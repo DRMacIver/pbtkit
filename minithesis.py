@@ -54,14 +54,12 @@ performance, so it's mostly a nice to have.
 
 from __future__ import annotations
 
-
 import hashlib
 import os
 from array import array
 from enum import IntEnum
 from random import Random
 from typing import (
-    cast,
     Any,
     Callable,
     Dict,
@@ -75,8 +73,8 @@ from typing import (
     Tuple,
     TypeVar,
     Union,
+    cast,
 )
-
 
 T = TypeVar("T", covariant=True)
 S = TypeVar("S", covariant=True)
@@ -84,14 +82,11 @@ U = TypeVar("U")  # Invariant
 
 
 class Database(Protocol):
-    def __setitem__(self, key: str, value: bytes) -> None:
-        ...
+    def __setitem__(self, key: str, value: bytes) -> None: ...
 
-    def get(self, key: str) -> Optional[bytes]:
-        ...
+    def get(self, key: str) -> Optional[bytes]: ...
 
-    def __delitem__(self, key: str) -> None:
-        ...
+    def __delitem__(self, key: str) -> None: ...
 
 
 def run_test(

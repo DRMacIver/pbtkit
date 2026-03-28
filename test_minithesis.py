@@ -11,10 +11,10 @@ from collections import defaultdict
 from random import Random
 
 import pytest
-from hypothesis import HealthCheck, Phase, given, note, reject, settings
-from hypothesis import strategies as st
 
 import minithesis as mt
+from hypothesis import HealthCheck, given, note, reject, settings
+from hypothesis import strategies as st
 from minithesis import CachedTestFunction, DirectoryDB, Frozen, Possibility, Status
 from minithesis import TestCase as TC
 from minithesis import TestingState as State
@@ -142,7 +142,7 @@ def test_error_on_too_strict_precondition():
 
         @run_test()
         def _(test_case):
-            n = test_case.choice(10)
+            test_case.choice(10)
             test_case.reject()
 
 
@@ -315,13 +315,13 @@ def test_errors_when_using_frozen():
 def test_errors_on_too_large_choice():
     tc = TC.for_choices([0])
     with pytest.raises(ValueError):
-        tc.choice(2 ** 64)
+        tc.choice(2**64)
 
 
 def test_can_choose_full_64_bits():
     @run_test()
     def _(tc):
-        tc.choice(2 ** 64 - 1)
+        tc.choice(2**64 - 1)
 
 
 def test_mapped_possibility():
@@ -342,7 +342,12 @@ def test_bound_possibility():
     @run_test()
     def _(tc):
         m, n = tc.any(
-            integers(0, 5).bind(lambda m: tuples(just(m), integers(m, m + 10),))
+            integers(0, 5).bind(
+                lambda m: tuples(
+                    just(m),
+                    integers(m, m + 10),
+                )
+            )
         )
 
         assert m <= n <= m + 10
@@ -427,7 +432,7 @@ def test_forced_choice_bounds():
 
         @run_test(database={})
         def _(tc):
-            tc.forced_choice(2 ** 64)
+            tc.forced_choice(2**64)
 
 
 class Failure(Exception):
@@ -470,7 +475,10 @@ def test_give_minithesis_a_workout(data):
         try:
 
             @run_test(
-                max_examples=max_examples, random=rnd, database=database, quiet=True,
+                max_examples=max_examples,
+                random=rnd,
+                database=database,
+                quiet=True,
             )
             def test_function(test_case):
                 node = tree
