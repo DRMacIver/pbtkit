@@ -81,23 +81,6 @@ S = TypeVar("S", covariant=True)
 U = TypeVar("U")  # Invariant
 
 
-class Backend:
-    """Handles random generation of choices. This is the layer that
-    would be replaced by an alternative backend (e.g. a solver-based
-    one like CrossHair)."""
-
-    def __init__(self, random: Random):
-        self.random = random
-
-    def draw_integer(self, min_value: int, max_value: int) -> int:
-        """Return a random integer in [min_value, max_value]."""
-        return self.random.randint(min_value, max_value)
-
-    def draw_boolean(self, p: float) -> int:
-        """Return 1 with probability p, 0 otherwise."""
-        return int(self.random.random() <= p)
-
-
 class Database(Protocol):
     def __setitem__(self, key: str, value: bytes) -> None: ...
 
@@ -206,7 +189,7 @@ class TestCase(object):
         """Returns a test case that makes this series of choices."""
         return TestCase(
             prefix=choices,
-            backend=None,
+            random=None,
             max_size=len(choices),
             print_results=print_results,
         )
@@ -214,14 +197,14 @@ class TestCase(object):
     def __init__(
         self,
         prefix: Sequence[int],
-        backend: Optional[Backend],
+        random: Optional[Random],
         max_size: float = float("inf"),
         print_results: bool = False,
     ):
         self.prefix = prefix
-        # backend can only be None if max_size == len(prefix),
-        # i.e. all choices come from the prefix.
-        self.backend: Backend = cast(Backend, backend)
+        # XXX Need a cast because below we assume self.random is not None;
+        # it can only be None if max_size == len(prefix)
+        self.random: Random = cast(Random, random)
         self.max_size = max_size
         self.choices: array[int] = array("Q")
         self.status: Optional[Status] = None
@@ -231,7 +214,7 @@ class TestCase(object):
 
     def choice(self, n: int) -> int:
         """Returns a number in the range [0, n]"""
-        result = self.__make_choice(n, lambda: self.backend.draw_integer(0, n))
+        result = self.__make_choice(n, lambda: self.random.randint(0, n))
         if self.__should_print():
             print(f"choice({n}): {result}")
         return result
@@ -243,7 +226,7 @@ class TestCase(object):
         elif p >= 1:
             result = self.forced_choice(1)
         else:
-            result = bool(self.__make_choice(1, lambda: self.backend.draw_boolean(p)))
+            result = bool(self.__make_choice(1, lambda: int(self.random.random() <= p)))
         if self.__should_print():
             print(f"weighted({p}): {result}")
         return result
@@ -523,7 +506,6 @@ class TestingState(object):
         max_examples: int,
     ):
         self.random = random
-        self.backend = Backend(random)
         self.max_examples = max_examples
         self.__test_function = test_function
         self.valid_test_cases = 0
@@ -574,7 +556,7 @@ class TestingState(object):
             attempt = array("Q", choices)
             attempt[i] += step
             test_case = TestCase(
-                prefix=attempt, backend=self.backend, max_size=BUFFER_SIZE
+                prefix=attempt, random=self.random, max_size=BUFFER_SIZE
             )
             self.test_function(test_case)
             assert test_case.status is not None
@@ -631,7 +613,7 @@ class TestingState(object):
             self.best_scoring is None or self.valid_test_cases <= self.max_examples // 2
         ):
             self.test_function(
-                TestCase(prefix=(), backend=self.backend, max_size=BUFFER_SIZE)
+                TestCase(prefix=(), random=self.random, max_size=BUFFER_SIZE)
             )
 
     def shrink(self) -> None:
