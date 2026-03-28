@@ -87,7 +87,12 @@ U = TypeVar("U")
 class ChoiceType(Generic[U]):
     """Base class for typed choices. The type parameter U is the
     type of value this choice produces. Subclasses carry the
-    constraints specific to each choice type."""
+    constraints specific to each choice type.
+
+    Subclasses must define:
+    * simplest: property returning the simplest/shrink-target value
+    * validate(value): return True if value is valid
+    """
 
 
 @dataclass(frozen=True)
@@ -95,10 +100,24 @@ class IntegerChoice(ChoiceType[int]):
     min_value: int
     max_value: int
 
+    @property
+    def simplest(self) -> int:
+        return self.min_value
+
+    def validate(self, value: int) -> bool:
+        return self.min_value <= value <= self.max_value
+
 
 @dataclass(frozen=True)
 class BooleanChoice(ChoiceType[bool]):
     p: float
+
+    @property
+    def simplest(self) -> bool:
+        return False
+
+    def validate(self, value: bool) -> bool:
+        return value in (0, 1)
 
 
 @dataclass(frozen=True)
@@ -254,15 +273,19 @@ class TestCase(object):
         self.depth = 0
         self.targeting_score: Optional[int] = None
 
+    def draw_integer(self, min_value: int, max_value: int) -> int:
+        """Returns a number in the range [min_value, max_value]."""
+        n = max_value - min_value
+        if n.bit_length() > 64 or n < 0:
+            raise ValueError(f"Invalid range [{min_value}, {max_value}]")
+        return self.__make_choice(
+            IntegerChoice(min_value, max_value),
+            lambda: self.random.randint(min_value, max_value),
+        )
+
     def choice(self, n: int) -> int:
         """Returns a number in the range [0, n]"""
-        if n.bit_length() > 64 or n < 0:
-            raise ValueError(f"Invalid choice {n}")
-        result = self.__make_choice(
-            IntegerChoice(0, n),
-            n,
-            lambda: self.random.randint(0, n),
-        )
+        result = self.draw_integer(0, n)
         if self.__should_print():
             print(f"choice({n}): {result}")
         return result
@@ -277,7 +300,6 @@ class TestCase(object):
         result = bool(
             self.__make_choice(
                 BooleanChoice(p),
-                1,
                 lambda: self.random.random() <= p,
                 forced=forced,
             )
@@ -295,7 +317,6 @@ class TestCase(object):
             raise ValueError(f"Invalid choice {n}")
         return self.__make_choice(
             IntegerChoice(0, n),
-            n,
             lambda: n,
             forced=n,
         )
@@ -346,13 +367,12 @@ class TestCase(object):
     def __make_choice(
         self,
         kind: ChoiceType[U],
-        n: int,
         rnd_method: Callable[[], U],
         *,
         forced: Optional[U] = None,
     ) -> U:
-        """Core method for recording a choice. Makes a choice in
-        [0, n], using the forced value, prefix, or rnd_method."""
+        """Core method for recording a choice. Uses the forced value,
+        prefix, or rnd_method, then validates against kind."""
         if self.status is not None:
             raise Frozen()
         if len(self.nodes) >= self.max_size:
@@ -364,7 +384,7 @@ class TestCase(object):
         else:
             value = rnd_method()
         self.nodes.append(ChoiceNode(kind, value, forced is not None))
-        if forced is None and value > n:
+        if forced is None and not kind.validate(value):
             self.mark_status(Status.INVALID)
         return value
 
@@ -421,7 +441,7 @@ class Possibility(Generic[T]):
 
 def integers(m: int, n: int) -> Possibility[int]:
     """Any integer in the range [m, n] is possible"""
-    return Possibility(lambda tc: m + tc.choice(n - m), name=f"integers({m}, {n})")
+    return Possibility(lambda tc: tc.draw_integer(m, n), name=f"integers({m}, {n})")
 
 
 def lists(
@@ -771,7 +791,10 @@ class TestingState(object):
                         # it can delete some things and often
                         # will get us unstuck when nothing else
                         # does.
-                        if i > 0 and attempt[i - 1].value > 0:
+                        if (
+                            i > 0
+                            and attempt[i - 1].value != attempt[i - 1].kind.simplest
+                        ):
                             attempt = list(attempt)
                             attempt[i - 1] = attempt[i - 1].with_value(
                                 attempt[i - 1].value - 1
@@ -797,17 +820,19 @@ class TestingState(object):
                     attempt[i] = attempt[i].with_value(v)
                 return consider(attempt)
 
-            # Now we try replacing blocks of choices with zeroes.
-            # Note that unlike the above we skip k = 1 because we
-            # handle that in the next step. Often (but not always)
-            # a block of all zeroes is the shortlex smallest value
-            # that a region can be.
+            # Now we try replacing blocks of choices with their
+            # simplest values. Note that unlike the above we skip
+            # k = 1 because we handle that in the next step. Often
+            # (but not always) the simplest values are the shortlex
+            # smallest that a region can be.
             k = 8
 
             while k > 1:
                 i = len(self.result) - k
                 while i >= 0:
-                    if replace({j: 0 for j in range(i, i + k)}):
+                    if replace(
+                        {j: self.result[j].kind.simplest for j in range(i, i + k)}
+                    ):
                         # If we've succeeded then all of [i, i + k]
                         # is zero so we adjust i so that the next region
                         # does not overlap with this at all.
@@ -819,13 +844,24 @@ class TestingState(object):
                         i -= 1
                 k -= 1
 
-            # Now try replacing each choice with a smaller value
-            # by doing a binary search. This will replace n with 0 or n - 1
-            # if possible, but will also more efficiently replace it with
-            # a smaller number than doing multiple subtractions would.
+            # Now try replacing each choice with a smaller value.
+            # For booleans we just try False. For integers we use
+            # binary search toward min_value, which will replace n
+            # with min_value or n - 1 if possible, but will also
+            # more efficiently find a smaller valid number than
+            # doing multiple subtractions would.
             i = len(self.result) - 1
             while i >= 0:
-                bin_search_down(0, self.result[i].value, lambda v: replace({i: v}))
+                node = self.result[i]
+                if isinstance(node.kind, BooleanChoice):
+                    replace({i: False})
+                else:
+                    assert isinstance(node.kind, IntegerChoice)
+                    bin_search_down(
+                        node.kind.min_value,
+                        node.value,
+                        lambda v: replace({i: v}),
+                    )
                 i -= 1
 
             # NB from here on this is just showing off cool shrinker tricks and
@@ -833,21 +869,26 @@ class TestingState(object):
             # unless they're easy and you want bragging rights for how much
             # better you are at shrinking than the local QuickCheck equivalent.
 
-            # Try sorting out of order ranges of choices, as ``sort(x) <= x``,
-            # so this is always a lexicographic reduction.
+            # Try sorting out of order ranges of integer choices,
+            # as ``sort(x) <= x`` so this is always a lexicographic
+            # reduction. We only sort ranges that are all integers
+            # since sorting mixed types is meaningless.
             k = 8
             while k > 1:
                 for i in range(len(self.result) - k - 1, -1, -1):
+                    region = self.result[i : i + k]
+                    if not all(isinstance(n.kind, IntegerChoice) for n in region):
+                        continue
                     consider(
                         self.result[:i]
-                        + sorted(self.result[i : i + k], key=lambda n: n.value)
+                        + sorted(region, key=lambda n: n.value)
                         + self.result[i + k :]
                     )
                 k -= 1
 
-            # Try adjusting nearby pairs of integers by redistributing value
-            # between them. This is useful for tests that depend on the
-            # sum of some generated values.
+            # Try adjusting nearby pairs of integer choices by
+            # redistributing value between them. This is useful for
+            # tests that depend on the sum of some generated values.
             for k in [2, 1]:
                 for i in range(len(self.result) - 1 - k, -1, -1):
                     j = i + k
@@ -855,6 +896,10 @@ class TestingState(object):
                     # might have shrunk the size of result, but also it's tedious
                     # to write tests for this so I didn't.
                     if j < len(self.result):  # pragma: no cover
+                        if not isinstance(
+                            self.result[i].kind, IntegerChoice
+                        ) or not isinstance(self.result[j].kind, IntegerChoice):
+                            continue
                         # Try swapping out of order pairs
                         if self.result[i].value > self.result[j].value:
                             replace(
@@ -864,11 +909,14 @@ class TestingState(object):
                                 }
                             )
                         # j could be out of range if the previous swap succeeded.
-                        if j < len(self.result) and self.result[i].value > 0:
+                        if (
+                            j < len(self.result)
+                            and self.result[i].value > self.result[i].kind.min_value
+                        ):
                             previous_i = self.result[i].value
                             previous_j = self.result[j].value
                             bin_search_down(
-                                0,
+                                self.result[i].kind.min_value,
                                 previous_i,
                                 lambda v: replace(
                                     {i: v, j: previous_j + (previous_i - v)}
