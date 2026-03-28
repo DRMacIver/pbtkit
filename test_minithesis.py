@@ -20,6 +20,7 @@ from minithesis import TestCase as TC
 from minithesis import TestingState as State
 from minithesis import (
     Unsatisfiable,
+    binary,
     integers,
     just,
     lists,
@@ -433,6 +434,133 @@ def test_forced_choice_bounds():
         @run_test(database={})
         def _(tc):
             tc.forced_choice(2**64)
+
+
+def test_finds_short_binary(capsys):
+    with pytest.raises(AssertionError):
+
+        @run_test(database={})
+        def _(test_case):
+            b = test_case.any(binary(max_size=10))
+            assert len(b) < 1
+
+    captured = capsys.readouterr()
+    assert captured.out.strip() == r"any(binary(0, 10)): b'\x00'"
+
+
+def test_shrinks_bytes_to_minimal(capsys):
+    with pytest.raises(AssertionError):
+
+        @run_test(database={}, max_examples=1000)
+        def _(test_case):
+            b = test_case.any(binary(min_size=1, max_size=5))
+            assert 0xFF not in b
+
+    captured = capsys.readouterr()
+    assert captured.out.strip() == r"any(binary(1, 5)): b'\xff'"
+
+
+def test_binary_respects_size_bounds():
+    @run_test(database={})
+    def _(test_case):
+        b = test_case.any(binary(min_size=2, max_size=4))
+        assert 2 <= len(b) <= 4
+
+
+def test_shrinks_bytes_with_constraints(capsys):
+    """When the simplest bytes value (all zeros at min_size) doesn't
+    trigger the failure, the shrinker falls back to shortening and
+    shrinking individual byte values."""
+    with pytest.raises(AssertionError):
+
+        @run_test(database={}, max_examples=1000)
+        def _(test_case):
+            b = test_case.any(binary(min_size=2, max_size=10))
+            assert sum(b) <= 10
+
+    captured = capsys.readouterr()
+    assert captured.out.strip() == r"any(binary(2, 10)): b'\x0b\x00'"
+
+
+def test_mixed_types_database_round_trip(tmpdir):
+    """Database round-trip works for all choice types (integer,
+    boolean, and bytes)."""
+    db = DirectoryDB(tmpdir)
+    count = 0
+
+    def run():
+        with pytest.raises(AssertionError):
+
+            @run_test(database=db)
+            def _(test_case):
+                nonlocal count
+                count += 1
+                b = test_case.any(binary(max_size=10))
+                test_case.weighted(0.5)
+                assert len(b) < 1
+
+    run()
+    prev_count = count
+
+    run()
+    assert count == prev_count + 2
+
+
+def test_shrinks_bytes_to_simplest(capsys):
+    """When the simplest bytes value itself triggers the failure,
+    the shrinker finds it immediately."""
+    with pytest.raises(AssertionError):
+
+        @run_test(database={})
+        def _(test_case):
+            b = test_case.any(binary(max_size=10))
+            assert sum(b) > 0
+
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "any(binary(0, 10)): b''"
+
+
+def test_targeting_with_bytes():
+    """Targeting skips non-integer nodes without crashing."""
+    max_score = 0
+
+    @run_test(database={}, max_examples=200)
+    def _(test_case):
+        nonlocal max_score
+        test_case.any(binary(max_size=5))
+        n = test_case.choice(100)
+        test_case.target(n)
+        max_score = max(n, max_score)
+
+    assert max_score == 100
+
+
+def test_malformed_database_entry():
+    """Malformed database entries are silently ignored."""
+    db = {"_": b"\xff\xff\xff"}
+
+    @run_test(database=db, max_examples=1)
+    def _(test_case):
+        pass
+
+
+def test_empty_database_entry():
+    """Empty database entries produce an empty replay."""
+    db = {"_": b""}
+
+    @run_test(database=db, max_examples=1)
+    def _(test_case):
+        pass
+
+
+def test_truncated_database_entry():
+    """Truncated database entries are silently ignored."""
+    # Boolean tag (0x01) with no value byte following
+    db = {"_": b"\x01"}
+
+    @run_test(database=db, max_examples=1)
+    def _(test_case):
+        pass
 
 
 class Failure(Exception):

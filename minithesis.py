@@ -94,6 +94,11 @@ class ChoiceType(Generic[U]):
     * validate(value): return True if value is valid
     """
 
+    def sort_key(self, value: U) -> Any:
+        """Returns a comparable key for ordering values during
+        shrinking. By default just returns the value itself."""
+        return value
+
 
 @dataclass(frozen=True)
 class IntegerChoice(ChoiceType[int]):
@@ -121,6 +126,23 @@ class BooleanChoice(ChoiceType[bool]):
 
 
 @dataclass(frozen=True)
+class BytesChoice(ChoiceType[bytes]):
+    min_size: int
+    max_size: int
+
+    @property
+    def simplest(self) -> bytes:
+        return b"\x00" * self.min_size
+
+    def validate(self, value: bytes) -> bool:
+        return isinstance(value, bytes) and self.min_size <= len(value) <= self.max_size
+
+    def sort_key(self, value: bytes) -> Any:
+        """Shortlex ordering: shorter is simpler, then lexicographic."""
+        return (len(value), value)
+
+
+@dataclass(frozen=True)
 class ChoiceNode(Generic[U]):
     """A single choice made during test case generation. Each choice
     carries its kind (with constraints) and value, plus whether it
@@ -134,6 +156,12 @@ class ChoiceNode(Generic[U]):
         """Return a copy of this node with a different value."""
         return ChoiceNode(kind=self.kind, value=value, was_forced=self.was_forced)
 
+    @property
+    def sort_key(self) -> Any:
+        """A comparable key for this node's value, delegated to
+        the choice type."""
+        return self.kind.sort_key(self.value)
+
 
 class Database(Protocol):
     def __setitem__(self, key: str, value: bytes) -> None: ...
@@ -141,6 +169,54 @@ class Database(Protocol):
     def get(self, key: str) -> Optional[bytes]: ...
 
     def __delitem__(self, key: str) -> None: ...
+
+
+_TAG_INTEGER = 0
+_TAG_BOOLEAN = 1
+_TAG_BYTES = 2
+
+
+def _serialize_choices(nodes: Sequence[ChoiceNode]) -> bytes:
+    """Serialize a choice sequence to bytes for database storage."""
+    parts: List[bytes] = []
+    for n in nodes:
+        if isinstance(n.kind, IntegerChoice):
+            parts.append(bytes([_TAG_INTEGER]) + n.value.to_bytes(8, "big"))
+        elif isinstance(n.kind, BooleanChoice):
+            parts.append(bytes([_TAG_BOOLEAN, int(n.value)]))
+        else:
+            assert isinstance(n.kind, BytesChoice)
+            parts.append(
+                bytes([_TAG_BYTES]) + len(n.value).to_bytes(4, "big") + n.value
+            )
+    return b"".join(parts)
+
+
+def _deserialize_choices(data: bytes) -> Optional[List]:
+    """Deserialize a choice sequence from bytes. Returns None if
+    the data is malformed (e.g. from an old format)."""
+    values: List = []
+    i = 0
+    try:
+        while i < len(data):
+            tag = data[i]
+            i += 1
+            if tag == _TAG_INTEGER:
+                values.append(int.from_bytes(data[i : i + 8], "big"))
+                i += 8
+            elif tag == _TAG_BOOLEAN:
+                values.append(bool(data[i]))
+                i += 1
+            elif tag == _TAG_BYTES:
+                length = int.from_bytes(data[i : i + 4], "big")
+                i += 4
+                values.append(data[i : i + length])
+                i += length
+            else:
+                return None
+    except (IndexError, ValueError):
+        return None
+    return values
 
 
 def run_test(
@@ -204,11 +280,9 @@ def run_test(
         previous_failure = db.get(test.__name__)
 
         if previous_failure is not None:
-            values = [
-                int.from_bytes(previous_failure[i : i + 8], "big")
-                for i in range(0, len(previous_failure), 8)
-            ]
-            state.test_function(TestCase.for_choices(values))
+            values = _deserialize_choices(previous_failure)
+            if values is not None:
+                state.test_function(TestCase.for_choices(values))
 
         if state.result is None:
             state.run()
@@ -222,9 +296,7 @@ def run_test(
             except KeyError:
                 pass
         else:
-            db[test.__name__] = b"".join(
-                n.value.to_bytes(8, "big") for n in state.result
-            )
+            db[test.__name__] = _serialize_choices(state.result)
 
         if state.result is not None:
             test(
@@ -244,7 +316,7 @@ class TestCase(object):
     @classmethod
     def for_choices(
         cls,
-        choices: Sequence[int],
+        choices: Sequence[Any],
         print_results: bool = False,
     ) -> TestCase:
         """Returns a test case that makes this series of choices."""
@@ -257,7 +329,7 @@ class TestCase(object):
 
     def __init__(
         self,
-        prefix: Sequence[int],
+        prefix: Sequence[Any],
         random: Optional[Random],
         max_size: float = float("inf"),
         print_results: bool = False,
@@ -281,6 +353,16 @@ class TestCase(object):
         return self.__make_choice(
             IntegerChoice(min_value, max_value),
             lambda: self.random.randint(min_value, max_value),
+        )
+
+    def draw_bytes(self, min_size: int, max_size: int) -> bytes:
+        """Returns a random byte string with length in [min_size, max_size]."""
+        return self.__make_choice(
+            BytesChoice(min_size, max_size),
+            lambda: bytes(
+                self.random.randint(0, 255)
+                for _ in range(self.random.randint(min_size, max_size))
+            ),
         )
 
     def choice(self, n: int) -> int:
@@ -444,6 +526,14 @@ def integers(m: int, n: int) -> Possibility[int]:
     return Possibility(lambda tc: tc.draw_integer(m, n), name=f"integers({m}, {n})")
 
 
+def binary(min_size: int = 0, max_size: int = 8) -> Possibility[bytes]:
+    """Any byte string with length in [min_size, max_size] is possible."""
+    return Possibility(
+        lambda tc: tc.draw_bytes(min_size, max_size),
+        name=f"binary({min_size}, {max_size})",
+    )
+
+
 def lists(
     elements: Possibility[U],
     min_size: int = 0,
@@ -509,11 +599,15 @@ def tuples(*possibilities: Possibility[Any]) -> Possibility[Any]:
 BUFFER_SIZE = 8 * 1024
 
 
-def sort_key(nodes: Sequence[ChoiceNode]) -> Tuple[int, List[int]]:
+def sort_key(nodes: Sequence[ChoiceNode]) -> Tuple:
     """Returns a key that can be used for the shrinking order
     of test cases. Shorter choice sequences are simpler, and
-    among equal lengths we prefer lexicographically smaller values."""
-    return (len(nodes), [n.value for n in nodes])
+    among equal lengths we prefer smaller values.
+
+    This comparison is safe because in a non-flaky test, the choice
+    type at each position is determined by previous values, so two
+    sequences always have the same type at the first index they differ."""
+    return (len(nodes), [n.sort_key for n in nodes])
 
 
 class CachedTestFunction(object):
@@ -635,6 +729,8 @@ class TestingState(object):
             """Can we improve the score by changing nodes[i] by ``step``?"""
             assert self.best_scoring is not None
             score, nodes = self.best_scoring
+            if not isinstance(nodes[i].kind, IntegerChoice):
+                return False
             if nodes[i].value + step < 0 or nodes[i].value.bit_length() >= 64:
                 return False
             values = [n.value for n in nodes]
@@ -804,7 +900,7 @@ class TestingState(object):
                         i -= 1
                 k -= 1
 
-            def replace(values: Mapping[int, int]) -> bool:
+            def replace(values: Mapping[int, Any]) -> bool:
                 """Attempts to replace some node values in the current
                 result. Useful for some purely lexicographic
                 reductions that we are about to perform."""
@@ -844,24 +940,51 @@ class TestingState(object):
                         i -= 1
                 k -= 1
 
-            # Now try replacing each choice with a smaller value.
-            # For booleans we just try False. For integers we use
-            # binary search toward min_value, which will replace n
-            # with min_value or n - 1 if possible, but will also
-            # more efficiently find a smaller valid number than
-            # doing multiple subtractions would.
+            # Now try replacing each choice with a smaller value,
+            # using type-appropriate strategies.
             i = len(self.result) - 1
             while i >= 0:
                 node = self.result[i]
                 if isinstance(node.kind, BooleanChoice):
+                    # Booleans: just try False.
                     replace({i: False})
-                else:
-                    assert isinstance(node.kind, IntegerChoice)
+                elif isinstance(node.kind, IntegerChoice):
+                    # Integers: binary search toward min_value.
                     bin_search_down(
                         node.kind.min_value,
                         node.value,
                         lambda v: replace({i: v}),
                     )
+                else:
+                    assert isinstance(node.kind, BytesChoice)
+                    # Bytes: try simplest, then shorten, then
+                    # remove individual bytes, then shrink each
+                    # byte value toward 0.
+                    if not replace({i: node.kind.simplest}):
+                        cur = self.result[i].value
+                        bin_search_down(
+                            self.result[i].kind.min_size,
+                            len(cur),
+                            lambda sz: replace({i: cur[:sz]}),
+                        )
+                        for j in range(len(self.result[i].value) - 1, -1, -1):
+                            v = self.result[i].value
+                            if j < len(v) and len(v) > self.result[i].kind.min_size:
+                                replace({i: v[:j] + v[j + 1 :]})
+                        for j in range(len(self.result[i].value) - 1, -1, -1):
+                            v = self.result[i].value
+                            if j < len(v) and v[j] != 0:
+                                bin_search_down(
+                                    0,
+                                    v[j],
+                                    lambda b: replace(
+                                        {
+                                            i: self.result[i].value[:j]
+                                            + bytes([b])
+                                            + self.result[i].value[j + 1 :]
+                                        }
+                                    ),
+                                )
                 i -= 1
 
             # NB from here on this is just showing off cool shrinker tricks and
