@@ -56,9 +56,10 @@ from __future__ import annotations
 
 import hashlib
 import os
-from array import array
+from dataclasses import dataclass
 from enum import IntEnum
 from random import Random
+
 from typing import (
     Any,
     Callable,
@@ -76,9 +77,43 @@ from typing import (
     cast,
 )
 
+
 T = TypeVar("T", covariant=True)
 S = TypeVar("S", covariant=True)
-U = TypeVar("U")  # Invariant
+U = TypeVar("U")
+
+
+@dataclass(frozen=True)
+class ChoiceType(Generic[U]):
+    """Base class for typed choices. The type parameter U is the
+    type of value this choice produces. Subclasses carry the
+    constraints specific to each choice type."""
+
+
+@dataclass(frozen=True)
+class IntegerChoice(ChoiceType[int]):
+    min_value: int
+    max_value: int
+
+
+@dataclass(frozen=True)
+class BooleanChoice(ChoiceType[bool]):
+    p: float
+
+
+@dataclass(frozen=True)
+class ChoiceNode(Generic[U]):
+    """A single choice made during test case generation. Each choice
+    carries its kind (with constraints) and value, plus whether it
+    was forced (i.e. deterministic, not random)."""
+
+    kind: ChoiceType[U]
+    value: U
+    was_forced: bool
+
+    def with_value(self, value: U) -> ChoiceNode[U]:
+        """Return a copy of this node with a different value."""
+        return ChoiceNode(kind=self.kind, value=value, was_forced=self.was_forced)
 
 
 class Database(Protocol):
@@ -150,11 +185,11 @@ def run_test(
         previous_failure = db.get(test.__name__)
 
         if previous_failure is not None:
-            choices = [
+            values = [
                 int.from_bytes(previous_failure[i : i + 8], "big")
                 for i in range(0, len(previous_failure), 8)
             ]
-            state.test_function(TestCase.for_choices(choices))
+            state.test_function(TestCase.for_choices(values))
 
         if state.result is None:
             state.run()
@@ -168,17 +203,24 @@ def run_test(
             except KeyError:
                 pass
         else:
-            db[test.__name__] = b"".join(i.to_bytes(8, "big") for i in state.result)
+            db[test.__name__] = b"".join(
+                n.value.to_bytes(8, "big") for n in state.result
+            )
 
         if state.result is not None:
-            test(TestCase.for_choices(state.result, print_results=not quiet))
+            test(
+                TestCase.for_choices(
+                    [n.value for n in state.result], print_results=not quiet
+                )
+            )
 
     return accept
 
 
 class TestCase(object):
     """Represents a single generated test case, which consists
-    of an underlying set of choices that produce possibilities."""
+    of an underlying sequence of typed choices that produce
+    possibilities."""
 
     @classmethod
     def for_choices(
@@ -202,11 +244,11 @@ class TestCase(object):
         print_results: bool = False,
     ):
         self.prefix = prefix
-        # XXX Need a cast because below we assume self.random is not None;
-        # it can only be None if max_size == len(prefix)
+        # random can only be None if max_size == len(prefix),
+        # i.e. all choices come from the prefix.
         self.random: Random = cast(Random, random)
         self.max_size = max_size
-        self.choices: array[int] = array("Q")
+        self.nodes: List[ChoiceNode] = []
         self.status: Optional[Status] = None
         self.print_results = print_results
         self.depth = 0
@@ -214,36 +256,49 @@ class TestCase(object):
 
     def choice(self, n: int) -> int:
         """Returns a number in the range [0, n]"""
-        result = self.__make_choice(n, lambda: self.random.randint(0, n))
+        if n.bit_length() > 64 or n < 0:
+            raise ValueError(f"Invalid choice {n}")
+        result = self.__make_choice(
+            IntegerChoice(0, n),
+            n,
+            lambda: self.random.randint(0, n),
+        )
         if self.__should_print():
             print(f"choice({n}): {result}")
         return result
 
-    def weighted(self, p: float) -> int:
-        """Return True with probability ``p``."""
+    def weighted(self, p: float, *, forced: Optional[bool] = None) -> bool:
+        """Return True with probability ``p``. If ``forced`` is
+        provided, the result is forced to that value (no randomness)."""
         if p <= 0:
-            result = self.forced_choice(0)
+            forced = False
         elif p >= 1:
-            result = self.forced_choice(1)
-        else:
-            result = bool(self.__make_choice(1, lambda: int(self.random.random() <= p)))
+            forced = True
+        result = bool(
+            self.__make_choice(
+                BooleanChoice(p),
+                1,
+                lambda: self.random.random() <= p,
+                forced=forced,
+            )
+        )
         if self.__should_print():
             print(f"weighted({p}): {result}")
         return result
 
     def forced_choice(self, n: int) -> int:
-        """Inserts a fake choice into the choice sequence, as if
-        some call to choice() had returned ``n``. You almost never
-        need this, but sometimes it can be a useful hint to the
-        shrinker."""
+        """Inserts a forced integer choice into the choice sequence,
+        as if some call to choice() had returned ``n``. You almost
+        never need this, but sometimes it can be a useful hint to
+        the shrinker."""
         if n.bit_length() > 64 or n < 0:
             raise ValueError(f"Invalid choice {n}")
-        if self.status is not None:
-            raise Frozen()
-        if len(self.choices) >= self.max_size:
-            self.mark_status(Status.OVERRUN)
-        self.choices.append(n)
-        return n
+        return self.__make_choice(
+            IntegerChoice(0, n),
+            n,
+            lambda: n,
+            forced=n,
+        )
 
     def reject(self) -> NoReturn:
         """Mark this test case as invalid."""
@@ -288,23 +343,30 @@ class TestCase(object):
     def __should_print(self) -> bool:
         return self.print_results and self.depth == 0
 
-    def __make_choice(self, n: int, rnd_method: Callable[[], int]) -> int:
-        """Make a choice in [0, n], by calling rnd_method if
-        randomness is needed."""
-        if n.bit_length() > 64 or n < 0:
-            raise ValueError(f"Invalid choice {n}")
+    def __make_choice(
+        self,
+        kind: ChoiceType[U],
+        n: int,
+        rnd_method: Callable[[], U],
+        *,
+        forced: Optional[U] = None,
+    ) -> U:
+        """Core method for recording a choice. Makes a choice in
+        [0, n], using the forced value, prefix, or rnd_method."""
         if self.status is not None:
             raise Frozen()
-        if len(self.choices) >= self.max_size:
+        if len(self.nodes) >= self.max_size:
             self.mark_status(Status.OVERRUN)
-        if len(self.choices) < len(self.prefix):
-            result = self.prefix[len(self.choices)]
+        if forced is not None:
+            value = forced
+        elif len(self.nodes) < len(self.prefix):
+            value = self.prefix[len(self.nodes)]
         else:
-            result = rnd_method()
-        self.choices.append(result)
-        if result > n:
+            value = rnd_method()
+        self.nodes.append(ChoiceNode(kind, value, forced is not None))
+        if forced is None and value > n:
             self.mark_status(Status.INVALID)
-        return result
+        return value
 
 
 class Possibility(Generic[T]):
@@ -373,9 +435,9 @@ def lists(
         result: List[U] = []
         while True:
             if len(result) < min_size:
-                test_case.forced_choice(1)
+                test_case.weighted(0.9, forced=True)
             elif len(result) + 1 >= max_size:
-                test_case.forced_choice(0)
+                test_case.weighted(0.9, forced=False)
                 break
             elif not test_case.weighted(0.9):
                 break
@@ -427,10 +489,11 @@ def tuples(*possibilities: Possibility[Any]) -> Possibility[Any]:
 BUFFER_SIZE = 8 * 1024
 
 
-def sort_key(choices: Sequence[int]) -> Tuple[int, Sequence[int]]:
+def sort_key(nodes: Sequence[ChoiceNode]) -> Tuple[int, List[int]]:
     """Returns a key that can be used for the shrinking order
-    of test cases."""
-    return (len(choices), choices)
+    of test cases. Shorter choice sequences are simpler, and
+    among equal lengths we prefer lexicographically smaller values."""
+    return (len(nodes), [n.value for n in nodes])
 
 
 class CachedTestFunction(object):
@@ -487,8 +550,9 @@ class CachedTestFunction(object):
 
         # We enter the choices made in a tree.
         node = self.tree
-        for i, c in enumerate(test_case.choices):
-            if i + 1 < len(test_case.choices) or test_case.status == Status.OVERRUN:
+        for i, choice_node in enumerate(test_case.nodes):
+            c = choice_node.value
+            if i + 1 < len(test_case.nodes) or test_case.status == Status.OVERRUN:
                 try:
                     node = node[c]
                 except KeyError:
@@ -510,8 +574,8 @@ class TestingState(object):
         self.__test_function = test_function
         self.valid_test_cases = 0
         self.calls = 0
-        self.result: Optional[array[int]] = None
-        self.best_scoring: Optional[Tuple[int, Sequence[int]]] = None
+        self.result: Optional[List[ChoiceNode]] = None
+        self.best_scoring: Optional[Tuple[int, List[ChoiceNode]]] = None
         self.test_is_trivial = False
 
     def test_function(self, test_case: TestCase) -> None:
@@ -522,13 +586,13 @@ class TestingState(object):
         if test_case.status is None:
             test_case.status = Status.VALID
         self.calls += 1
-        if test_case.status >= Status.INVALID and len(test_case.choices) == 0:
+        if test_case.status >= Status.INVALID and len(test_case.nodes) == 0:
             self.test_is_trivial = True
         if test_case.status >= Status.VALID:
             self.valid_test_cases += 1
 
             if test_case.targeting_score is not None:
-                relevant_info = (test_case.targeting_score, test_case.choices)
+                relevant_info = (test_case.targeting_score, test_case.nodes)
                 if self.best_scoring is None:
                     self.best_scoring = relevant_info
                 else:
@@ -537,9 +601,9 @@ class TestingState(object):
                         self.best_scoring = relevant_info
 
         if test_case.status == Status.INTERESTING and (
-            self.result is None or sort_key(test_case.choices) < sort_key(self.result)
+            self.result is None or sort_key(test_case.nodes) < sort_key(self.result)
         ):
-            self.result = test_case.choices
+            self.result = test_case.nodes
 
     def target(self) -> None:
         """If any test cases have had ``target()`` called on them, do a simple
@@ -548,15 +612,15 @@ class TestingState(object):
             return
 
         def adjust(i: int, step: int) -> bool:
-            """Can we improve the score by changing choices[i] by ``step``?"""
+            """Can we improve the score by changing nodes[i] by ``step``?"""
             assert self.best_scoring is not None
-            score, choices = self.best_scoring
-            if choices[i] + step < 0 or choices[i].bit_length() >= 64:
+            score, nodes = self.best_scoring
+            if nodes[i].value + step < 0 or nodes[i].value.bit_length() >= 64:
                 return False
-            attempt = array("Q", choices)
-            attempt[i] += step
+            values = [n.value for n in nodes]
+            values[i] += step
             test_case = TestCase(
-                prefix=attempt, random=self.random, max_size=BUFFER_SIZE
+                prefix=values, random=self.random, max_size=BUFFER_SIZE
             )
             self.test_function(test_case)
             assert test_case.status is not None
@@ -635,10 +699,10 @@ class TestingState(object):
         # not to work.
         cached = CachedTestFunction(self.test_function)
 
-        def consider(choices: array[int]) -> bool:
-            if choices == self.result:
+        def consider(nodes: List[ChoiceNode]) -> bool:
+            if sort_key(nodes) == sort_key(self.result):
                 return True
-            return cached(choices) == Status.INTERESTING
+            return cached([n.value for n in nodes]) == Status.INTERESTING
 
         assert consider(self.result)
 
@@ -707,19 +771,22 @@ class TestingState(object):
                         # it can delete some things and often
                         # will get us unstuck when nothing else
                         # does.
-                        if i > 0 and attempt[i - 1] > 0:
-                            attempt[i - 1] -= 1
+                        if i > 0 and attempt[i - 1].value > 0:
+                            attempt = list(attempt)
+                            attempt[i - 1] = attempt[i - 1].with_value(
+                                attempt[i - 1].value - 1
+                            )
                             if consider(attempt):
                                 i += 1
                         i -= 1
                 k -= 1
 
             def replace(values: Mapping[int, int]) -> bool:
-                """Attempts to replace some indices in the current
-                result with new values. Useful for some purely lexicographic
+                """Attempts to replace some node values in the current
+                result. Useful for some purely lexicographic
                 reductions that we are about to perform."""
                 assert self.result is not None
-                attempt = array("Q", self.result)
+                attempt = list(self.result)
                 for i, v in values.items():
                     # The size of self.result can change during shrinking.
                     # If that happens, stop attempting to make use of these
@@ -727,7 +794,7 @@ class TestingState(object):
                     # to run now.
                     if i >= len(attempt):
                         return False
-                    attempt[i] = v
+                    attempt[i] = attempt[i].with_value(v)
                 return consider(attempt)
 
             # Now we try replacing blocks of choices with zeroes.
@@ -758,8 +825,7 @@ class TestingState(object):
             # a smaller number than doing multiple subtractions would.
             i = len(self.result) - 1
             while i >= 0:
-                # Attempt to replace
-                bin_search_down(0, self.result[i], lambda v: replace({i: v}))
+                bin_search_down(0, self.result[i].value, lambda v: replace({i: v}))
                 i -= 1
 
             # NB from here on this is just showing off cool shrinker tricks and
@@ -774,7 +840,7 @@ class TestingState(object):
                 for i in range(len(self.result) - k - 1, -1, -1):
                     consider(
                         self.result[:i]
-                        + array("Q", sorted(self.result[i : i + k]))
+                        + sorted(self.result[i : i + k], key=lambda n: n.value)
                         + self.result[i + k :]
                     )
                 k -= 1
@@ -790,12 +856,17 @@ class TestingState(object):
                     # to write tests for this so I didn't.
                     if j < len(self.result):  # pragma: no cover
                         # Try swapping out of order pairs
-                        if self.result[i] > self.result[j]:
-                            replace({j: self.result[i], i: self.result[j]})
+                        if self.result[i].value > self.result[j].value:
+                            replace(
+                                {
+                                    j: self.result[i].value,
+                                    i: self.result[j].value,
+                                }
+                            )
                         # j could be out of range if the previous swap succeeded.
-                        if j < len(self.result) and self.result[i] > 0:
-                            previous_i = self.result[i]
-                            previous_j = self.result[j]
+                        if j < len(self.result) and self.result[i].value > 0:
+                            previous_i = self.result[i].value
+                            previous_j = self.result[j].value
                             bin_search_down(
                                 0,
                                 previous_i,
