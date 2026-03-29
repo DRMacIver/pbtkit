@@ -24,6 +24,8 @@ from minithesis.generators import (
     tuples,
 )
 
+pytestmark = pytest.mark.requires("collections")
+
 
 class Failure(Exception):
     pass

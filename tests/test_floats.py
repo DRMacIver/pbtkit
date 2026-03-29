@@ -12,12 +12,9 @@ from random import Random
 
 import pytest
 
-from tests.conftest import module_disabled
-
-if module_disabled("floats"):
-    pytest.skip("minithesis.floats is disabled", allow_module_level=True)
-
 import minithesis.floats
+
+pytestmark = pytest.mark.requires("floats")
 from minithesis import DirectoryDB, run_test
 from minithesis.core import SerializationTag, Status, TestingState
 from minithesis.core import TestCase as TC
