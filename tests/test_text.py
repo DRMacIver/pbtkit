@@ -10,7 +10,7 @@
 import pytest
 
 from minithesis.generators import text
-from minithesis import DirectoryDB, StringChoice, _TAG_STRING
+from minithesis import DirectoryDB, SerializationTag, StringChoice
 from minithesis import TestCase as TC
 from minithesis import run_test
 
@@ -109,8 +109,10 @@ def test_string_validate():
 def test_truncated_string_database_entry():
     """Truncated string entries in database are handled gracefully."""
     for data in [
-        bytes([_TAG_STRING, 0x00, 0x00]),  # truncated length header
-        bytes([_TAG_STRING, 0x00, 0x00, 0x00, 0x05, 0x61]),  # length 5 but only 1 byte
+        bytes([SerializationTag.STRING, 0x00, 0x00]),  # truncated length header
+        bytes(
+            [SerializationTag.STRING, 0x00, 0x00, 0x00, 0x05, 0x61]
+        ),  # length 5 but only 1 byte
     ]:
         db = {"_": data}
 

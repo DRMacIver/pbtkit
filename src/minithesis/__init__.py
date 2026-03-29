@@ -331,33 +331,41 @@ class Database(Protocol):
     def __delitem__(self, key: str) -> None: ...
 
 
-_TAG_INTEGER = 0
-_TAG_BOOLEAN = 1
-_TAG_BYTES = 2
-_TAG_FLOAT = 3
-_TAG_STRING = 4
+class SerializationTag(IntEnum):
+    INTEGER = 0
+    BOOLEAN = 1
+    BYTES = 2
+    FLOAT = 3
+    STRING = 4
+
+
+# Serialization registry. Type modules register their serializers
+# so the database can persist and replay choice sequences.
+_SERIALIZERS: Dict[type, Tuple[int, Callable[[Any], bytes]]] = {}
+_DESERIALIZERS: Dict[int, Callable[[bytes, int], Tuple[Any, int]]] = {}
+
+
+def register_serializer(
+    choice_type: type,
+    tag: int,
+    serialize: Callable[[Any], bytes],
+    deserialize: Callable[[bytes, int], Tuple[Any, int]],
+) -> None:
+    """Register serialization for a ChoiceType subclass.
+
+    serialize(value) -> bytes
+    deserialize(data, offset) -> (value, new_offset)
+        Should raise IndexError or ValueError on truncated data."""
+    _SERIALIZERS[choice_type] = (tag, serialize)
+    _DESERIALIZERS[tag] = deserialize
 
 
 def _serialize_choices(nodes: Sequence[ChoiceNode]) -> bytes:
     """Serialize a choice sequence to bytes for database storage."""
     parts: List[bytes] = []
     for n in nodes:
-        if isinstance(n.kind, IntegerChoice):
-            parts.append(bytes([_TAG_INTEGER]) + n.value.to_bytes(8, "big"))
-        elif isinstance(n.kind, BooleanChoice):
-            parts.append(bytes([_TAG_BOOLEAN, int(n.value)]))
-        elif isinstance(n.kind, BytesChoice):
-            parts.append(
-                bytes([_TAG_BYTES]) + len(n.value).to_bytes(4, "big") + n.value
-            )
-        elif isinstance(n.kind, StringChoice):
-            encoded = n.value.encode("utf-8")
-            parts.append(
-                bytes([_TAG_STRING]) + len(encoded).to_bytes(4, "big") + encoded
-            )
-        else:
-            assert isinstance(n.kind, FloatChoice)
-            parts.append(bytes([_TAG_FLOAT]) + struct.pack("!d", n.value))
+        tag, serialize = _SERIALIZERS[type(n.kind)]
+        parts.append(bytes([tag]) + serialize(n.value))
     return b"".join(parts)
 
 
@@ -370,42 +378,78 @@ def _deserialize_choices(data: bytes) -> Optional[List]:
         while i < len(data):
             tag = data[i]
             i += 1
-            if tag == _TAG_INTEGER:
-                if i + 8 > len(data):
-                    return None
-                values.append(int.from_bytes(data[i : i + 8], "big"))
-                i += 8
-            elif tag == _TAG_BOOLEAN:
-                values.append(bool(data[i]))
-                i += 1
-            elif tag == _TAG_BYTES:
-                if i + 4 > len(data):
-                    return None
-                length = int.from_bytes(data[i : i + 4], "big")
-                i += 4
-                if i + length > len(data):
-                    return None
-                values.append(data[i : i + length])
-                i += length
-            elif tag == _TAG_STRING:
-                if i + 4 > len(data):
-                    return None
-                length = int.from_bytes(data[i : i + 4], "big")
-                i += 4
-                if i + length > len(data):
-                    return None
-                values.append(data[i : i + length].decode("utf-8"))
-                i += length
-            elif tag == _TAG_FLOAT:
-                if i + 8 > len(data):
-                    return None
-                values.append(struct.unpack("!d", data[i : i + 8])[0])
-                i += 8
-            else:
+            if tag not in _DESERIALIZERS:
                 return None
+            value, i = _DESERIALIZERS[tag](data, i)
+            values.append(value)
     except (IndexError, ValueError):
         return None
     return values
+
+
+def _deserialize_fixed(size: int, convert: Callable[[bytes], Any]) -> Callable:
+    """Helper to create a deserializer for fixed-size values."""
+
+    def deserialize(data: bytes, offset: int) -> Tuple[Any, int]:
+        if offset + size > len(data):
+            raise ValueError("truncated")
+        return convert(data[offset : offset + size]), offset + size
+
+    return deserialize
+
+
+def _deserialize_length_prefixed(
+    convert: Callable[[bytes], Any],
+) -> Callable:
+    """Helper to create a deserializer for length-prefixed values."""
+
+    def deserialize(data: bytes, offset: int) -> Tuple[Any, int]:
+        if offset + 4 > len(data):
+            raise ValueError("truncated")
+        length = int.from_bytes(data[offset : offset + 4], "big")
+        offset += 4
+        if offset + length > len(data):
+            raise ValueError("truncated")
+        return convert(data[offset : offset + length]), offset + length
+
+    return deserialize
+
+
+# Register core types.
+register_serializer(
+    IntegerChoice,
+    SerializationTag.INTEGER,
+    lambda v: v.to_bytes(8, "big"),
+    _deserialize_fixed(8, lambda b: int.from_bytes(b, "big")),
+)
+
+register_serializer(
+    BooleanChoice,
+    SerializationTag.BOOLEAN,
+    lambda v: bytes([int(v)]),
+    _deserialize_fixed(1, lambda b: bool(b[0])),
+)
+
+register_serializer(
+    BytesChoice,
+    SerializationTag.BYTES,
+    lambda v: len(v).to_bytes(4, "big") + v,
+    _deserialize_length_prefixed(lambda b: bytes(b)),
+)
+
+register_serializer(
+    StringChoice,
+    SerializationTag.STRING,
+    lambda v: (e := v.encode("utf-8"), len(e).to_bytes(4, "big") + e)[1],
+    _deserialize_length_prefixed(lambda b: b.decode("utf-8")),
+)
+
+register_serializer(
+    FloatChoice,
+    SerializationTag.FLOAT,
+    lambda v: struct.pack("!d", v),
+    _deserialize_fixed(8, lambda b: struct.unpack("!d", b)[0]),
+)
 
 
 def run_test(

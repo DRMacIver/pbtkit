@@ -16,7 +16,12 @@ import minithesis as mt
 from minithesis.generators import floats
 from minithesis import DirectoryDB, FloatChoice, Status
 from minithesis import TestCase as TC
-from minithesis import TestingState, _TAG_FLOAT, _draw_unbounded_float, run_test
+from minithesis import (
+    SerializationTag,
+    TestingState,
+    _draw_unbounded_float,
+    run_test,
+)
 
 
 def test_floats_bounded():
@@ -318,7 +323,7 @@ def test_floats_shrinks_inf_to_finite():
 
 def test_floats_deserialize_truncated():
     """Truncated float in database is handled gracefully."""
-    db = {"_": bytes([_TAG_FLOAT, 0x40, 0x09])}
+    db = {"_": bytes([SerializationTag.FLOAT, 0x40, 0x09])}
 
     @run_test(database=db, max_examples=1)
     def _(test_case):
