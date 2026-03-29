@@ -9,6 +9,8 @@
 
 import pytest
 
+from minithesis import Unsatisfiable, run_test
+from minithesis.collections import many
 from minithesis.generators import (
     booleans,
     composite,
@@ -21,7 +23,6 @@ from minithesis.generators import (
     sampled_from,
     tuples,
 )
-from minithesis import Unsatisfiable, run_test
 
 
 class Failure(Exception):
@@ -158,7 +159,6 @@ def test_many_with_small_max():
 def test_many_reject():
     """Test that many()'s reject() mechanism works: too many
     rejections force the collection to stop."""
-    from minithesis.collections import many
 
     @run_test(database={}, max_examples=200)
     def _(tc):
@@ -178,8 +178,6 @@ def test_many_reject():
 def test_many_reject_unsatisfiable():
     """If too many rejections happen before reaching min_size,
     the test case is marked invalid."""
-    from minithesis.collections import many
-
     with pytest.raises(Unsatisfiable):
 
         @run_test(database={}, max_examples=200)

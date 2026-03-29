@@ -65,8 +65,6 @@ def test_floats_bounded_shrinks(capsys):
 def test_floats_no_nan():
     @run_test(database={}, max_examples=200)
     def _(tc):
-        import math
-
         f = tc.any(floats(allow_nan=False))
         assert not math.isnan(f)
 
@@ -74,8 +72,6 @@ def test_floats_no_nan():
 def test_floats_no_infinity():
     @run_test(database={}, max_examples=200)
     def _(tc):
-        import math
-
         f = tc.any(floats(allow_infinity=False, allow_nan=False))
         assert math.isfinite(f)
 

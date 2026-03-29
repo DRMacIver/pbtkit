@@ -11,6 +11,7 @@ from random import Random
 
 import pytest
 
+import minithesis.minithesis as core
 from minithesis import Generator, Unsatisfiable, run_test
 from minithesis.generators import integers, lists
 from minithesis.minithesis import (
@@ -135,8 +136,6 @@ def test_error_on_too_strict_precondition():
 
 
 def test_error_on_unbounded_test_function(monkeypatch):
-    from minithesis import minithesis as core
-
     monkeypatch.setattr(core, "BUFFER_SIZE", 10)
     with pytest.raises(Unsatisfiable):
 
