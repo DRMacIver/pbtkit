@@ -7,51 +7,6 @@
 # v. 2.0. If a copy of the MPL was not distributed with this file, You can
 # obtain one at https://mozilla.org/MPL/2.0/.
 
-"""
-This file implements a simple property-based testing library called
-minithesis. It's not really intended to be used as is, but is instead
-a proof of concept that implements as much of the core ideas of
-Hypothesis in a simple way that is designed for people who want to
-implement a property-based testing library for non-Python languages.
-
-This module is the standalone core that knows about integers and
-booleans only. Float, bytes, and string support is added by the
-package's __init__.py module.
-
-
-=============
-PORTING NOTES
-=============
-
-minithesis supports roughly the following features, more or less
-in order of most to least important:
-
-1. Test case generation.
-2. Test case reduction ("shrinking")
-3. A small library of primitive generators and combinators.
-4. A Test case database for replay between runs.
-5. Targeted property-based testing
-6. A caching layer for mapping choice sequences to outcomes
-
-
-Anything that supports 1 and 2 is a reasonably good first porting
-goal. You'll probably want to port most of the generators library
-because it's easy and it helps you write tests, but don't worry
-too much about the specifics.
-
-The test case database is *very* useful and I strongly encourage
-you to support it, but if it's fiddly feel free to leave it out
-of a first pass.
-
-Targeted property-based testing is very much a nice to have. You
-probably don't need it, but it's a rare enough feature that supporting
-it gives you bragging rights and who doesn't love bragging rights?
-
-The caching layer you can skip. It's used more heavily in Hypothesis
-proper, but in minithesis you only really need it for shrinking
-performance, so it's mostly a nice to have.
-"""
-
 from __future__ import annotations
 
 import hashlib
