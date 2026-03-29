@@ -9,3 +9,5 @@ __pycache__/
 .hypothesis/
 uv.lock
 hypothesis/
+hegel-rust/
+.claude/worktrees/
