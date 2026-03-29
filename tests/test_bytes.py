@@ -9,6 +9,11 @@
 
 import pytest
 
+from tests.conftest import module_disabled
+
+if module_disabled("bytes"):
+    pytest.skip("minithesis.bytes is disabled", allow_module_level=True)
+
 from minithesis import run_test
 from minithesis.core import DirectoryDB
 from minithesis.generators import binary

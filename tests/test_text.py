@@ -9,6 +9,11 @@
 
 import pytest
 
+from tests.conftest import module_disabled
+
+if module_disabled("text"):
+    pytest.skip("minithesis.text is disabled", allow_module_level=True)
+
 from minithesis import DirectoryDB, run_test
 from minithesis.core import SerializationTag
 from minithesis.core import TestCase as TC
