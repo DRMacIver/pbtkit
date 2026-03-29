@@ -4,7 +4,7 @@
 
 ```
 src/minithesis/
-  minithesis.py      — standalone core (integers + booleans only)
+  core.py            — standalone core (integers + booleans only)
   __init__.py        — adds float/bytes/string types, re-exports public API
   generators.py      — user-facing generator functions
 tests/
@@ -38,7 +38,7 @@ All three must pass before committing.
 ## Public API vs internals
 
 * **Public API** (in `__all__`): `run_test`, `TestCase`, `Generator`, `Unsatisfiable`, `Database`, `DirectoryDB`.
-* Everything else is internal. Tests should import internals from `minithesis.minithesis` directly, not via the package.
+* Everything else is internal. Tests should import internals from `minithesis.core` directly, not via the package.
 * Do not add internal names to `__all__` for testing convenience.
 
 ## Architecture
@@ -50,7 +50,7 @@ All three must pass before committing.
 
 ## Testing
 
-* Tests that need to monkeypatch module constants (like `BUFFER_SIZE`, `_DEFAULT_DATABASE_PATH`) should target `minithesis.minithesis` (the module where the constant is defined and read).
+* Tests that need to monkeypatch module constants (like `BUFFER_SIZE`, `_DEFAULT_DATABASE_PATH`) should target `minithesis.core` (the module where the constant is defined and read).
 * `NAN_DRAW_PROBABILITY` is defined in `__init__.py` and can be monkeypatched via `import minithesis; monkeypatch.setattr(minithesis, ...)`.
 * The database isolation fixture in `conftest.py` ensures tests don't share state via `.minithesis-cache`. Each test gets a fresh tmp directory.
 * Coverage must be deterministically 100%. If a path depends on randomness, boost the probability via monkeypatch rather than increasing `max_examples`.
@@ -61,6 +61,7 @@ All three must pass before committing.
 * When the user asks to amend a specific commit, make sure to target the right one. Keep the latest commit as a low-stakes one (like .gitignore) so that amending defaults to the right place.
 * Do not rewrite history across many commits unless specifically asked. Prefer fixup commits.
 * Commit messages should be concise and descriptive. End with `Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>`.
+* Do not include CLAUDE.md changes in code commits. CLAUDE.md updates should be in their own separate commits.
 
 ## Style
 
