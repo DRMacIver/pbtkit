@@ -575,15 +575,13 @@ def nothing() -> Possibility[NoReturn]:
 def mix_of(*possibilities: Possibility[T]) -> Possibility[T]:
     """Possible values can be any value possible for one of ``possibilities``."""
     if not possibilities:
-        # XXX Need a cast since NoReturn isn't a T (though perhaps it should be)
-        return cast(Possibility[T], nothing())
+        return nothing()
     return Possibility(
         lambda tc: tc.any(possibilities[tc.choice(len(possibilities) - 1)]),
         name="mix_of({', '.join(p.name for p in possibilities)})",
     )
 
 
-# XXX This signature requires PEP 646
 def tuples(*possibilities: Possibility[Any]) -> Possibility[Any]:
     """Any tuple t of of length len(possibilities) such that t[i] is possible
     for possibilities[i] is possible."""
@@ -635,11 +633,9 @@ class CachedTestFunction(object):
         # a Patricia trie, which implements long non-branching
         # paths as an array inline. For simplicity we don't
         # do that here.
-        # XXX The type of self.tree is recursive
-        self.tree: Dict[int, Union[Status, Dict[int, Any]]] = {}
+        self.tree: Dict[Any, Union[Status, Dict[Any, Any]]] = {}
 
-    def __call__(self, choices: Sequence[int]) -> Status:
-        # XXX The type of node is problematic
+    def __call__(self, choices: Sequence[Any]) -> Status:
         node: Any = self.tree
         try:
             for c in choices:
