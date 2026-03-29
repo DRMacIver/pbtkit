@@ -28,14 +28,14 @@ in order of most to least important:
 
 1. Test case generation.
 2. Test case reduction ("shrinking")
-3. A small library of primitive possibilities (generators) and combinators.
+3. A small library of primitive generators and combinators.
 4. A Test case database for replay between runs.
 5. Targeted property-based testing
 6. A caching layer for mapping choice sequences to outcomes
 
 
 Anything that supports 1 and 2 is a reasonable good first porting
-goal. You'll probably want to port most of the possibilities library
+goal. You'll probably want to port most of the generators library
 because it's easy and it helps you write tests, but don't worry
 too much about the specifics.
 
@@ -313,8 +313,7 @@ def run_test(
 
 class TestCase(object):
     """Represents a single generated test case, which consists
-    of an underlying sequence of typed choices that produce
-    possibilities."""
+    of an underlying sequence of typed choices."""
 
     @classmethod
     def for_choices(
@@ -425,16 +424,16 @@ class TestCase(object):
         """
         self.targeting_score = score
 
-    def any(self, possibility: Generator[U]) -> U:
-        """Return a possible value from ``possibility``."""
+    def any(self, generator: Generator[U]) -> U:
+        """Return a value from ``generator``."""
         try:
             self.depth += 1
-            result = possibility.produce(self)
+            result = generator.produce(self)
         finally:
             self.depth -= 1
 
         if self.__should_print():
-            print(f"any({possibility}): {result}")
+            print(f"any({generator}): {result}")
         return result
 
     def mark_status(self, status: Status) -> NoReturn:
@@ -581,28 +580,28 @@ def nothing() -> Generator[NoReturn]:
     return Generator(produce)
 
 
-def mix_of(*possibilities: Generator[T]) -> Generator[T]:
-    """Possible values can be any value possible for one of ``possibilities``."""
-    if not possibilities:
+def mix_of(*generators: Generator[T]) -> Generator[T]:
+    """Randomly picks one of the given generators and draws from it."""
+    if not generators:
         return nothing()
     return Generator(
-        lambda tc: tc.any(possibilities[tc.choice(len(possibilities) - 1)]),
-        name="mix_of({', '.join(p.name for p in possibilities)})",
+        lambda tc: tc.any(generators[tc.choice(len(generators) - 1)]),
+        name="mix_of({', '.join(g.name for g in generators)})",
     )
 
 
-def tuples(*possibilities: Generator[Any]) -> Generator[Any]:
-    """Any tuple t of of length len(possibilities) such that t[i] is possible
-    for possibilities[i] is possible."""
+def tuples(*generators: Generator[Any]) -> Generator[Any]:
+    """Generates a tuple of length len(generators) where element i
+    is drawn from generators[i]."""
     return Generator(
-        lambda tc: tuple(tc.any(p) for p in possibilities),
-        name="tuples({', '.join(p.name for p in possibilities)})",
+        lambda tc: tuple(tc.any(g) for g in generators),
+        name="tuples({', '.join(g.name for g in generators)})",
     )
 
 
 # We cap the maximum amount of entropy a test case can use.
 # This prevents cases where the generated test case size explodes
-# by effectively rejection
+# by effectively rejecting test cases that use too many choices.
 BUFFER_SIZE = 8 * 1024
 
 
@@ -936,8 +935,8 @@ class TestingState(object):
                         {j: self.result[j].kind.simplest for j in range(i, i + k)}
                     ):
                         # If we've succeeded then all of [i, i + k]
-                        # is zero so we adjust i so that the next region
-                        # does not overlap with this at all.
+                        # is at simplest so we adjust i so that the
+                        # next region does not overlap with this at all.
                         i -= k
                     else:
                         # Otherwise we might still be able to zero some
