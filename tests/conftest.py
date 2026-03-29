@@ -1,10 +1,10 @@
 import pytest
 
-import minithesis as mt
+from minithesis import minithesis as core
 
 
 @pytest.fixture(autouse=True)
 def _isolate_database(tmp_path, monkeypatch):
     """Ensure each test gets a fresh default database directory
     so tests don't leak state via .minithesis-cache."""
-    monkeypatch.setattr(mt, "_DEFAULT_DATABASE_PATH", str(tmp_path / "cache"))
+    monkeypatch.setattr(core, "_DEFAULT_DATABASE_PATH", str(tmp_path / "cache"))

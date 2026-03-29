@@ -9,10 +9,10 @@
 
 import pytest
 
+from minithesis import DirectoryDB, StringChoice, run_test
 from minithesis.generators import text
-from minithesis import DirectoryDB, SerializationTag, StringChoice
-from minithesis import TestCase as TC
-from minithesis import run_test
+from minithesis.minithesis import SerializationTag
+from minithesis.minithesis import TestCase as TC
 
 
 def test_text_basic():

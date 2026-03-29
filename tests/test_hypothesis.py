@@ -14,7 +14,8 @@ import pytest
 
 from hypothesis import HealthCheck, given, note, reject, settings
 from hypothesis import strategies as st
-from minithesis import Generator, Status, Unsatisfiable, run_test
+from minithesis import Generator, Unsatisfiable, run_test
+from minithesis.minithesis import Status
 
 
 @Generator

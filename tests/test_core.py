@@ -11,12 +11,16 @@ from random import Random
 
 import pytest
 
-import minithesis as mt
+from minithesis import Generator, Unsatisfiable, run_test
 from minithesis.generators import integers, lists
-from minithesis import CachedTestFunction, DirectoryDB, Frozen, Generator, Status
-from minithesis import TestCase as TC
-from minithesis import TestingState as State
-from minithesis import Unsatisfiable, run_test
+from minithesis.minithesis import (
+    CachedTestFunction,
+    DirectoryDB,
+    Frozen,
+    Status,
+)
+from minithesis.minithesis import TestCase as TC
+from minithesis.minithesis import TestingState as State
 
 
 @pytest.mark.parametrize("seed", range(10))
@@ -131,7 +135,9 @@ def test_error_on_too_strict_precondition():
 
 
 def test_error_on_unbounded_test_function(monkeypatch):
-    monkeypatch.setattr(mt, "BUFFER_SIZE", 10)
+    from minithesis import minithesis as core
+
+    monkeypatch.setattr(core, "BUFFER_SIZE", 10)
     with pytest.raises(Unsatisfiable):
 
         @run_test(max_examples=5)

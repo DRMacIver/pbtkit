@@ -19,7 +19,7 @@ from typing import (
     TypeVar,
 )
 
-from minithesis import Generator, Status, TestCase
+from minithesis.minithesis import Generator, Status, TestCase
 
 T = TypeVar("T", covariant=True)
 U = TypeVar("U")
