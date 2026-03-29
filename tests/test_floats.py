@@ -14,10 +14,10 @@ import pytest
 
 import minithesis.floats
 from minithesis import DirectoryDB, run_test
+from minithesis.core import SerializationTag, Status, TestingState
+from minithesis.core import TestCase as TC
 from minithesis.floats import FloatChoice, _draw_unbounded_float
 from minithesis.generators import floats
-from minithesis.minithesis import SerializationTag, Status, TestingState
-from minithesis.minithesis import TestCase as TC
 
 
 def test_floats_bounded():

@@ -13,7 +13,7 @@ import sys
 from dataclasses import dataclass
 from typing import Any, Callable, Tuple
 
-from minithesis.minithesis import (
+from minithesis.core import (
     ChoiceType,
     SerializationTag,
     TestCase,

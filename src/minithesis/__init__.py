@@ -11,7 +11,7 @@
 minithesis — a minimal property-based testing library.
 
 This module re-exports the core (integers + booleans) from
-minithesis.minithesis and adds float, bytes, and string support
+minithesis.core and adds float, bytes, and string support
 by importing the type-specific submodules which register their
 choice types, draw methods, serializers, and shrink passes.
 """
@@ -19,7 +19,7 @@ choice types, draw methods, serializers, and shrink passes.
 from __future__ import annotations
 
 # Public API and internal names re-exported from the core.
-from minithesis.minithesis import (
+from minithesis.core import (
     Database,
     DirectoryDB,
     Generator,
@@ -29,12 +29,9 @@ from minithesis.minithesis import (
 )
 
 __all__ = [
-    "BytesChoice",
     "Database",
     "DirectoryDB",
-    "FloatChoice",
     "Generator",
-    "StringChoice",
     "TestCase",
     "Unsatisfiable",
     "run_test",
@@ -42,6 +39,6 @@ __all__ = [
 
 # Import type-specific modules for their side effects: each one
 # registers its serializer, shrink pass, and draw method on TestCase.
-from minithesis.bytes import BytesChoice
-from minithesis.floats import FloatChoice
-from minithesis.text import StringChoice
+import minithesis.bytes
+import minithesis.floats
+import minithesis.text

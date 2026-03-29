@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, List
 
-from minithesis.minithesis import (
+from minithesis.core import (
     ChoiceType,
     SerializationTag,
     TestCase,

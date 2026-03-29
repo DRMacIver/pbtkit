@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 
-from minithesis.minithesis import Status, TestCase
+from minithesis.core import Status, TestCase
 
 
 class many:

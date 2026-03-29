@@ -10,9 +10,9 @@
 import pytest
 
 from minithesis import DirectoryDB, run_test
+from minithesis.core import SerializationTag
+from minithesis.core import TestCase as TC
 from minithesis.generators import text
-from minithesis.minithesis import SerializationTag
-from minithesis.minithesis import TestCase as TC
 from minithesis.text import StringChoice
 
 

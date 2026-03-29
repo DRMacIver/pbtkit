@@ -1,6 +1,6 @@
 import pytest
 
-from minithesis import minithesis as core
+import minithesis.core as core
 
 
 @pytest.fixture(autouse=True)

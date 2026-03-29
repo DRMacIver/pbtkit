@@ -19,7 +19,7 @@ from typing import (
 )
 
 from minithesis.collections import many
-from minithesis.minithesis import Generator, TestCase
+from minithesis.core import Generator, TestCase
 
 T = TypeVar("T", covariant=True)
 U = TypeVar("U")

@@ -10,8 +10,8 @@
 import pytest
 
 from minithesis import run_test
+from minithesis.core import DirectoryDB
 from minithesis.generators import binary
-from minithesis.minithesis import DirectoryDB
 
 
 def test_finds_short_binary(capsys):

@@ -11,17 +11,17 @@ from random import Random
 
 import pytest
 
-import minithesis.minithesis as core
+import minithesis.core as core
 from minithesis import Generator, Unsatisfiable, run_test
-from minithesis.generators import integers, lists
-from minithesis.minithesis import (
+from minithesis.core import (
     CachedTestFunction,
     DirectoryDB,
     Frozen,
     Status,
 )
-from minithesis.minithesis import TestCase as TC
-from minithesis.minithesis import TestingState as State
+from minithesis.core import TestCase as TC
+from minithesis.core import TestingState as State
+from minithesis.generators import integers, lists
 
 
 @pytest.mark.parametrize("seed", range(10))
