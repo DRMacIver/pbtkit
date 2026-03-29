@@ -98,6 +98,55 @@ class many:
                 self.force_stop = True
 
 
+def floats(
+    min_value: float = -float("inf"),
+    max_value: float = float("inf"),
+    *,
+    allow_nan: bool = True,
+    allow_infinity: bool = True,
+) -> Generator[float]:
+    """Generates floating-point numbers.
+
+    For bounded ranges, generates uniformly. For unbounded ranges,
+    explores the full float space including special values."""
+    return Generator(
+        lambda tc: tc.draw_float(
+            min_value,
+            max_value,
+            allow_nan=allow_nan,
+            allow_infinity=allow_infinity,
+        ),
+        name=f"floats(min_value={min_value}, max_value={max_value}, allow_nan={allow_nan}, allow_infinity={allow_infinity})",
+    )
+
+
+def text(
+    min_codepoint: int = 0,
+    max_codepoint: int = 0x10FFFF,
+    min_size: int = 0,
+    max_size: int = 10,
+) -> Generator[str]:
+    """Generates strings with codepoints in [min_codepoint, max_codepoint]
+    and length in [min_size, max_size]. Surrogates are excluded."""
+    defaults = {
+        "min_codepoint": 0,
+        "max_codepoint": 0x10FFFF,
+        "min_size": 0,
+        "max_size": 10,
+    }
+    params = {
+        "min_codepoint": min_codepoint,
+        "max_codepoint": max_codepoint,
+        "min_size": min_size,
+        "max_size": max_size,
+    }
+    args = ", ".join(f"{k}={v}" for k, v in params.items() if v != defaults[k])
+    return Generator(
+        lambda tc: tc.draw_string(min_codepoint, max_codepoint, min_size, max_size),
+        name=f"text({args})" if args else "text()",
+    )
+
+
 def integers(min_value: int, max_value: int) -> Generator[int]:
     """Generates an integer in the range [min_value, max_value]."""
     return Generator(
