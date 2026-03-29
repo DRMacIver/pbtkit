@@ -18,6 +18,7 @@ from generators import (
     binary,
     booleans,
     composite,
+    dictionaries,
     floats,
     integers,
     just,
@@ -1102,6 +1103,65 @@ def test_truncated_string_database_entry():
         @run_test(database=db, max_examples=1)
         def _(test_case):
             pass
+
+
+def test_unique_lists():
+    @run_test(database={})
+    def _(tc):
+        ls = tc.any(lists(integers(0, 10), unique=True, max_size=5))
+        assert len(ls) == len(set(ls))
+
+
+def test_unique_lists_shrinks(capsys):
+    with pytest.raises(AssertionError):
+
+        @run_test(database={}, max_examples=1000)
+        def _(tc):
+            ls = tc.any(lists(integers(0, 100), unique=True))
+            assert len(ls) < 3
+
+    captured = capsys.readouterr()
+    assert "lists(" in captured.out
+
+
+def test_unique_by():
+    @run_test(database={})
+    def _(tc):
+        ls = tc.any(lists(integers(0, 100), unique_by=lambda x: x % 10, max_size=5))
+        keys = [x % 10 for x in ls]
+        assert len(keys) == len(set(keys))
+
+
+def test_dictionaries():
+    @run_test(database={})
+    def _(tc):
+        d = tc.any(dictionaries(integers(0, 10), integers(0, 100), max_size=5))
+        assert isinstance(d, dict)
+        assert len(d) <= 5
+        for k, v in d.items():
+            assert 0 <= k <= 10
+            assert 0 <= v <= 100
+
+
+def test_dictionaries_shrinks(capsys):
+    with pytest.raises(AssertionError):
+
+        @run_test(database={}, max_examples=1000)
+        def _(tc):
+            d = tc.any(dictionaries(integers(0, 10), integers(0, 100)))
+            assert sum(d.values()) <= 100
+
+    captured = capsys.readouterr()
+    assert "dictionaries(" in captured.out
+
+
+def test_dictionaries_size_bounds():
+    @run_test(database={})
+    def _(tc):
+        d = tc.any(
+            dictionaries(integers(0, 10), integers(0, 100), min_size=1, max_size=3)
+        )
+        assert 1 <= len(d) <= 3
 
 
 def test_forced_choice_bounds():

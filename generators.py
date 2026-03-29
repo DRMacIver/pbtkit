@@ -8,7 +8,16 @@ from __future__ import annotations
 
 import functools
 import math
-from typing import Any, Callable, List, NoReturn, Sequence, TypeVar
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    NoReturn,
+    Optional,
+    Sequence,
+    TypeVar,
+)
 
 from minithesis import Generator, Status, TestCase
 
@@ -167,18 +176,45 @@ def lists(
     elements: Generator[U],
     min_size: int = 0,
     max_size: float = float("inf"),
+    unique: bool = False,
+    unique_by: Optional[Callable[[U], Any]] = None,
 ) -> Generator[List[U]]:
     """Generates lists whose elements are drawn from ``elements``.
 
     Uses a geometric distribution for list length, with forced
-    results to respect min_size and max_size bounds."""
+    results to respect min_size and max_size bounds.
 
-    def produce(test_case: TestCase) -> List[U]:
-        result: List[U] = []
-        elems = many(test_case, min_size=min_size, max_size=max_size)
-        while elems.more():
-            result.append(test_case.any(elements))
-        return result
+    If ``unique`` is True, all elements will be distinct.
+    If ``unique_by`` is provided, elements will be distinct
+    by the key function."""
+
+    needs_unique = unique or unique_by is not None
+    key_fn = unique_by if unique_by is not None else (lambda x: x)
+
+    if needs_unique:
+
+        def produce(test_case: TestCase) -> List[U]:
+            result: List[U] = []
+            seen: set = set()
+            elems = many(test_case, min_size=min_size, max_size=max_size)
+            while elems.more():
+                value = test_case.any(elements)
+                key = key_fn(value)
+                if key in seen:
+                    elems.reject()
+                else:
+                    seen.add(key)
+                    result.append(value)
+            return result
+
+    else:
+
+        def produce(test_case: TestCase) -> List[U]:
+            result: List[U] = []
+            elems = many(test_case, min_size=min_size, max_size=max_size)
+            while elems.more():
+                result.append(test_case.any(elements))
+            return result
 
     return Generator[List[U]](
         produce,
@@ -230,6 +266,37 @@ def one_of(*generators: Generator[T]) -> Generator[T]:
     return Generator(
         lambda tc: tc.any(generators[tc.choice(len(generators) - 1)]),
         name=f"one_of({', '.join(g.name for g in generators)})",
+    )
+
+
+V = TypeVar("V")
+
+
+def dictionaries(
+    keys: Generator[U],
+    values: Generator[V],
+    min_size: int = 0,
+    max_size: float = float("inf"),
+) -> Generator[Dict[U, V]]:
+    """Generates dictionaries with keys from ``keys`` and values
+    from ``values``. Duplicate keys are rejected using many()'s
+    rejection mechanism."""
+
+    def produce(test_case: TestCase) -> Dict[U, V]:
+        result: Dict[U, V] = {}
+        elems = many(test_case, min_size=min_size, max_size=max_size)
+        while elems.more():
+            k = test_case.any(keys)
+            v = test_case.any(values)
+            if k in result:
+                elems.reject()
+            else:
+                result[k] = v
+        return result
+
+    return Generator[Dict[U, V]](
+        produce,
+        name=f"dictionaries({keys.name}, {values.name}, min_size={min_size}, max_size={max_size})",
     )
 
 
