@@ -12,14 +12,12 @@ from random import Random
 
 import pytest
 
-import minithesis
+import minithesis.floats
 from minithesis import DirectoryDB, run_test
+from minithesis.floats import FloatChoice, _draw_unbounded_float
 from minithesis.generators import floats
 from minithesis.minithesis import SerializationTag, Status, TestingState
 from minithesis.minithesis import TestCase as TC
-
-# FloatChoice and _draw_unbounded_float are defined in __init__.py
-from minithesis import FloatChoice, _draw_unbounded_float
 
 
 def test_floats_bounded():
@@ -31,7 +29,7 @@ def test_floats_bounded():
 
 def test_floats_unbounded(monkeypatch):
     # Boost NaN probability so we reliably cover _draw_nan.
-    monkeypatch.setattr(minithesis, "NAN_DRAW_PROBABILITY", 0.5)
+    monkeypatch.setattr(minithesis.floats, "NAN_DRAW_PROBABILITY", 0.5)
 
     @run_test(database={}, max_examples=200)
     def _(tc):
