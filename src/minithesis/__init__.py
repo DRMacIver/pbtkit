@@ -815,6 +815,20 @@ _DEFAULT_DATABASE_PATH = ".minithesis-cache"
 NAN_DRAW_PROBABILITY = 0.01
 
 
+# Shrink pass registry. Each pass is a function taking a
+# TestingState and attempting to simplify state.result.
+# Passes are run in order, repeating until a fixed point.
+SHRINK_PASSES: List[Callable[["TestingState"], None]] = []
+
+
+def shrink_pass(
+    fn: Callable[["TestingState"], None],
+) -> Callable[["TestingState"], None]:
+    """Decorator that registers a function as a shrink pass."""
+    SHRINK_PASSES.append(fn)
+    return fn
+
+
 def sort_key(nodes: Sequence[ChoiceNode]) -> Tuple:
     """Returns a key that can be used for the shrinking order
     of test cases. Shorter choice sequences are simpler, and
@@ -1027,375 +1041,368 @@ class TestingState:
         # us to catch cases where we try something that is e.g. a prefix
         # of something we've previously tried, which is guaranteed
         # not to work.
-        cached = CachedTestFunction(self.test_function)
+        self._cached = CachedTestFunction(self.test_function)
+        assert self.consider(self.result)
 
-        def consider(nodes: List[ChoiceNode]) -> bool:
-            assert self.result is not None
-            if sort_key(nodes) == sort_key(self.result):
-                return True
-            return cached([n.value for n in nodes]) == Status.INTERESTING
-
-        assert consider(self.result)
-
-        # We are going to perform a number of transformations to
-        # the current result, iterating until none of them make any
-        # progress - i.e. until we make it through an entire iteration
-        # of the loop without changing the result.
+        # Run registered shrink passes repeatedly until none of
+        # them make any progress.
         prev = None
         while prev != self.result:
             prev = self.result
+            for pass_fn in SHRINK_PASSES:
+                pass_fn(self)
 
-            # A note on weird loop order: We iterate backwards
-            # through the choice sequence rather than forwards,
-            # because later bits tend to depend on earlier bits
-            # so it's easier to make changes near the end and
-            # deleting bits at the end may allow us to make
-            # changes earlier on that we we'd have missed.
-            #
-            # Note that we do not restart the loop at the end
-            # when we find a successful shrink. This is because
-            # things we've already tried are less likely to work.
-            #
-            # If this guess is wrong, that's OK, this isn't a
-            # correctness problem, because if we made a successful
-            # reduction then we are not at a fixed point and
-            # will restart the loop at the end the next time
-            # round. In some cases this can result in performance
-            # issues, but the end result should still be fine.
+    def consider(self, nodes: List[ChoiceNode]) -> bool:
+        """Test whether a choice sequence is interesting."""
+        assert self.result is not None
+        if sort_key(nodes) == sort_key(self.result):
+            return True
+        return self._cached([n.value for n in nodes]) == Status.INTERESTING
 
-            # First try deleting each choice we made in chunks.
-            # We try longer chunks because this allows us to
-            # delete whole composite elements: e.g. deleting an
-            # element from a generated list requires us to delete
-            # both the choice of whether to include it and also
-            # the element itself, which may involve more than one
-            # choice. Some things will take more than 8 choices
-            # in the sequence. That's too bad, we may not be
-            # able to delete those. In Hypothesis proper we
-            # record the boundaries corresponding to ``any``
-            # calls so that we can try deleting those, but
-            # that's pretty high overhead and also a bunch of
-            # slightly annoying code that it's not worth porting.
-            #
-            # We could instead do a quadratic amount of work
-            # to try all boundaries, but in general we don't
-            # want to do that because even a shrunk test case
-            # can involve a relatively large number of choices.
-            k = 8
-            while k > 0:
-                i = len(self.result) - k - 1
-                while i >= 0:
-                    if i >= len(self.result):
-                        # Can happen if we successfully lowered
-                        # the value at i - 1
-                        i -= 1
-                        continue
-                    attempt = self.result[:i] + self.result[i + k :]
-                    assert len(attempt) < len(self.result)
-                    if not consider(attempt):
-                        # This fixes a common problem that occurs
-                        # when you have dependencies on some
-                        # length parameter. e.g. draw a number
-                        # between 0 and 10 and then draw that
-                        # many elements. This can't delete
-                        # everything that occurs that way, but
-                        # it can delete some things and often
-                        # will get us unstuck when nothing else
-                        # does.
-                        if (
-                            i > 0
-                            and attempt[i - 1].value != attempt[i - 1].kind.simplest
-                        ):
-                            attempt = list(attempt)
-                            attempt[i - 1] = attempt[i - 1].with_value(
-                                attempt[i - 1].value - 1
-                            )
-                            if consider(attempt):
-                                i += 1
-                        i -= 1
-                k -= 1
+    def replace(self, values: Mapping[int, Any]) -> bool:
+        """Attempt to replace node values at given indices."""
+        assert self.result is not None
+        attempt = list(self.result)
+        for i, v in values.items():
+            if i >= len(attempt):
+                return False
+            attempt[i] = attempt[i].with_value(v)
+        return self.consider(attempt)
 
-            def replace(values: Mapping[int, Any]) -> bool:
-                """Attempts to replace some node values in the current
-                result. Useful for some purely lexicographic
-                reductions that we are about to perform."""
-                assert self.result is not None
-                attempt = list(self.result)
-                for i, v in values.items():
-                    # The size of self.result can change during shrinking.
-                    # If that happens, stop attempting to make use of these
-                    # replacements because some other shrink pass is better
-                    # to run now.
-                    if i >= len(attempt):
-                        return False
-                    attempt[i] = attempt[i].with_value(v)
-                return consider(attempt)
 
-            # Now we try replacing blocks of choices with their
-            # simplest values. Note that unlike the above we skip
-            # k = 1 because we handle that in the next step. Often
-            # (but not always) the simplest values are the shortlex
-            # smallest that a region can be.
-            k = 8
+@shrink_pass
+def delete_chunks(state: TestingState) -> None:
+    """Try deleting chunks of choices from the sequence.
 
-            while k > 1:
-                i = len(self.result) - k
-                while i >= 0:
-                    if replace(
-                        {j: self.result[j].kind.simplest for j in range(i, i + k)}
-                    ):
-                        # If we've succeeded then all of [i, i + k]
-                        # is at simplest so we adjust i so that the
-                        # next region does not overlap with this at all.
-                        i -= k
-                    else:
-                        # Otherwise we might still be able to simplify
-                        # some of these values but not the last one,
-                        # so we just go back one.
-                        i -= 1
-                k -= 1
+    We try longer chunks because this allows us to delete whole
+    composite elements: e.g. deleting an element from a generated
+    list requires us to delete both the choice of whether to include
+    it and also the element itself, which may involve more than one
+    choice.
 
-            # Now try replacing each choice with a smaller value,
-            # using type-appropriate strategies.
-            i = len(self.result) - 1
-            while i >= 0:
-                node = self.result[i]
-                if isinstance(node.kind, BooleanChoice):
-                    # Booleans: just try False.
-                    replace({i: False})
-                elif isinstance(node.kind, IntegerChoice):
-                    # Integers: binary search toward min_value.
-                    bin_search_down(
-                        node.kind.min_value,
-                        node.value,
-                        lambda v: replace({i: v}),
-                    )
-                elif isinstance(node.kind, FloatChoice):
-                    self.__shrink_float(i, node.kind, replace)
-                elif isinstance(node.kind, StringChoice):
-                    self.__shrink_sequence(
-                        i,
-                        node.kind.min_size,
-                        node.kind.simplest,
-                        lambda v, j: ord(v[j]),
-                        lambda v, j, e: v[:j] + chr(e) + v[j + 1 :],
-                        node.kind.min_codepoint,
-                        replace,
-                    )
-                else:
-                    assert isinstance(node.kind, BytesChoice)
-                    self.__shrink_sequence(
-                        i,
-                        node.kind.min_size,
-                        node.kind.simplest,
-                        lambda v, j: v[j],
-                        lambda v, j, e: v[:j] + bytes([e]) + v[j + 1 :],
-                        0,
-                        replace,
-                    )
+    We iterate backwards because later bits tend to depend on earlier
+    bits, so it's easier to make changes near the end."""
+    assert state.result is not None
+    k = 8
+    while k > 0:
+        i = len(state.result) - k - 1
+        while i >= 0:
+            if i >= len(state.result):
                 i -= 1
+                continue
+            attempt = state.result[:i] + state.result[i + k :]
+            assert len(attempt) < len(state.result)
+            if not state.consider(attempt):
+                if i > 0 and attempt[i - 1].value != attempt[i - 1].kind.simplest:
+                    attempt = list(attempt)
+                    attempt[i - 1] = attempt[i - 1].with_value(attempt[i - 1].value - 1)
+                    if state.consider(attempt):
+                        i += 1
+                i -= 1
+        k -= 1
 
-            # NB from here on this is just showing off cool shrinker tricks and
-            # you probably don't need to worry about it and can skip these bits
-            # unless they're easy and you want bragging rights for how much
-            # better you are at shrinking than the local QuickCheck equivalent.
 
-            # Try sorting out of order ranges of integer choices,
-            # as ``sort(x) <= x`` so this is always a lexicographic
-            # reduction. We only sort ranges that are all integers
-            # since sorting mixed types is meaningless.
-            k = 8
-            while k > 1:
-                for i in range(len(self.result) - k - 1, -1, -1):
-                    region = self.result[i : i + k]
-                    if not all(isinstance(n.kind, IntegerChoice) for n in region):
-                        continue
-                    consider(
-                        self.result[:i]
-                        + sorted(region, key=lambda n: n.value)
-                        + self.result[i + k :]
-                    )
-                k -= 1
+@shrink_pass
+def zero_choices(state: TestingState) -> None:
+    """Replace blocks of choices with their simplest values.
+    Skip k=1 because we handle that in the per-choice pass."""
+    assert state.result is not None
+    k = 8
+    while k > 1:
+        i = len(state.result) - k
+        while i >= 0:
+            if state.replace(
+                {j: state.result[j].kind.simplest for j in range(i, i + k)}
+            ):
+                i -= k
+            else:
+                i -= 1
+        k -= 1
 
-            # Try adjusting nearby pairs of integer choices by
-            # redistributing value between them. This is useful for
-            # tests that depend on the sum of some generated values.
-            for k in [2, 1]:
-                for i in range(len(self.result) - 1 - k, -1, -1):
-                    j = i + k
-                    # In theory a swap could shorten self.result,
-                    # putting j out of bounds. In practice the
-                    # zeroing pass always finds such shortenings
-                    # first, so this is just a safety check.
-                    assert j < len(self.result)
-                    kind_i = self.result[i].kind
-                    kind_j = self.result[j].kind
-                    if not isinstance(kind_i, IntegerChoice) or not isinstance(
-                        kind_j, IntegerChoice
-                    ):
-                        continue
-                    # Try swapping out of order pairs
-                    if self.result[i].value > self.result[j].value:
-                        replace(
-                            {
-                                j: self.result[i].value,
-                                i: self.result[j].value,
-                            }
-                        )
-                    if j < len(self.result) and self.result[i].value > kind_i.min_value:
-                        previous_i = self.result[i].value
-                        previous_j = self.result[j].value
-                        bin_search_down(
-                            kind_i.min_value,
-                            previous_i,
-                            lambda v: replace({i: v, j: previous_j + (previous_i - v)}),
-                        )
 
-    def __shrink_float(
-        self,
-        i: int,
-        kind: FloatChoice,
-        replace: Callable[[Mapping[int, Any]], bool],
-    ) -> None:
-        """Shrink a float choice at index i toward human-readable
-        simplicity.
-
-        1. Replace special values (NaN → inf → finite)
-        2. Try range edges
-        3. If negative, try flipping sign
-        4. Shrink string representation parts (exponent, fractional,
-           integer) as integers
-        """
-        assert self.result is not None
-        value = self.result[i].value
-
-        def try_float(f: float) -> bool:
-            if kind.validate(f):
-                return replace({i: f})
-            return False
-
-        # Step 1: Replace special values with simpler ones.
-        if math.isnan(value):
-            for v in [math.inf, -math.inf, 0.0]:
-                if try_float(v):
-                    return
-            return
-        if math.isinf(value):
-            if value < 0:
-                try_float(math.inf)
-                value = self.result[i].value
-            assert math.isinf(value)
-            try_float(sys.float_info.max if value > 0 else -sys.float_info.max)
-            value = self.result[i].value
-
-        # Step 2: Try range edges.
-        if math.isfinite(kind.min_value):
-            try_float(kind.min_value)
-        if math.isfinite(kind.max_value):
-            try_float(kind.max_value)
-        value = self.result[i].value
-
-        # Step 3: If negative, try flipping sign.
-        if value < 0:
-            try_float(-value)
-            value = self.result[i].value
-
-        if not math.isfinite(value):
-            return
-
-        # Step 4: Shrink string parts as integers. For negative
-        # values (in forced-negative ranges), negate before parsing
-        # and negate back when trying replacements.
-        negate = value < 0
-        if negate:
-            value = -value
-
-        def try_positive(f: float) -> bool:
-            return try_float(-f if negate else f)
-
-        exp_part, frac_part, int_part, _ = _parse_float_string(value)
-        if exp_part:
-            exp_abs = exp_part.lstrip("+-")
-            exp_sign = exp_part[0] if exp_part[0] in "+-" else ""
-            if exp_sign == "-":
-                try_positive(float(f"{int_part}.{frac_part}e{exp_abs}"))
-            assert exp_abs  # Python's str() always has digits after 'e'
+@shrink_pass
+def shrink_individual_integers(state: TestingState) -> None:
+    """Binary search each integer choice toward its min_value."""
+    assert state.result is not None
+    i = len(state.result) - 1
+    while i >= 0:
+        node = state.result[i]
+        if isinstance(node.kind, IntegerChoice):
             bin_search_down(
-                0,
-                int(exp_abs),
-                lambda e: try_positive(
-                    float(f"{int_part}.{frac_part}e{exp_sign}{e}")
-                    if e > 0
-                    else float(f"{int_part}.{frac_part}")
-                ),
+                node.kind.min_value,
+                node.value,
+                lambda v: state.replace({i: v}),
             )
-            value = abs(self.result[i].value)
-            exp_part, frac_part, int_part, _ = _parse_float_string(value)
+        i -= 1
 
-        if frac_part and frac_part != "0":
-            reversed_frac = int(frac_part[::-1])
-            bin_search_down(
-                0,
-                reversed_frac,
-                lambda rf: try_positive(float(f"{int_part}.{str(rf)[::-1]}")),
+
+@shrink_pass
+def shrink_individual_booleans(state: TestingState) -> None:
+    """Try replacing each boolean choice with False."""
+    assert state.result is not None
+    i = len(state.result) - 1
+    while i >= 0:
+        node = state.result[i]
+        if isinstance(node.kind, BooleanChoice):
+            state.replace({i: False})
+        i -= 1
+
+
+@shrink_pass
+def shrink_individual_floats(state: TestingState) -> None:
+    """Shrink each float choice toward human-readable simplicity."""
+    assert state.result is not None
+    i = len(state.result) - 1
+    while i >= 0:
+        node = state.result[i]
+        if isinstance(node.kind, FloatChoice):
+            _shrink_float(
+                node.value,
+                node.kind,
+                lambda v: state.replace({i: v}),
             )
-            value = abs(self.result[i].value)
-            exp_part, frac_part, int_part, _ = _parse_float_string(value)
+        i -= 1
 
-        if int_part and int(int_part) > 0:
-            bin_search_down(
-                0,
-                int(int_part),
-                lambda i_val: try_positive(
-                    float(f"{i_val}.{frac_part}") if frac_part else float(i_val)
-                ),
+
+@shrink_pass
+def shrink_individual_strings(state: TestingState) -> None:
+    """Shrink each string choice: shorten, remove chars,
+    reduce codepoints."""
+    assert state.result is not None
+    i = len(state.result) - 1
+    while i >= 0:
+        node = state.result[i]
+        if isinstance(node.kind, StringChoice):
+            _shrink_sequence(
+                node.value,
+                node.kind.min_size,
+                node.kind.simplest,
+                lambda v, j: ord(v[j]),
+                lambda v, j, e: v[:j] + chr(e) + v[j + 1 :],
+                node.kind.min_codepoint,
+                lambda v: state.replace({i: v}),
             )
+        i -= 1
 
-    def __shrink_sequence(
-        self,
-        i: int,
-        min_size: int,
-        simplest: Any,
-        element_value: Callable[[Any, int], int],
-        replace_element: Callable[[Any, int, int], Any],
-        min_element: int,
-        replace: Callable[[Mapping[int, Any]], bool],
-    ) -> None:
-        """Shrink a sequence choice (string or bytes) at index i.
 
-        Tries: simplest value, then shorten, then remove individual
-        elements, then shrink each element value toward min_element.
+@shrink_pass
+def shrink_individual_bytes(state: TestingState) -> None:
+    """Shrink each bytes choice: shorten, remove bytes,
+    reduce byte values."""
+    assert state.result is not None
+    i = len(state.result) - 1
+    while i >= 0:
+        node = state.result[i]
+        if isinstance(node.kind, BytesChoice):
+            _shrink_sequence(
+                node.value,
+                node.kind.min_size,
+                node.kind.simplest,
+                lambda v, j: v[j],
+                lambda v, j, e: v[:j] + bytes([e]) + v[j + 1 :],
+                0,
+                lambda v: state.replace({i: v}),
+            )
+        i -= 1
 
-        element_value: extract an integer from element j of sequence v
-        replace_element: build a new sequence with element j replaced
-        """
-        if replace({i: simplest}):
-            return
-        assert self.result is not None
-        cur = self.result[i].value
-        bin_search_down(
-            min_size,
-            len(cur),
-            lambda sz: replace({i: cur[:sz]}),
-        )
-        assert self.result is not None
-        for j in range(len(self.result[i].value) - 1, -1, -1):
-            assert self.result is not None
-            v = self.result[i].value
-            if j < len(v) and len(v) > min_size:
-                replace({i: v[:j] + v[j + 1 :]})
-        assert self.result is not None
-        for j in range(len(self.result[i].value) - 1, -1, -1):
-            assert self.result is not None
-            v = self.result[i].value
-            if j < len(v) and element_value(v, j) > min_element:
-                result = self.result
-                assert result is not None
-                bin_search_down(
-                    min_element,
-                    element_value(v, j),
-                    lambda e: replace({i: replace_element(result[i].value, j, e)}),
+
+@shrink_pass
+def sort_integer_ranges(state: TestingState) -> None:
+    """Try sorting out of order ranges of integer choices.
+    sort(x) <= x, so this is always a lexicographic reduction."""
+    assert state.result is not None
+    k = 8
+    while k > 1:
+        for i in range(len(state.result) - k - 1, -1, -1):
+            region = state.result[i : i + k]
+            if not all(isinstance(n.kind, IntegerChoice) for n in region):
+                continue
+            state.consider(
+                state.result[:i]
+                + sorted(region, key=lambda n: n.value)
+                + state.result[i + k :]
+            )
+        k -= 1
+
+
+@shrink_pass
+def redistribute_integers(state: TestingState) -> None:
+    """Try adjusting nearby pairs of integer choices by
+    redistributing value between them. Useful for tests that
+    depend on the sum of some generated values."""
+    assert state.result is not None
+    for k in [2, 1]:
+        for i in range(len(state.result) - 1 - k, -1, -1):
+            j = i + k
+            assert j < len(state.result)
+            kind_i = state.result[i].kind
+            kind_j = state.result[j].kind
+            if not isinstance(kind_i, IntegerChoice) or not isinstance(
+                kind_j, IntegerChoice
+            ):
+                continue
+            if state.result[i].value > state.result[j].value:
+                state.replace(
+                    {
+                        j: state.result[i].value,
+                        i: state.result[j].value,
+                    }
                 )
+            if j < len(state.result) and state.result[i].value > kind_i.min_value:
+                previous_i = state.result[i].value
+                previous_j = state.result[j].value
+                bin_search_down(
+                    kind_i.min_value,
+                    previous_i,
+                    lambda v: state.replace({i: v, j: previous_j + (previous_i - v)}),
+                )
+
+
+def _shrink_float(
+    value: float,
+    kind: FloatChoice,
+    try_replace: Callable[[float], bool],
+) -> None:
+    """Shrink a float choice toward human-readable simplicity.
+
+    1. Replace special values (NaN -> inf -> finite)
+    2. Try range edges
+    3. If negative, try flipping sign
+    4. Shrink string representation parts (exponent, fractional,
+       integer) as integers
+    """
+    # We track the current value locally. When try_replace succeeds
+    # with a new value v, we update our local tracking to v.
+    current = [value]
+
+    def try_float(f: float) -> bool:
+        if kind.validate(f):
+            if try_replace(f):
+                current[0] = f
+                return True
+        return False
+
+    # Step 1: Replace special values with simpler ones.
+    if math.isnan(current[0]):
+        for v in [math.inf, -math.inf, 0.0]:
+            if try_float(v):
+                return
+        return
+    if math.isinf(current[0]):
+        if current[0] < 0:
+            try_float(math.inf)
+        assert math.isinf(current[0])
+        try_float(sys.float_info.max if current[0] > 0 else -sys.float_info.max)
+
+    # Step 2: Try range edges.
+    if math.isfinite(kind.min_value):
+        try_float(kind.min_value)
+    if math.isfinite(kind.max_value):
+        try_float(kind.max_value)
+
+    # Step 3: If negative, try flipping sign.
+    if current[0] < 0:
+        try_float(-current[0])
+
+    if not math.isfinite(current[0]):
+        return
+
+    # Step 4: Shrink string parts as integers. For negative
+    # values (in forced-negative ranges), negate before parsing
+    # and negate back when trying replacements.
+    negate = current[0] < 0
+    if negate:
+        current[0] = -current[0]
+
+    def try_positive(f: float) -> bool:
+        return try_float(-f if negate else f)
+
+    exp_part, frac_part, int_part, _ = _parse_float_string(current[0])
+    if exp_part:
+        exp_abs = exp_part.lstrip("+-")
+        exp_sign = exp_part[0] if exp_part[0] in "+-" else ""
+        if exp_sign == "-":
+            try_positive(float(f"{int_part}.{frac_part}e{exp_abs}"))
+        assert exp_abs  # Python's str() always has digits after 'e'
+        bin_search_down(
+            0,
+            int(exp_abs),
+            lambda e: try_positive(
+                float(f"{int_part}.{frac_part}e{exp_sign}{e}")
+                if e > 0
+                else float(f"{int_part}.{frac_part}")
+            ),
+        )
+        current[0] = abs(current[0])
+        exp_part, frac_part, int_part, _ = _parse_float_string(current[0])
+
+    if frac_part and frac_part != "0":
+        reversed_frac = int(frac_part[::-1])
+        bin_search_down(
+            0,
+            reversed_frac,
+            lambda rf: try_positive(float(f"{int_part}.{str(rf)[::-1]}")),
+        )
+        current[0] = abs(current[0])
+        exp_part, frac_part, int_part, _ = _parse_float_string(current[0])
+
+    if int_part and int(int_part) > 0:
+        bin_search_down(
+            0,
+            int(int_part),
+            lambda i_val: try_positive(
+                float(f"{i_val}.{frac_part}") if frac_part else float(i_val)
+            ),
+        )
+
+
+def _shrink_sequence(
+    value: Any,
+    min_size: int,
+    simplest: Any,
+    element_value: Callable[[Any, int], int],
+    replace_element: Callable[[Any, int, int], Any],
+    min_element: int,
+    try_replace: Callable[[Any], bool],
+) -> None:
+    """Shrink a sequence choice (string or bytes).
+
+    Tries: simplest value, then shorten, then remove individual
+    elements, then shrink each element value toward min_element.
+
+    element_value: extract an integer from element j of sequence v
+    replace_element: build a new sequence with element j replaced
+    """
+    # We track the current value locally. When try_replace succeeds
+    # with a new value v, we update our local tracking to v.
+    current = [value]
+
+    def tracking_replace(v: Any) -> bool:
+        if try_replace(v):
+            current[0] = v
+            return True
+        return False
+
+    if tracking_replace(simplest):
+        return
+    cur = current[0]
+    bin_search_down(
+        min_size,
+        len(cur),
+        lambda sz: tracking_replace(cur[:sz]),
+    )
+    for j in range(len(current[0]) - 1, -1, -1):
+        v = current[0]
+        if j < len(v) and len(v) > min_size:
+            tracking_replace(v[:j] + v[j + 1 :])
+    for j in range(len(current[0]) - 1, -1, -1):
+        v = current[0]
+        if j < len(v) and element_value(v, j) > min_element:
+            bin_search_down(
+                min_element,
+                element_value(v, j),
+                lambda e: tracking_replace(replace_element(current[0], j, e)),
+            )
 
 
 def bin_search_down(lo: int, hi: int, f: Callable[[int], bool]) -> int:
