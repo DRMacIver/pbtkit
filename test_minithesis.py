@@ -15,20 +15,11 @@ import pytest
 import minithesis as mt
 from hypothesis import HealthCheck, given, note, reject, settings
 from hypothesis import strategies as st
+from generators import binary, integers, just, lists, nothing, one_of, tuples
 from minithesis import CachedTestFunction, DirectoryDB, Frozen, Generator, Status
 from minithesis import TestCase as TC
 from minithesis import TestingState as State
-from minithesis import (
-    Unsatisfiable,
-    binary,
-    integers,
-    just,
-    lists,
-    mix_of,
-    nothing,
-    run_test,
-    tuples,
-)
+from minithesis import Unsatisfiable, run_test
 
 
 @Generator
@@ -51,7 +42,10 @@ def test_finds_small_list(capsys, seed):
 
     captured = capsys.readouterr()
 
-    assert captured.out.strip() == "any(lists(integers(0, 10000))): [1001]"
+    assert (
+        captured.out.strip()
+        == "any(lists(integers(min_value=0, max_value=10000), min_size=0, max_size=inf)): [1001]"
+    )
 
 
 @pytest.mark.parametrize("seed", range(10))
@@ -335,7 +329,7 @@ def test_mapped_possibility():
 def test_selected_possibility():
     @run_test()
     def _(tc):
-        n = tc.any(integers(0, 5).satisfying(lambda n: n % 2 == 0))
+        n = tc.any(integers(0, 5).filter(lambda n: n % 2 == 0))
         assert n % 2 == 0
 
 
@@ -343,7 +337,7 @@ def test_bound_possibility():
     @run_test()
     def _(tc):
         m, n = tc.any(
-            integers(0, 5).bind(
+            integers(0, 5).flat_map(
                 lambda m: tuples(
                     just(m),
                     integers(m, m + 10),
@@ -362,18 +356,25 @@ def test_cannot_witness_nothing():
             tc.any(nothing())
 
 
-def test_cannot_witness_empty_mix_of():
+def test_cannot_witness_empty_one_of():
     with pytest.raises(Unsatisfiable):
 
         @run_test()
         def _(tc):
-            tc.any(mix_of())
+            tc.any(one_of())
+
+
+def test_one_of_single():
+    @run_test()
+    def _(tc):
+        n = tc.any(one_of(integers(0, 10)))
+        assert 0 <= n <= 10
 
 
 def test_can_draw_mixture():
     @run_test()
     def _(tc):
-        m = tc.any(mix_of(integers(-5, 0), integers(2, 5)))
+        m = tc.any(one_of(integers(-5, 0), integers(2, 5)))
         assert -5 <= m <= 5
         assert m != 1
 
@@ -445,7 +446,7 @@ def test_finds_short_binary(capsys):
             assert len(b) < 1
 
     captured = capsys.readouterr()
-    assert captured.out.strip() == r"any(binary(0, 10)): b'\x00'"
+    assert captured.out.strip() == r"any(binary(min_size=0, max_size=10)): b'\x00'"
 
 
 def test_shrinks_bytes_to_minimal(capsys):
@@ -457,7 +458,7 @@ def test_shrinks_bytes_to_minimal(capsys):
             assert 0xFF not in b
 
     captured = capsys.readouterr()
-    assert captured.out.strip() == r"any(binary(1, 5)): b'\xff'"
+    assert captured.out.strip() == r"any(binary(min_size=1, max_size=5)): b'\xff'"
 
 
 def test_binary_respects_size_bounds():
@@ -482,8 +483,8 @@ def test_shrinks_bytes_with_constraints(capsys):
     # Both bytes sum to 11; order depends on shrinking details.
     output = captured.out.strip()
     assert output in (
-        r"any(binary(2, 10)): b'\x0b\x00'",
-        r"any(binary(2, 10)): b'\x00\x0b'",
+        r"any(binary(min_size=2, max_size=10)): b'\x0b\x00'",
+        r"any(binary(min_size=2, max_size=10)): b'\x00\x0b'",
     )
 
 
@@ -522,7 +523,7 @@ def test_shrinks_bytes_to_simplest(capsys):
             assert sum(b) > 0
 
     captured = capsys.readouterr()
-    assert captured.out.strip() == "any(binary(0, 10)): b''"
+    assert captured.out.strip() == "any(binary(min_size=0, max_size=10)): b''"
 
 
 def test_targeting_with_bytes():

@@ -507,7 +507,7 @@ class Generator(Generic[T]):
             name=f"{self.name}.map({f.__name__})",
         )
 
-    def bind(self, f: Callable[[T], Generator[S]]) -> Generator[S]:
+    def flat_map(self, f: Callable[[T], Generator[S]]) -> Generator[S]:
         """Returns a ``Generator`` where values come from
         drawing a value from ``self``, passing it to ``f`` to
         get a new ``Generator``, then drawing from that."""
@@ -517,12 +517,13 @@ class Generator(Generic[T]):
 
         return Generator[S](
             produce,
-            name=f"{self.name}.bind({f.__name__})",
+            name=f"{self.name}.flat_map({f.__name__})",
         )
 
-    def satisfying(self, f: Callable[[T], bool]) -> Generator[T]:
-        """Returns a ``Generator`` whose values are any possible
-        value of ``self`` for which ``f`` returns True."""
+    def filter(self, f: Callable[[T], bool]) -> Generator[T]:
+        """Returns a ``Generator`` whose values are drawn from
+        ``self`` and satisfy ``f``. Retries up to 3 times,
+        then rejects the test case."""
 
         def produce(test_case: TestCase) -> T:
             for _ in range(3):
@@ -531,77 +532,7 @@ class Generator(Generic[T]):
                     return candidate
             test_case.reject()
 
-        return Generator[T](produce, name=f"{self.name}.satisfying({f.__name__})")
-
-
-def integers(m: int, n: int) -> Generator[int]:
-    """Generates an integer in the range [m, n]."""
-    return Generator(lambda tc: tc.draw_integer(m, n), name=f"integers({m}, {n})")
-
-
-def binary(min_size: int = 0, max_size: int = 8) -> Generator[bytes]:
-    """Any byte string with length in [min_size, max_size] is possible."""
-    return Generator(
-        lambda tc: tc.draw_bytes(min_size, max_size),
-        name=f"binary({min_size}, {max_size})",
-    )
-
-
-def lists(
-    elements: Generator[U],
-    min_size: int = 0,
-    max_size: float = float("inf"),
-) -> Generator[List[U]]:
-    """Generates lists whose elements are drawn from ``elements``."""
-
-    def produce(test_case: TestCase) -> List[U]:
-        result: List[U] = []
-        while True:
-            if len(result) < min_size:
-                test_case.weighted(0.9, forced=True)
-            elif len(result) + 1 >= max_size:
-                test_case.weighted(0.9, forced=False)
-                break
-            elif not test_case.weighted(0.9):
-                break
-            result.append(test_case.any(elements))
-        return result
-
-    return Generator[List[U]](produce, name=f"lists({elements.name})")
-
-
-def just(value: U) -> Generator[U]:
-    """Only ``value`` is possible."""
-    return Generator[U](lambda tc: value, name=f"just({value})")
-
-
-def nothing() -> Generator[NoReturn]:
-    """No possible values. i.e. Any call to ``any`` will reject
-    the test case."""
-
-    def produce(tc: TestCase) -> NoReturn:
-        tc.reject()
-
-    return Generator(produce)
-
-
-def mix_of(*generators: Generator[T]) -> Generator[T]:
-    """Randomly picks one of the given generators and draws from it."""
-    if not generators:
-        return nothing()
-    return Generator(
-        lambda tc: tc.any(generators[tc.choice(len(generators) - 1)]),
-        name="mix_of({', '.join(g.name for g in generators)})",
-    )
-
-
-def tuples(*generators: Generator[Any]) -> Generator[Any]:
-    """Generates a tuple of length len(generators) where element i
-    is drawn from generators[i]."""
-    return Generator(
-        lambda tc: tuple(tc.any(g) for g in generators),
-        name="tuples({', '.join(g.name for g in generators)})",
-    )
+        return Generator[T](produce, name=f"{self.name}.filter({f.__name__})")
 
 
 # We cap the maximum amount of entropy a test case can use.
