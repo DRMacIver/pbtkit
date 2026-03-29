@@ -34,7 +34,7 @@ in order of most to least important:
 6. A caching layer for mapping choice sequences to outcomes
 
 
-Anything that supports 1 and 2 is a reasonable good first porting
+Anything that supports 1 and 2 is a reasonably good first porting
 goal. You'll probably want to port most of the generators library
 because it's easy and it helps you write tests, but don't worry
 too much about the specifics.
@@ -205,14 +205,20 @@ def _deserialize_choices(data: bytes) -> Optional[List]:
             tag = data[i]
             i += 1
             if tag == _TAG_INTEGER:
+                if i + 8 > len(data):
+                    return None
                 values.append(int.from_bytes(data[i : i + 8], "big"))
                 i += 8
             elif tag == _TAG_BOOLEAN:
                 values.append(bool(data[i]))
                 i += 1
             elif tag == _TAG_BYTES:
+                if i + 4 > len(data):
+                    return None
                 length = int.from_bytes(data[i : i + 4], "big")
                 i += 4
+                if i + length > len(data):
+                    return None
                 values.append(data[i : i + length])
                 i += length
             else:
@@ -244,7 +250,7 @@ def run_test(
     that fails.
 
     The test will be run immediately, unlike in Hypothesis where
-    @given wraps a function to expose it to the the test runner.
+    @given wraps a function to expose it to the test runner.
     If you don't want it to be run immediately wrap it inside a
     test function yourself.
 
@@ -311,7 +317,7 @@ def run_test(
     return accept
 
 
-class TestCase(object):
+class TestCase:
     """Represents a single generated test case, which consists
     of an underlying sequence of typed choices."""
 
@@ -503,9 +509,8 @@ class Generator(Generic[T]):
 
     def bind(self, f: Callable[[T], Generator[S]]) -> Generator[S]:
         """Returns a ``Generator`` where values come from
-        applying ``f`` (which should return a new ``Generator``
-        to some possible value for ``self`` then returning a possible
-        value from that."""
+        drawing a value from ``self``, passing it to ``f`` to
+        get a new ``Generator``, then drawing from that."""
 
         def produce(test_case: TestCase) -> S:
             return test_case.any(f(test_case.any(self)))
@@ -526,11 +531,11 @@ class Generator(Generic[T]):
                     return candidate
             test_case.reject()
 
-        return Generator[T](produce, name=f"{self.name}.select({f.__name__})")
+        return Generator[T](produce, name=f"{self.name}.satisfying({f.__name__})")
 
 
 def integers(m: int, n: int) -> Generator[int]:
-    """Any integer in the range [m, n] is possible"""
+    """Generates an integer in the range [m, n]."""
     return Generator(lambda tc: tc.draw_integer(m, n), name=f"integers({m}, {n})")
 
 
@@ -547,7 +552,7 @@ def lists(
     min_size: int = 0,
     max_size: float = float("inf"),
 ) -> Generator[List[U]]:
-    """Any lists whose elements are possible values from ``elements`` are possible."""
+    """Generates lists whose elements are drawn from ``elements``."""
 
     def produce(test_case: TestCase) -> List[U]:
         result: List[U] = []
@@ -616,7 +621,7 @@ def sort_key(nodes: Sequence[ChoiceNode]) -> Tuple:
     return (len(nodes), [n.sort_key for n in nodes])
 
 
-class CachedTestFunction(object):
+class CachedTestFunction:
     """Returns a cached version of a function that maps
     a choice sequence to the status of calling a test function
     on a test case populated with it. Is able to take advantage
@@ -680,7 +685,7 @@ class CachedTestFunction(object):
         return test_case.status
 
 
-class TestingState(object):
+class TestingState:
     def __init__(
         self,
         random: Random,
@@ -939,9 +944,9 @@ class TestingState(object):
                         # next region does not overlap with this at all.
                         i -= k
                     else:
-                        # Otherwise we might still be able to zero some
-                        # of these values but not the last one, so we
-                        # just go back one.
+                        # Otherwise we might still be able to simplify
+                        # some of these values but not the last one,
+                        # so we just go back one.
                         i -= 1
                 k -= 1
 
@@ -962,43 +967,7 @@ class TestingState(object):
                     )
                 else:
                     assert isinstance(node.kind, BytesChoice)
-                    # Bytes: try simplest, then shorten, then
-                    # remove individual bytes, then shrink each
-                    # byte value toward 0.
-                    kind = node.kind
-                    if not replace({i: kind.simplest}):
-                        result = self.result
-                        assert result is not None
-                        cur = result[i].value
-                        bin_search_down(
-                            kind.min_size,
-                            len(cur),
-                            lambda sz: replace({i: cur[:sz]}),
-                        )
-                        result = self.result
-                        assert result is not None
-                        for j in range(len(result[i].value) - 1, -1, -1):
-                            v = result[i].value
-                            if j < len(v) and len(v) > kind.min_size:
-                                replace({i: v[:j] + v[j + 1 :]})
-                                result = self.result
-                                assert result is not None
-                        result = self.result
-                        assert result is not None
-                        for j in range(len(result[i].value) - 1, -1, -1):
-                            v = result[i].value
-                            if j < len(v) and v[j] != 0:
-                                bin_search_down(
-                                    0,
-                                    v[j],
-                                    lambda b: replace(
-                                        {
-                                            i: result[i].value[:j]
-                                            + bytes([b])
-                                            + result[i].value[j + 1 :]
-                                        }
-                                    ),
-                                )
+                    self.__shrink_bytes(i, node.kind, replace)
                 i -= 1
 
             # NB from here on this is just showing off cool shrinker tricks and
@@ -1056,6 +1025,44 @@ class TestingState(object):
                             previous_i,
                             lambda v: replace({i: v, j: previous_j + (previous_i - v)}),
                         )
+
+    def __shrink_bytes(
+        self, i: int, kind: BytesChoice, replace: Callable[[Mapping[int, Any]], bool]
+    ) -> None:
+        """Shrink a bytes choice at index i: try simplest, then
+        shorten, then remove individual bytes, then shrink each
+        byte value toward 0."""
+        if replace({i: kind.simplest}):
+            return
+        assert self.result is not None
+        cur = self.result[i].value
+        bin_search_down(
+            kind.min_size,
+            len(cur),
+            lambda sz: replace({i: cur[:sz]}),
+        )
+        assert self.result is not None
+        for j in range(len(self.result[i].value) - 1, -1, -1):
+            assert self.result is not None
+            v = self.result[i].value
+            if j < len(v) and len(v) > kind.min_size:
+                replace({i: v[:j] + v[j + 1 :]})
+        assert self.result is not None
+        for j in range(len(self.result[i].value) - 1, -1, -1):
+            assert self.result is not None
+            v = self.result[i].value
+            if j < len(v) and v[j] != 0:
+                bin_search_down(
+                    0,
+                    v[j],
+                    lambda b: replace(
+                        {
+                            i: self.result[i].value[:j]  # type: ignore[index]
+                            + bytes([b])
+                            + self.result[i].value[j + 1 :]  # type: ignore[index]
+                        }
+                    ),
+                )
 
 
 def bin_search_down(lo: int, hi: int, f: Callable[[int], bool]) -> int:

@@ -479,7 +479,12 @@ def test_shrinks_bytes_with_constraints(capsys):
             assert sum(b) <= 10
 
     captured = capsys.readouterr()
-    assert captured.out.strip() == r"any(binary(2, 10)): b'\x00\x0b'"
+    # Both bytes sum to 11; order depends on shrinking details.
+    output = captured.out.strip()
+    assert output in (
+        r"any(binary(2, 10)): b'\x0b\x00'",
+        r"any(binary(2, 10)): b'\x00\x0b'",
+    )
 
 
 def test_mixed_types_database_round_trip(tmpdir):
@@ -553,10 +558,18 @@ def test_empty_database_entry():
         pass
 
 
-def test_truncated_database_entry():
+@pytest.mark.parametrize(
+    "data",
+    [
+        b"\x01",  # Boolean tag with no value byte
+        b"\x00\x01\x02",  # Integer tag with only 3 of 8 bytes
+        b"\x02\x00\x00",  # Bytes tag with truncated length header
+        b"\x02\x00\x00\x00\x05\x01",  # Bytes tag claiming length 5 but only 1 byte
+    ],
+)
+def test_truncated_database_entry(data):
     """Truncated database entries are silently ignored."""
-    # Boolean tag (0x01) with no value byte following
-    db = {"_": b"\x01"}
+    db = {"_": data}
 
     @run_test(database=db, max_examples=1)
     def _(test_case):
