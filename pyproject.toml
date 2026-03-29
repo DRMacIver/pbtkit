@@ -10,4 +10,10 @@ dev = [
     "pytest",
     "coverage",
     "ruff",
+    "pyright",
+]
+
+[tool.coverage.report]
+exclude_also = [
+    "raise NotImplementedError",
 ]

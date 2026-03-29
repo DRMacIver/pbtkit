@@ -86,13 +86,17 @@ U = TypeVar("U")
 @dataclass(frozen=True)
 class ChoiceType(Generic[U]):
     """Base class for typed choices. The type parameter U is the
-    type of value this choice produces. Subclasses carry the
-    constraints specific to each choice type.
+    type of value this choice produces."""
 
-    Subclasses must define:
-    * simplest: property returning the simplest/shrink-target value
-    * validate(value): return True if value is valid
-    """
+    @property
+    def simplest(self) -> U:
+        """The simplest value for this choice type, used as the
+        shrink target."""
+        raise NotImplementedError
+
+    def validate(self, value: U) -> bool:
+        """Return True if value is valid for this choice type."""
+        raise NotImplementedError
 
     def sort_key(self, value: U) -> Any:
         """Returns a comparable key for ordering values during
@@ -812,6 +816,7 @@ class TestingState(object):
         cached = CachedTestFunction(self.test_function)
 
         def consider(nodes: List[ChoiceNode]) -> bool:
+            assert self.result is not None
             if sort_key(nodes) == sort_key(self.result):
                 return True
             return cached([n.value for n in nodes]) == Status.INTERESTING
@@ -956,28 +961,37 @@ class TestingState(object):
                     # Bytes: try simplest, then shorten, then
                     # remove individual bytes, then shrink each
                     # byte value toward 0.
-                    if not replace({i: node.kind.simplest}):
-                        cur = self.result[i].value
+                    kind = node.kind
+                    if not replace({i: kind.simplest}):
+                        result = self.result
+                        assert result is not None
+                        cur = result[i].value
                         bin_search_down(
-                            self.result[i].kind.min_size,
+                            kind.min_size,
                             len(cur),
                             lambda sz: replace({i: cur[:sz]}),
                         )
-                        for j in range(len(self.result[i].value) - 1, -1, -1):
-                            v = self.result[i].value
-                            if j < len(v) and len(v) > self.result[i].kind.min_size:
+                        result = self.result
+                        assert result is not None
+                        for j in range(len(result[i].value) - 1, -1, -1):
+                            v = result[i].value
+                            if j < len(v) and len(v) > kind.min_size:
                                 replace({i: v[:j] + v[j + 1 :]})
-                        for j in range(len(self.result[i].value) - 1, -1, -1):
-                            v = self.result[i].value
+                                result = self.result
+                                assert result is not None
+                        result = self.result
+                        assert result is not None
+                        for j in range(len(result[i].value) - 1, -1, -1):
+                            v = result[i].value
                             if j < len(v) and v[j] != 0:
                                 bin_search_down(
                                     0,
                                     v[j],
                                     lambda b: replace(
                                         {
-                                            i: self.result[i].value[:j]
+                                            i: result[i].value[:j]
                                             + bytes([b])
-                                            + self.result[i].value[j + 1 :]
+                                            + result[i].value[j + 1 :]
                                         }
                                     ),
                                 )
@@ -1011,31 +1025,33 @@ class TestingState(object):
             for k in [2, 1]:
                 for i in range(len(self.result) - 1 - k, -1, -1):
                     j = i + k
-                    # This check is necessary because the previous changes
-                    # might have shrunk the size of result, but also it's tedious
-                    # to write tests for this so I didn't.
-                    if j < len(self.result):  # pragma: no cover
-                        if not isinstance(
-                            self.result[i].kind, IntegerChoice
-                        ) or not isinstance(self.result[j].kind, IntegerChoice):
-                            continue
-                        # Try swapping out of order pairs
-                        if self.result[i].value > self.result[j].value:
-                            replace(
-                                {
-                                    j: self.result[i].value,
-                                    i: self.result[j].value,
-                                }
-                            )
-                        # j could be out of range if the previous swap succeeded.
-                        if (
-                            j < len(self.result)
-                            and self.result[i].value > self.result[i].kind.min_value
-                        ):
+                    # In theory a swap could shorten self.result,
+                    # putting j out of bounds. In practice the
+                    # zeroing pass always finds such shortenings
+                    # first, so this is just a safety check.
+                    assert j < len(self.result)
+                    kind_i = self.result[i].kind
+                    kind_j = self.result[j].kind
+                    if not isinstance(kind_i, IntegerChoice) or not isinstance(
+                        kind_j, IntegerChoice
+                    ):
+                        continue
+                    # Try swapping out of order pairs
+                    if self.result[i].value > self.result[j].value:
+                        replace(
+                            {
+                                j: self.result[i].value,
+                                i: self.result[j].value,
+                            }
+                        )
+                    if (
+                        j < len(self.result)
+                        and self.result[i].value > kind_i.min_value
+                    ):
                             previous_i = self.result[i].value
                             previous_j = self.result[j].value
                             bin_search_down(
-                                self.result[i].kind.min_value,
+                                kind_i.min_value,
                                 previous_i,
                                 lambda v: replace(
                                     {i: v, j: previous_j + (previous_i - v)}

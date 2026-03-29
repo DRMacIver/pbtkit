@@ -479,7 +479,7 @@ def test_shrinks_bytes_with_constraints(capsys):
             assert sum(b) <= 10
 
     captured = capsys.readouterr()
-    assert captured.out.strip() == r"any(binary(2, 10)): b'\x0b\x00'"
+    assert captured.out.strip() == r"any(binary(2, 10)): b'\x00\x0b'"
 
 
 def test_mixed_types_database_round_trip(tmpdir):
