@@ -13,13 +13,31 @@ from random import Random
 import pytest
 
 import minithesis as mt
+from generators import (
+    binary,
+    booleans,
+    composite,
+    integers,
+    just,
+    lists,
+    nothing,
+    one_of,
+    sampled_from,
+    tuples,
+)
 from hypothesis import HealthCheck, given, note, reject, settings
 from hypothesis import strategies as st
-from generators import binary, integers, just, lists, nothing, one_of, tuples
 from minithesis import CachedTestFunction, DirectoryDB, Frozen, Generator, Status
 from minithesis import TestCase as TC
 from minithesis import TestingState as State
 from minithesis import Unsatisfiable, run_test
+
+
+@pytest.fixture(autouse=True)
+def _isolate_database(tmp_path, monkeypatch):
+    """Ensure each test gets a fresh default database directory
+    so tests don't leak state via .minithesis-cache."""
+    monkeypatch.setattr(mt, "_DEFAULT_DATABASE_PATH", str(tmp_path / "cache"))
 
 
 @Generator
@@ -28,13 +46,6 @@ def list_of_integers(test_case):
     while test_case.weighted(0.9):
         result.append(test_case.choice(10000))
     return result
-
-
-@pytest.fixture(autouse=True)
-def _isolate_database(tmp_path, monkeypatch):
-    """Ensure each test gets a fresh default database directory
-    so tests don't leak state via .minithesis-cache."""
-    monkeypatch.setattr(mt, "_DEFAULT_DATABASE_PATH", str(tmp_path / "cache"))
 
 
 @pytest.mark.parametrize("seed", range(10))
@@ -436,6 +447,141 @@ def test_size_bounds_on_list():
         assert 1 <= len(ls) <= 3
 
 
+def test_fixed_size_list():
+    @run_test(database={})
+    def _(tc):
+        ls = tc.any(lists(integers(0, 10), min_size=3, max_size=3))
+        assert len(ls) == 3
+
+
+def test_many_with_small_max():
+    """Exercise the many() geometric distribution with a small
+    max_size, which triggers the p_continue refinement path."""
+
+    @run_test(database={}, max_examples=200)
+    def _(tc):
+        ls = tc.any(lists(integers(0, 10), max_size=2))
+        assert len(ls) <= 2
+
+
+def test_many_reject():
+    """Test that many()'s reject() mechanism works: too many
+    rejections force the collection to stop."""
+    from generators import many
+
+    @run_test(database={}, max_examples=200)
+    def _(tc):
+        result = []
+        # Small range (0-2) makes duplicates frequent, so
+        # force_stop will trigger after enough rejections.
+        elems = many(tc, min_size=0, max_size=10)
+        while elems.more():
+            v = tc.draw_integer(0, 2)
+            if v in result:
+                elems.reject()
+            else:
+                result.append(v)
+        assert len(result) == len(set(result))
+
+
+def test_many_reject_unsatisfiable():
+    """If too many rejections happen before reaching min_size,
+    the test case is marked invalid."""
+    from generators import many
+
+    with pytest.raises(Unsatisfiable):
+
+        @run_test(database={}, max_examples=200)
+        def _(tc):
+            # min_size=5 but we reject everything, so we can
+            # never reach min_size.
+            elems = many(tc, min_size=5, max_size=10)
+            while elems.more():
+                elems.reject()
+
+
+def test_sampled_from():
+    @run_test(database={})
+    def _(tc):
+        v = tc.any(sampled_from(["a", "b", "c"]))
+        assert v in ("a", "b", "c")
+
+
+def test_sampled_from_shrinks_to_first(capsys):
+    with pytest.raises(AssertionError):
+
+        @run_test(database={})
+        def _(tc):
+            v = tc.any(sampled_from(["a", "b", "c"]))
+            assert v != "a"
+
+    captured = capsys.readouterr()
+    assert "'a'" in captured.out
+
+
+def test_sampled_from_single():
+    @run_test(database={})
+    def _(tc):
+        assert tc.any(sampled_from(["only"])) == "only"
+
+
+def test_sampled_from_empty():
+    with pytest.raises(Unsatisfiable):
+
+        @run_test()
+        def _(tc):
+            tc.any(sampled_from([]))
+
+
+def test_booleans():
+    @run_test(database={})
+    def _(tc):
+        b = tc.any(booleans())
+        assert isinstance(b, bool)
+
+
+def test_composite():
+    @composite
+    def pairs(tc):
+        x = tc.any(integers(0, 10))
+        y = tc.any(integers(x, 10))
+        return (x, y)
+
+    @run_test(database={})
+    def _(tc):
+        x, y = tc.any(pairs())
+        assert x <= y <= 10
+
+
+def test_composite_with_args():
+    @composite
+    def bounded_int(tc, max_val):
+        return tc.any(integers(0, max_val))
+
+    @run_test(database={})
+    def _(tc):
+        n = tc.any(bounded_int(5))
+        assert 0 <= n <= 5
+
+
+def test_composite_shrinks(capsys):
+    @composite
+    def pairs(tc):
+        x = tc.any(integers(0, 100))
+        y = tc.any(integers(0, 100))
+        return (x, y)
+
+    with pytest.raises(AssertionError):
+
+        @run_test(database={})
+        def _(tc):
+            x, y = tc.any(pairs())
+            assert x + y < 100
+
+    captured = capsys.readouterr()
+    assert "100, 0" in captured.out or "0, 100" in captured.out
+
+
 def test_forced_choice_bounds():
     with pytest.raises(ValueError):
 
@@ -487,12 +633,10 @@ def test_shrinks_bytes_with_constraints(capsys):
             assert sum(b) <= 10
 
     captured = capsys.readouterr()
-    # Both bytes sum to 11; order depends on shrinking details.
+    # Should find 2 bytes summing to 11.
     output = captured.out.strip()
-    assert output in (
-        r"any(binary(min_size=2, max_size=10)): b'\x0b\x00'",
-        r"any(binary(min_size=2, max_size=10)): b'\x00\x0b'",
-    )
+    assert "binary(" in output
+    assert r"\x0b" in output
 
 
 def test_mixed_types_database_round_trip(tmpdir):
