@@ -74,7 +74,6 @@ from typing import (
     Tuple,
     TypeVar,
     Union,
-    cast,
 )
 
 
@@ -339,9 +338,7 @@ class TestCase(object):
         print_results: bool = False,
     ):
         self.prefix = prefix
-        # random can only be None if max_size == len(prefix),
-        # i.e. all choices come from the prefix.
-        self.random: Random = cast(Random, random)
+        self._random = random
         self.max_size = max_size
         self.nodes: List[ChoiceNode] = []
         self.status: Optional[Status] = None
@@ -446,6 +443,14 @@ class TestCase(object):
             raise Frozen()
         self.status = status
         raise StopTest()
+
+    @property
+    def random(self) -> Random:
+        """The Random instance for this test case. Only available
+        when the test case was created with a Random (not from
+        for_choices)."""
+        assert self._random is not None
+        return self._random
 
     def __should_print(self) -> bool:
         return self.print_results and self.depth == 0
@@ -1044,19 +1049,14 @@ class TestingState(object):
                                 i: self.result[j].value,
                             }
                         )
-                    if (
-                        j < len(self.result)
-                        and self.result[i].value > kind_i.min_value
-                    ):
-                            previous_i = self.result[i].value
-                            previous_j = self.result[j].value
-                            bin_search_down(
-                                kind_i.min_value,
-                                previous_i,
-                                lambda v: replace(
-                                    {i: v, j: previous_j + (previous_i - v)}
-                                ),
-                            )
+                    if j < len(self.result) and self.result[i].value > kind_i.min_value:
+                        previous_i = self.result[i].value
+                        previous_j = self.result[j].value
+                        bin_search_down(
+                            kind_i.min_value,
+                            previous_i,
+                            lambda v: replace({i: v, j: previous_j + (previous_i - v)}),
+                        )
 
 
 def bin_search_down(lo: int, hi: int, f: Callable[[int], bool]) -> int:
