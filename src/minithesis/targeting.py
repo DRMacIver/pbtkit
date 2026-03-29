@@ -2,8 +2,7 @@
 
 This module adds score-based targeting (hill climbing) to the core
 engine. When imported, it patches TestCase with a target() method
-and registers the targeting phase and test-function hook on
-TestingState.
+and registers the targeting phase and test-function hook.
 """
 
 from __future__ import annotations
@@ -17,6 +16,8 @@ from minithesis.core import (
     Status,
     TestCase,
     TestingState,
+    run_phase,
+    test_function_hook,
 )
 
 
@@ -32,9 +33,10 @@ def _target(self: TestCase, score: int) -> None:
     self.targeting_score = score
 
 
-TestCase.target = _target  # type: ignore[assignment]
+TestCase.target = _target
 
 
+@test_function_hook
 def _targeting_hook(state: TestingState, test_case: TestCase) -> None:
     """Track the best targeting score seen so far."""
     if test_case.status is not None and test_case.status >= Status.VALID:
@@ -51,9 +53,7 @@ def _targeting_hook(state: TestingState, test_case: TestCase) -> None:
                     state.best_scoring = relevant_info
 
 
-TestingState.test_function_hooks.append(_targeting_hook)
-
-
+@run_phase
 def _targeting_phase(state: TestingState) -> None:
     """If any test cases have had ``target()`` called on them, do a simple
     hill climbing algorithm to attempt to optimise that target score."""
@@ -99,6 +99,3 @@ def _targeting_phase(state: TestingState) -> None:
             while state.should_keep_generating() and adjust(i, sign * k):
                 pass
             k //= 2
-
-
-TestingState.run_phases.append(_targeting_phase)

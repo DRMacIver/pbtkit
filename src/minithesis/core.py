@@ -406,8 +406,8 @@ class TestCase:
         allow_nan: bool = True,
         allow_infinity: bool = True,
     ) -> float:
-        """Returns a random float. Implemented in minithesis.__init__."""
-        raise NotImplementedError("import minithesis to use draw_float")
+        """Returns a random float. Stub — import minithesis.floats to enable."""
+        raise NotImplementedError("import minithesis.floats to use draw_float")
 
     def draw_string(
         self,
@@ -416,12 +416,12 @@ class TestCase:
         min_size: int = 0,
         max_size: int = 10,
     ) -> str:
-        """Returns a random string. Implemented in minithesis.__init__."""
-        raise NotImplementedError("import minithesis to use draw_string")
+        """Returns a random string. Stub — import minithesis.text to enable."""
+        raise NotImplementedError("import minithesis.text to use draw_string")
 
     def draw_bytes(self, min_size: int, max_size: int) -> bytes:
-        """Returns a random byte string. Implemented in minithesis.__init__."""
-        raise NotImplementedError("import minithesis to use draw_bytes")
+        """Returns a random byte string. Stub — import minithesis.bytes to enable."""
+        raise NotImplementedError("import minithesis.bytes to use draw_bytes")
 
     def choice(self, n: int) -> int:
         """Returns a number in the range [0, n]"""
@@ -473,7 +473,7 @@ class TestCase:
 
     def target(self, score: int) -> None:
         """Set a score to maximize. Stub — import minithesis to enable."""
-        raise NotImplementedError("import minithesis to use target")
+        raise NotImplementedError("import minithesis.targeting to use target")
 
     def any(self, generator: Generator[U]) -> U:
         """Return a value from ``generator``."""
@@ -584,6 +584,8 @@ class Generator(Generic[T]):
 # TestingState and attempting to simplify state.result.
 # Passes are run in order, repeating until a fixed point.
 SHRINK_PASSES: List[Callable[["TestingState"], None]] = []
+TEST_FUNCTION_HOOKS: List[Callable[["TestingState", "TestCase"], None]] = []
+RUN_PHASES: List[Callable[["TestingState"], None]] = []
 
 
 def shrink_pass(
@@ -591,6 +593,22 @@ def shrink_pass(
 ) -> Callable[["TestingState"], None]:
     """Decorator that registers a function as a shrink pass."""
     SHRINK_PASSES.append(fn)
+    return fn
+
+
+def test_function_hook(
+    fn: Callable[["TestingState", "TestCase"], None],
+) -> Callable[["TestingState", "TestCase"], None]:
+    """Decorator that registers a hook called after each test function run."""
+    TEST_FUNCTION_HOOKS.append(fn)
+    return fn
+
+
+def run_phase(
+    fn: Callable[["TestingState"], None],
+) -> Callable[["TestingState"], None]:
+    """Decorator that registers a phase in the test run (between generate and shrink)."""
+    RUN_PHASES.append(fn)
     return fn
 
 
@@ -685,9 +703,6 @@ class TestingState:
         self.best_scoring: Optional[Tuple[int, List[ChoiceNode]]] = None
         self.test_is_trivial = False
 
-    test_function_hooks: List[Callable[["TestingState", TestCase], None]] = []
-    run_phases: List[Callable[["TestingState"], None]] = []
-
     def test_function(self, test_case: TestCase) -> None:
         try:
             self.__test_function(test_case)
@@ -701,7 +716,7 @@ class TestingState:
         if test_case.status >= Status.VALID:
             self.valid_test_cases += 1
 
-        for hook in self.test_function_hooks:
+        for hook in TEST_FUNCTION_HOOKS:
             hook(self, test_case)
 
         if test_case.status == Status.INTERESTING and (
@@ -711,7 +726,7 @@ class TestingState:
 
     def run(self) -> None:
         self.generate()
-        for phase in self.run_phases:
+        for phase in RUN_PHASES:
             phase(self)
         self.shrink()
 
