@@ -91,6 +91,7 @@ def test_can_draw_mixture():
         assert m != 1
 
 
+@pytest.mark.requires("targeting")
 def test_target_and_reduce(capsys):
     """This test is very hard to trigger without targeting,
     and targeting will tend to overshoot the score, so we

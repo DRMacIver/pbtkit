@@ -103,6 +103,7 @@ def test_shrinks_bytes_to_simplest(capsys):
     assert captured.out.strip() == "any(binary(min_size=0, max_size=10)): b''"
 
 
+@pytest.mark.requires("targeting")
 def test_targeting_with_bytes():
     """Targeting skips non-integer nodes without crashing."""
     max_score = 0

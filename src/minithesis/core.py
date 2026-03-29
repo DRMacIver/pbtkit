@@ -472,15 +472,8 @@ class TestCase:
             self.reject()
 
     def target(self, score: int) -> None:
-        """Set a score to maximize. Multiple calls to this function
-        will override previous ones.
-
-        The name and idea come from Löscher, Andreas, and Konstantinos
-        Sagonas. "Targeted property-based testing." ISSTA. 2017, but
-        the implementation is based on that found in Hypothesis,
-        which is not that similar to anything described in the paper.
-        """
-        self.targeting_score = score
+        """Set a score to maximize. Stub — import minithesis to enable."""
+        raise NotImplementedError("import minithesis to use target")
 
     def any(self, generator: Generator[U]) -> U:
         """Return a value from ``generator``."""
@@ -692,6 +685,9 @@ class TestingState:
         self.best_scoring: Optional[Tuple[int, List[ChoiceNode]]] = None
         self.test_is_trivial = False
 
+    test_function_hooks: List[Callable[["TestingState", TestCase], None]] = []
+    run_phases: List[Callable[["TestingState"], None]] = []
+
     def test_function(self, test_case: TestCase) -> None:
         try:
             self.__test_function(test_case)
@@ -705,71 +701,18 @@ class TestingState:
         if test_case.status >= Status.VALID:
             self.valid_test_cases += 1
 
-            if test_case.targeting_score is not None:
-                relevant_info = (test_case.targeting_score, test_case.nodes)
-                if self.best_scoring is None:
-                    self.best_scoring = relevant_info
-                else:
-                    best, _ = self.best_scoring
-                    if test_case.targeting_score > best:
-                        self.best_scoring = relevant_info
+        for hook in self.test_function_hooks:
+            hook(self, test_case)
 
         if test_case.status == Status.INTERESTING and (
             self.result is None or sort_key(test_case.nodes) < sort_key(self.result)
         ):
             self.result = test_case.nodes
 
-    def target(self) -> None:
-        """If any test cases have had ``target()`` called on them, do a simple
-        hill climbing algorithm to attempt to optimise that target score."""
-        if self.result is not None or self.best_scoring is None:
-            return
-
-        def adjust(i: int, step: int) -> bool:
-            """Can we improve the score by changing nodes[i] by ``step``?"""
-            assert self.best_scoring is not None
-            score, nodes = self.best_scoring
-            if not isinstance(nodes[i].kind, IntegerChoice):
-                return False
-            if nodes[i].value + step < 0 or nodes[i].value.bit_length() >= 64:
-                return False
-            values = [n.value for n in nodes]
-            values[i] += step
-            test_case = TestCase(
-                prefix=values, random=self.random, max_size=BUFFER_SIZE
-            )
-            self.test_function(test_case)
-            assert test_case.status is not None
-            return (
-                test_case.status >= Status.VALID
-                and test_case.targeting_score is not None
-                and test_case.targeting_score > score
-            )
-
-        while self.should_keep_generating():
-            i = self.random.randrange(0, len(self.best_scoring[1]))
-            sign = 0
-            for k in [1, -1]:
-                if not self.should_keep_generating():
-                    return
-                if adjust(i, k):
-                    sign = k
-                    break
-            if sign == 0:
-                continue
-
-            k = 1
-            while self.should_keep_generating() and adjust(i, sign * k):
-                k *= 2
-
-            while k > 0:
-                while self.should_keep_generating() and adjust(i, sign * k):
-                    pass
-                k //= 2
-
     def run(self) -> None:
         self.generate()
-        self.target()
+        for phase in self.run_phases:
+            phase(self)
         self.shrink()
 
     def should_keep_generating(self) -> bool:

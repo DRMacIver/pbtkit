@@ -41,4 +41,5 @@ __all__ = [
 # registers its serializer, shrink pass, and draw method on TestCase.
 import minithesis.bytes
 import minithesis.floats
+import minithesis.targeting
 import minithesis.text

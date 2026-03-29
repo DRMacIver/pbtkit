@@ -7,6 +7,7 @@ test-core:
     MINITHESIS_DISABLED=bytes uv run pytest tests/ -m 'not hypothesis' --verbose
     MINITHESIS_DISABLED=text uv run pytest tests/ -m 'not hypothesis' --verbose
     MINITHESIS_DISABLED=collections uv run pytest tests/ -m 'not hypothesis' --verbose
+    MINITHESIS_DISABLED=targeting uv run pytest tests/ -m 'not hypothesis' --verbose
 
 typecheck:
     uv run pyright src/
