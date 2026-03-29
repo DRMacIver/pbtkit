@@ -425,7 +425,7 @@ class TestCase(object):
         """
         self.targeting_score = score
 
-    def any(self, possibility: Possibility[U]) -> U:
+    def any(self, possibility: Generator[U]) -> U:
         """Return a possible value from ``possibility``."""
         try:
             self.depth += 1
@@ -480,7 +480,7 @@ class TestCase(object):
         return value
 
 
-class Possibility(Generic[T]):
+class Generator(Generic[T]):
     """Represents some range of values that might be used in
     a test, that can be requested from a ``TestCase``.
 
@@ -494,30 +494,30 @@ class Possibility(Generic[T]):
     def __repr__(self) -> str:
         return self.name
 
-    def map(self, f: Callable[[T], S]) -> Possibility[S]:
-        """Returns a ``Possibility`` where values come from
+    def map(self, f: Callable[[T], S]) -> Generator[S]:
+        """Returns a ``Generator`` where values come from
         applying ``f`` to some possible value for ``self``."""
-        return Possibility(
+        return Generator(
             lambda test_case: f(test_case.any(self)),
             name=f"{self.name}.map({f.__name__})",
         )
 
-    def bind(self, f: Callable[[T], Possibility[S]]) -> Possibility[S]:
-        """Returns a ``Possibility`` where values come from
-        applying ``f`` (which should return a new ``Possibility``
+    def bind(self, f: Callable[[T], Generator[S]]) -> Generator[S]:
+        """Returns a ``Generator`` where values come from
+        applying ``f`` (which should return a new ``Generator``
         to some possible value for ``self`` then returning a possible
         value from that."""
 
         def produce(test_case: TestCase) -> S:
             return test_case.any(f(test_case.any(self)))
 
-        return Possibility[S](
+        return Generator[S](
             produce,
             name=f"{self.name}.bind({f.__name__})",
         )
 
-    def satisfying(self, f: Callable[[T], bool]) -> Possibility[T]:
-        """Returns a ``Possibility`` whose values are any possible
+    def satisfying(self, f: Callable[[T], bool]) -> Generator[T]:
+        """Returns a ``Generator`` whose values are any possible
         value of ``self`` for which ``f`` returns True."""
 
         def produce(test_case: TestCase) -> T:
@@ -527,27 +527,27 @@ class Possibility(Generic[T]):
                     return candidate
             test_case.reject()
 
-        return Possibility[T](produce, name=f"{self.name}.select({f.__name__})")
+        return Generator[T](produce, name=f"{self.name}.select({f.__name__})")
 
 
-def integers(m: int, n: int) -> Possibility[int]:
+def integers(m: int, n: int) -> Generator[int]:
     """Any integer in the range [m, n] is possible"""
-    return Possibility(lambda tc: tc.draw_integer(m, n), name=f"integers({m}, {n})")
+    return Generator(lambda tc: tc.draw_integer(m, n), name=f"integers({m}, {n})")
 
 
-def binary(min_size: int = 0, max_size: int = 8) -> Possibility[bytes]:
+def binary(min_size: int = 0, max_size: int = 8) -> Generator[bytes]:
     """Any byte string with length in [min_size, max_size] is possible."""
-    return Possibility(
+    return Generator(
         lambda tc: tc.draw_bytes(min_size, max_size),
         name=f"binary({min_size}, {max_size})",
     )
 
 
 def lists(
-    elements: Possibility[U],
+    elements: Generator[U],
     min_size: int = 0,
     max_size: float = float("inf"),
-) -> Possibility[List[U]]:
+) -> Generator[List[U]]:
     """Any lists whose elements are possible values from ``elements`` are possible."""
 
     def produce(test_case: TestCase) -> List[U]:
@@ -563,38 +563,38 @@ def lists(
             result.append(test_case.any(elements))
         return result
 
-    return Possibility[List[U]](produce, name=f"lists({elements.name})")
+    return Generator[List[U]](produce, name=f"lists({elements.name})")
 
 
-def just(value: U) -> Possibility[U]:
+def just(value: U) -> Generator[U]:
     """Only ``value`` is possible."""
-    return Possibility[U](lambda tc: value, name=f"just({value})")
+    return Generator[U](lambda tc: value, name=f"just({value})")
 
 
-def nothing() -> Possibility[NoReturn]:
+def nothing() -> Generator[NoReturn]:
     """No possible values. i.e. Any call to ``any`` will reject
     the test case."""
 
     def produce(tc: TestCase) -> NoReturn:
         tc.reject()
 
-    return Possibility(produce)
+    return Generator(produce)
 
 
-def mix_of(*possibilities: Possibility[T]) -> Possibility[T]:
+def mix_of(*possibilities: Generator[T]) -> Generator[T]:
     """Possible values can be any value possible for one of ``possibilities``."""
     if not possibilities:
         return nothing()
-    return Possibility(
+    return Generator(
         lambda tc: tc.any(possibilities[tc.choice(len(possibilities) - 1)]),
         name="mix_of({', '.join(p.name for p in possibilities)})",
     )
 
 
-def tuples(*possibilities: Possibility[Any]) -> Possibility[Any]:
+def tuples(*possibilities: Generator[Any]) -> Generator[Any]:
     """Any tuple t of of length len(possibilities) such that t[i] is possible
     for possibilities[i] is possible."""
-    return Possibility(
+    return Generator(
         lambda tc: tuple(tc.any(p) for p in possibilities),
         name="tuples({', '.join(p.name for p in possibilities)})",
     )

@@ -15,7 +15,7 @@ import pytest
 import minithesis as mt
 from hypothesis import HealthCheck, given, note, reject, settings
 from hypothesis import strategies as st
-from minithesis import CachedTestFunction, DirectoryDB, Frozen, Possibility, Status
+from minithesis import CachedTestFunction, DirectoryDB, Frozen, Generator, Status
 from minithesis import TestCase as TC
 from minithesis import TestingState as State
 from minithesis import (
@@ -31,7 +31,7 @@ from minithesis import (
 )
 
 
-@Possibility
+@Generator
 def list_of_integers(test_case):
     result = []
     while test_case.weighted(0.9):
@@ -73,7 +73,7 @@ def test_finds_small_list_even_with_bad_lists(capsys, seed):
 
     with pytest.raises(AssertionError):
 
-        @Possibility
+        @Generator
         def bad_list(test_case):
             n = test_case.choice(10)
             return [test_case.choice(10000) for _ in range(n)]
