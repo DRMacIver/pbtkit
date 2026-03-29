@@ -30,6 +30,13 @@ def list_of_integers(test_case):
     return result
 
 
+@pytest.fixture(autouse=True)
+def _isolate_database(tmp_path, monkeypatch):
+    """Ensure each test gets a fresh default database directory
+    so tests don't leak state via .minithesis-cache."""
+    monkeypatch.setattr(mt, "_DEFAULT_DATABASE_PATH", str(tmp_path / "cache"))
+
+
 @pytest.mark.parametrize("seed", range(10))
 def test_finds_small_list(capsys, seed):
 

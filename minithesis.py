@@ -282,7 +282,7 @@ def run_test(
         if database is None:
             # If the database is not set, use a standard cache directory
             # location to persist examples.
-            db: Database = DirectoryDB(".minithesis-cache")
+            db: Database = DirectoryDB(_DEFAULT_DATABASE_PATH)
         else:
             db = database
 
@@ -539,6 +539,10 @@ class Generator(Generic[T]):
 # This prevents cases where the generated test case size explodes
 # by effectively rejecting test cases that use too many choices.
 BUFFER_SIZE = 8 * 1024
+
+_DEFAULT_DATABASE_PATH = ".minithesis-cache"
+
+NAN_DRAW_PROBABILITY = 0.01
 
 
 def sort_key(nodes: Sequence[ChoiceNode]) -> Tuple:
