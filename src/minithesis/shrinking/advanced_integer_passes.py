@@ -8,6 +8,8 @@ as shrink passes.
 
 from __future__ import annotations
 
+from typing import List
+
 from minithesis.core import (
     IntegerChoice,
     MinithesisState,
@@ -18,40 +20,45 @@ from minithesis.core import (
 
 @shrink_pass
 def sort_integer_ranges(state: MinithesisState) -> None:
-    """Try sorting ranges of integer choices by their sort key.
-    Sorted order is always <= the original in shortlex, so this
-    is always a valid reduction."""
+    """Try sorting ranges of integer choices by their sort key,
+    skipping non-integer choices between them. Sorted order is
+    always <= the original in shortlex, so this is a valid reduction."""
     assert state.result is not None
-    k = 8
+    result = state.result
+    indices = _integer_indices(state)
+    k = min(len(indices), 8)
     while k > 1:
-        for i in range(len(state.result) - k - 1, -1, -1):
-            region = state.result[i : i + k]
-            if not all(isinstance(n.kind, IntegerChoice) for n in region):
-                continue
-            state.consider(
-                state.result[:i]
-                + sorted(region, key=lambda n: n.sort_key)
-                + state.result[i + k :]
+        for start in range(len(indices) - k + 1):
+            idx = indices[start : start + k]
+            values = [result[i].value for i in idx]
+            sorted_values = sorted(
+                values, key=lambda v: result[idx[0]].kind.sort_key(v)
             )
+            if sorted_values != values:
+                state.replace(dict(zip(idx, sorted_values)))
         k -= 1
+
+
+def _integer_indices(state: MinithesisState) -> List[int]:
+    """Return indices of all IntegerChoice nodes in the result."""
+    assert state.result is not None
+    return [
+        i for i, node in enumerate(state.result) if isinstance(node.kind, IntegerChoice)
+    ]
 
 
 @shrink_pass
 def redistribute_integers(state: MinithesisState) -> None:
-    """Try adjusting nearby pairs of integer choices by
-    redistributing value between them. Useful for tests that
-    depend on the sum of some generated values."""
+    """Try adjusting pairs of integer choices by redistributing
+    value between them. Operates on pairs of IntegerChoice nodes
+    at various distances, skipping non-integer choices in between.
+    Useful for tests that depend on the sum of some generated values."""
     assert state.result is not None
-    for k in [2, 1]:
-        for i in range(len(state.result) - 1 - k, -1, -1):
-            j = i + k
-            assert j < len(state.result)
-            kind_i = state.result[i].kind
-            kind_j = state.result[j].kind
-            if not isinstance(kind_i, IntegerChoice) or not isinstance(
-                kind_j, IntegerChoice
-            ):
-                continue
+    indices = _integer_indices(state)
+    for gap in range(1, min(len(indices), 8)):
+        for pair_idx in range(len(indices) - gap, 0, -1):
+            i = indices[pair_idx - 1]
+            j = indices[pair_idx - 1 + gap]
             # Sort the pair by sort key (smaller absolute value first).
             if state.result[i].sort_key > state.result[j].sort_key:
                 state.replace(
@@ -63,7 +70,7 @@ def redistribute_integers(state: MinithesisState) -> None:
             # Try to redistribute value from i toward j, reducing |i|.
             # Keep the sum constant: when i changes by delta, j changes
             # by -delta.
-            if j < len(state.result) and state.result[i].value != kind_i.simplest:
+            if state.result[i].value != state.result[i].kind.simplest:
                 previous_i = state.result[i].value
                 previous_j = state.result[j].value
                 if previous_i > 0:

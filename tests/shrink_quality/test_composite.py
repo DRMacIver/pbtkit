@@ -33,9 +33,6 @@ def separated_sum(tc):
     return (n1, n2)
 
 
-@pytest.mark.xfail(
-    strict=False, reason="shrinking across mixed choice types (text interleaved)"
-)
 @pytest.mark.requires("text")
 def test_sum_of_pair_separated():
     assert minimal(separated_sum(), lambda x: x[0] + x[1] > 1000) == (1, 1000)
