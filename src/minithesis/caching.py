@@ -27,6 +27,15 @@ from minithesis.core import (
 _KIND = object()
 
 
+def _cache_key(value: Any) -> Any:
+    """Return a dict key that distinguishes True, 1, and 1.0.
+
+    Python considers True == 1 == 1.0 and uses the same hash,
+    so a plain dict lookup would collide. We prefix with the
+    type name to prevent this."""
+    return (type(value).__name__, value)
+
+
 class CachedTestFunction:
     """A choice-tree cache for test function results.
 
@@ -66,7 +75,7 @@ class CachedTestFunction:
                 kind = node.get(_KIND)
                 if kind is not None:
                     nodes.append(ChoiceNode(kind, c, False))
-                node = node[c]
+                node = node[_cache_key(c)]
                 # mark_status was called at this point, so future
                 # choices are irrelevant.
                 if isinstance(node, Status):
@@ -85,21 +94,21 @@ class CachedTestFunction:
         assert test_case.status is not None
         node: Any = self.tree
         for i, choice_node in enumerate(test_case.nodes):
-            c = choice_node.value
+            key = _cache_key(choice_node.value)
             # Store the kind for this position on the current node.
             node[_KIND] = choice_node.kind
             if i + 1 < len(test_case.nodes) or test_case.status == Status.EARLY_STOP:
                 try:
-                    existing = node[c]
+                    existing = node[key]
                 except KeyError:
-                    node = node.setdefault(c, {})
+                    node = node.setdefault(key, {})
                     continue
                 # A previous recording at this position was a terminal
                 # Status, which should have been caught by lookup.
                 assert not isinstance(existing, Status)
                 node = existing
             else:
-                node[c] = test_case.status
+                node[key] = test_case.status
 
     def __call__(self, choices: Sequence[Any]) -> Status:
         """Look up choices in the cache, calling the test function

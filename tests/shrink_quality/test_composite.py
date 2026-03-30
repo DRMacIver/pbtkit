@@ -8,7 +8,15 @@ from random import Random
 import pytest
 
 from minithesis.core import MinithesisState, Status
-from minithesis.generators import booleans, composite, integers, text, tuples
+from minithesis.generators import (
+    booleans,
+    composite,
+    floats,
+    integers,
+    one_of,
+    text,
+    tuples,
+)
 
 from .conftest import minimal
 
@@ -97,3 +105,15 @@ def test_earlier_exit_produces_shorter_sequence():
     vals = [n.value for n in state.result]
     assert len(vals) == 5
     assert vals[0]  # v0 is truthy (triggers early exit)
+
+
+def test_one_of_shrinks_branch_selector():
+    """one_of should shrink toward branch 0 even when a higher branch
+    also produces an interesting result. Found by shrink comparison test."""
+    result = minimal(
+        one_of(booleans(), floats(allow_nan=False, allow_infinity=False)),
+        lambda v: bool(v),
+    )
+    # Branch 0 (booleans) with value True is simpler than
+    # branch 1 (floats) with any truthy float.
+    assert result is True
