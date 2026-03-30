@@ -725,15 +725,6 @@ def bin_search_down(lo: int, hi: int, f: Callable[[int], bool]) -> int:
     # Try subtracting powers of 10 and dividing by 10. This helps
     # when the value has structure at decimal boundaries (e.g.
     # reversed fractional parts of floats).
-    k = 1
-    while k < hi:
-        k *= 10
-    while k >= 10:
-        k //= 10
-        if hi - k >= lo and f(hi - k):
-            hi -= k
-    if hi // 10 >= lo and f(hi // 10):
-        hi = hi // 10
     while lo + 1 < hi:
         mid = lo + (hi - lo) // 2
         if f(mid):

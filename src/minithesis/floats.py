@@ -33,6 +33,22 @@ NAN_DRAW_PROBABILITY = 0.01
 # ---------------------------------------------------------------------------
 
 
+def shrink_by_tens(n: int, condition: Callable[[int], bool]) -> int:
+    """Shrinks an integer `n` subject to condition `condition` in a
+    manner that will be particularly useful if the condition is sensitive
+    to its decimal representation."""
+    while n >= 10 and condition(n // 10):
+        n //= 10
+    k = 1
+    while k < n:
+        k *= 10
+    while k >= 10:
+        k //= 10
+        while n >= k and condition(n - k):
+            n -= k
+    return n
+
+
 def _draw_unbounded_float(random: Any) -> float:
     """Generate a random float from the full float space,
     excluding NaN (via rejection sampling). NaN is ~0.05%
@@ -323,6 +339,10 @@ def _shrink_float(
 
     if frac_part and frac_part != "0":
         reversed_frac = int(frac_part[::-1])
+        reversed_frac = shrink_by_tens(
+            reversed_frac,
+            lambda rf: try_positive(float(f"{int_part}.{str(rf)[::-1]}")),
+        )
         bin_search_down(
             0,
             reversed_frac,
