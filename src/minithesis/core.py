@@ -620,7 +620,7 @@ def zero_choices(state: MinithesisState) -> None:
     Skip k=1 because we handle that in the per-choice pass."""
     assert state.result is not None
     k = 8
-    while k > 1:
+    while k > 0:
         i = len(state.result) - k
         while i >= 0:
             if state.replace(
@@ -645,18 +645,6 @@ def shrink_individual_integers(state: MinithesisState) -> None:
                 node.value,
                 lambda v: state.replace({i: v}),
             )
-        i -= 1
-
-
-@shrink_pass
-def shrink_individual_booleans(state: MinithesisState) -> None:
-    """Try replacing each boolean choice with False."""
-    assert state.result is not None
-    i = len(state.result) - 1
-    while i >= 0:
-        node = state.result[i]
-        if isinstance(node.kind, BooleanChoice):
-            state.replace({i: False})
         i -= 1
 
 
