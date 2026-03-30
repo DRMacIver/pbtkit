@@ -39,6 +39,16 @@ def _try_sort_group(
     to insertion sort."""
     assert state.result is not None
 
+    # Filter out indices that are stale (result may have shortened
+    # from a prior group's sort in sort_values).
+    indices = [
+        i
+        for i in indices
+        if i < len(state.result) and type(state.result[i].kind) == choice_type
+    ]
+    if len(indices) < 2:
+        return
+
     # Try a full sort.
     kind = state.result[indices[0]].kind
     values = [state.result[i].value for i in indices]

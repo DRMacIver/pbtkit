@@ -312,3 +312,24 @@ def test_sorting_pass_survives_type_changes_from_lists():
             v0 = tc.any(lists(booleans(), max_size=10))
             v1 = tc.any(lists(integers(0, 0), max_size=10))
             assert len(v0) == len(v1)
+
+
+@pytest.mark.requires("collections")
+def test_sorting_full_sort_survives_stale_indices():
+    """Sorting full-sort path must not crash when a prior group's
+    sort shortens the result, making indices for the next group
+    invalid. Regression for IndexError in sorting.py found by minismith."""
+
+    try:
+
+        @run_test(max_examples=1, database={}, quiet=True, random=Random(1))
+        def _(tc):
+            v0 = tc.any(lists(integers(0, 12), max_size=10))
+            tc.any(booleans())
+            if not (len(v0) == 0 or v0[0] > 0):
+                raise AssertionError
+            if len(v0) > 2:
+                if not (len(v0) == 0):
+                    raise AssertionError
+    except AssertionError:
+        pass
