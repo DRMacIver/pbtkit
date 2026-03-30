@@ -22,7 +22,7 @@ from hypothesis.internal.conjecture.data import (
 from hypothesis.internal.conjecture.engine import ConjectureRunner
 from hypothesis.internal.intervalsets import IntervalSet
 
-from hypothesis import HealthCheck, given, note, settings
+from hypothesis import HealthCheck, assume, given, note, settings
 from hypothesis import strategies as st
 from minithesis.bytes import BytesChoice
 from minithesis.core import (  # noqa: F401
@@ -336,6 +336,10 @@ def test_minithesis_shrinks_at_least_as_well_as_hypothesis(
     except Exception:
         return  # Skip programs we can't extract a body from.
 
+    # Run under minithesis first — skip programs where it finds nothing.
+    minithesis_result = _run_minithesis(test_body, seed=0)
+    assume(minithesis_result is not None)
+
     # Run under Hypothesis 10 times with different seeds.
     hypothesis_results = []
     for seed in range(10):
@@ -343,19 +347,10 @@ def test_minithesis_shrinks_at_least_as_well_as_hypothesis(
         if result is not None:
             hypothesis_results.append(result)
 
-    if not hypothesis_results:
-        return  # No interesting examples found — nothing to compare.
+    assume(len(hypothesis_results) > 0)
 
     # The worst Hypothesis result under minithesis sort_key.
     worst_hypothesis = max(hypothesis_results, key=sort_key)
-
-    # Run under minithesis.
-    minithesis_result = _run_minithesis(test_body, seed=0)
-
-    if minithesis_result is None:
-        # Minithesis didn't find an interesting example but Hypothesis did.
-        # This is acceptable — minithesis may have hit different random paths.
-        return
 
     assert sort_key(minithesis_result) <= sort_key(worst_hypothesis), (
         f"Minithesis result {[n.value for n in minithesis_result]} "
