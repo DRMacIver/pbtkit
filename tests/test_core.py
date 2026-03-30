@@ -16,6 +16,7 @@ from minithesis import Generator, Unsatisfiable, run_test
 from minithesis.caching import CachedTestFunction
 from minithesis.core import (
     Frozen,
+    IntegerChoice,
     Status,
 )
 from minithesis.core import MinithesisState as State
@@ -185,6 +186,12 @@ def test_can_choose_full_64_bits():
     @run_test()
     def _(tc):
         tc.choice(2**64 - 1)
+
+
+def test_integer_choice_simplest():
+    assert IntegerChoice(-10, 10).simplest == 0
+    assert IntegerChoice(5, 100).simplest == 5
+    assert IntegerChoice(-100, -5).simplest == -5
 
 
 def test_forced_choice_bounds():

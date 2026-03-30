@@ -18,10 +18,12 @@ from minithesis.generators import (
 
 from .conftest import minimal
 
+pytestmark = pytest.mark.requires("collections")
+
 # --- Sets (using unique lists as proxy) ---
 
 
-@pytest.mark.xfail(reason="integers shrink toward min_value, not toward 0")
+@pytest.mark.requires("shrinking.advanced_integer_passes")
 def test_minimize_3_set():
     result = minimal(
         lists(integers(-(2**63), 2**63 - 1), unique=True),
@@ -30,6 +32,7 @@ def test_minimize_3_set():
     assert result in [[0, 1, 2], [-1, 0, 1]]
 
 
+@pytest.mark.requires("shrinking.advanced_integer_passes")
 def test_minimize_sets_sampled_from():
     items = list(range(10))
     assert minimal(
@@ -68,6 +71,7 @@ def test_duplicate_containment():
 # --- List ordering and structure ---
 
 
+@pytest.mark.requires("shrinking.advanced_integer_passes")
 def test_reordering_bytes():
     ls = minimal(
         lists(integers(0, 1000)),
@@ -126,7 +130,6 @@ def test_list_with_wide_gap():
 # --- Lists of collections ---
 
 
-@pytest.mark.xfail(reason="integers shrink toward min_value, not toward 0")
 def test_minimize_list_of_lists():
     result = minimal(
         lists(lists(integers(-(2**63), 2**63 - 1))),
@@ -135,7 +138,6 @@ def test_minimize_list_of_lists():
     assert result == [[0]] * 3
 
 
-@pytest.mark.xfail(reason="integers shrink toward min_value, not toward 0")
 def test_minimize_list_of_tuples():
     result = minimal(
         lists(tuples(integers(-(2**63), 2**63 - 1), integers(-(2**63), 2**63 - 1))),
@@ -147,7 +149,6 @@ def test_minimize_list_of_tuples():
 # --- Lists forced near top ---
 
 
-@pytest.mark.xfail(reason="integers shrink toward min_value, not toward 0")
 @pytest.mark.parametrize("n", [0, 1, 5, 10])
 def test_lists_forced_near_top(n):
     assert minimal(
@@ -165,7 +166,6 @@ def test_dictionary_minimizes_to_empty():
     assert result == {}
 
 
-@pytest.mark.xfail(reason="integers shrink toward min_value, not toward 0")
 @pytest.mark.requires("text")
 def test_dictionary_minimizes_values():
     result = minimal(

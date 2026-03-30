@@ -9,11 +9,10 @@ from minithesis.generators import booleans, composite, integers, lists, one_of, 
 
 from .conftest import minimal
 
-pytestmark = pytest.mark.requires("text")
+pytestmark = [pytest.mark.requires("text"), pytest.mark.requires("collections")]
 
 
 # one_of with same-type generators
-@pytest.mark.xfail(reason="integers shrink toward min_value, not toward 0")
 def test_minimize_one_of_integers():
     for _ in range(10):
         result = minimal(
@@ -36,7 +35,6 @@ def test_minimize_one_of_mixed():
 
 
 # Mixed list
-@pytest.mark.xfail(reason="integers shrink toward min_value, not toward 0")
 def test_minimize_mixed_list():
     result = minimal(
         lists(

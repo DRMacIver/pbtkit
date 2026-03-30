@@ -18,8 +18,9 @@ from minithesis.core import (
 
 @shrink_pass
 def sort_integer_ranges(state: MinithesisState) -> None:
-    """Try sorting out of order ranges of integer choices.
-    sort(x) <= x, so this is always a lexicographic reduction."""
+    """Try sorting ranges of integer choices by their sort key.
+    Sorted order is always <= the original in shortlex, so this
+    is always a valid reduction."""
     assert state.result is not None
     k = 8
     while k > 1:
@@ -29,7 +30,7 @@ def sort_integer_ranges(state: MinithesisState) -> None:
                 continue
             state.consider(
                 state.result[:i]
-                + sorted(region, key=lambda n: n.value)
+                + sorted(region, key=lambda n: n.sort_key)
                 + state.result[i + k :]
             )
         k -= 1
@@ -51,18 +52,34 @@ def redistribute_integers(state: MinithesisState) -> None:
                 kind_j, IntegerChoice
             ):
                 continue
-            if state.result[i].value > state.result[j].value:
+            # Sort the pair by sort key (smaller absolute value first).
+            if state.result[i].sort_key > state.result[j].sort_key:
                 state.replace(
                     {
                         j: state.result[i].value,
                         i: state.result[j].value,
                     }
                 )
-            if j < len(state.result) and state.result[i].value > kind_i.min_value:
+            # Try to redistribute value from i toward j, reducing |i|.
+            # Keep the sum constant: when i changes by delta, j changes
+            # by -delta.
+            if j < len(state.result) and state.result[i].value != kind_i.simplest:
                 previous_i = state.result[i].value
                 previous_j = state.result[j].value
-                bin_search_down(
-                    kind_i.min_value,
-                    previous_i,
-                    lambda v: state.replace({i: v, j: previous_j + (previous_i - v)}),
-                )
+                if previous_i > 0:
+                    bin_search_down(
+                        0,
+                        previous_i,
+                        lambda v: state.replace(
+                            {i: v, j: previous_j + (previous_i - v)}
+                        ),
+                    )
+                else:
+                    assert previous_i < 0
+                    bin_search_down(
+                        0,
+                        -previous_i,
+                        lambda a: state.replace(
+                            {i: -a, j: previous_j + (previous_i + a)}
+                        ),
+                    )

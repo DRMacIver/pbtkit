@@ -9,22 +9,21 @@ from minithesis.generators import composite, integers, lists
 
 from .conftest import minimal
 
+pytestmark = pytest.mark.requires("collections")
+
 
 def test_integers_from_minimizes_leftwards():
     assert minimal(integers(101, 2**63)) == 101
 
 
-@pytest.mark.xfail(reason="integers shrink toward min_value, not toward 0")
 def test_minimize_bounded_integers_to_zero():
     assert minimal(integers(-10, 10)) == 0
 
 
-@pytest.mark.xfail(reason="integers shrink toward min_value, not toward 0")
 def test_minimize_bounded_integers_to_positive():
     assert minimal(integers(-10, 10), lambda x: x != 0) == 1
 
 
-@pytest.mark.xfail(reason="integers shrink toward min_value, not toward 0")
 def test_minimize_single_element_in_silly_large_int_range():
     hi = 2**63 - 1
     lo = -(2**63)
@@ -32,7 +31,6 @@ def test_minimize_single_element_in_silly_large_int_range():
     assert result == 0
 
 
-@pytest.mark.xfail(reason="integers shrink toward min_value, not toward 0")
 def test_minimize_multiple_elements_in_silly_large_int_range():
     hi = 2**63 - 1
     lo = -(2**63)
@@ -58,7 +56,6 @@ def test_minimize_multiple_elements_min_is_not_dupe():
     assert result == list(range(20))
 
 
-@pytest.mark.xfail(reason="integers shrink toward min_value, not toward 0")
 def test_can_find_an_int():
     assert minimal(integers(-(2**63), 2**63 - 1)) == 0
 

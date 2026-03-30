@@ -59,10 +59,18 @@ class IntegerChoice(ChoiceType[int]):
 
     @property
     def simplest(self) -> int:
-        return self.min_value
+        if self.min_value <= 0 <= self.max_value:
+            return 0
+        elif abs(self.min_value) <= abs(self.max_value):
+            return self.min_value
+        else:
+            return self.max_value
 
     def validate(self, value: int) -> bool:
         return isinstance(value, int) and self.min_value <= value <= self.max_value
+
+    def sort_key(self, value: int) -> Any:
+        return (abs(value), value < 0)
 
 
 @dataclass(frozen=True)
@@ -638,17 +646,38 @@ def zero_choices(state: MinithesisState) -> None:
 
 @shrink_pass
 def shrink_individual_integers(state: MinithesisState) -> None:
-    """Binary search each integer choice toward its min_value."""
+    """Shrink each integer choice toward 0.
+
+    Tries the simplest value, then flips negative to positive,
+    then binary searches the absolute value toward 0."""
     assert state.result is not None
     i = len(state.result) - 1
     while i >= 0:
         node = state.result[i]
         if isinstance(node.kind, IntegerChoice):
-            bin_search_down(
-                node.kind.min_value,
-                node.value,
-                lambda v: state.replace({i: v}),
-            )
+            kind = node.kind
+            value = node.value
+            # Try the simplest value first.
+            if value != kind.simplest:
+                state.replace({i: kind.simplest})
+            value = state.result[i].value
+            # If negative and the positive counterpart is valid, try it.
+            if value < 0 and kind.validate(-value):
+                state.replace({i: -value})
+            value = state.result[i].value
+            # Binary search |value| toward 0.
+            if value > 0:
+                bin_search_down(
+                    max(kind.simplest, 0),
+                    value,
+                    lambda v: state.replace({i: v}),
+                )
+            elif value < 0:
+                bin_search_down(
+                    abs(min(kind.simplest, 0)),
+                    -value,
+                    lambda a: state.replace({i: -a}),
+                )
         i -= 1
 
 

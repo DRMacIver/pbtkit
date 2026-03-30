@@ -11,7 +11,7 @@ from minithesis.generators import floats, lists
 
 from .conftest import minimal
 
-pytestmark = pytest.mark.requires("floats")
+pytestmark = [pytest.mark.requires("floats"), pytest.mark.requires("collections")]
 
 
 @pytest.mark.xfail(reason="float shrinker doesn't find round numbers")

@@ -17,6 +17,7 @@ def int_pair(tc, lo, hi):
     return (a, b)
 
 
+@pytest.mark.requires("shrinking.advanced_integer_passes")
 def test_sum_of_pair():
     assert minimal(int_pair(0, 1000), lambda x: x[0] + x[1] > 1000) == (1, 1000)
 

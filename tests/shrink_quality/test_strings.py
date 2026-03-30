@@ -9,7 +9,7 @@ from minithesis.generators import lists, text
 
 from .conftest import minimal
 
-pytestmark = pytest.mark.requires("text")
+pytestmark = [pytest.mark.requires("text"), pytest.mark.requires("collections")]
 
 
 def test_minimize_string_to_empty():

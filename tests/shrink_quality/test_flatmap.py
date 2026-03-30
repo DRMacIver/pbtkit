@@ -9,6 +9,8 @@ from minithesis.generators import booleans, integers, just, lists, sampled_from
 
 from .conftest import minimal
 
+pytestmark = pytest.mark.requires("collections")
+
 
 def test_can_simplify_flatmap_with_bounded_left_hand_size():
     assert (
@@ -20,7 +22,6 @@ def test_can_simplify_flatmap_with_bounded_left_hand_size():
     )
 
 
-@pytest.mark.xfail(reason="integers shrink toward min_value, not toward 0")
 def test_can_simplify_across_flatmap_of_just():
     assert minimal(integers(-(2**63), 2**63 - 1).flat_map(just)) == 0
 
@@ -32,7 +33,6 @@ def test_can_simplify_on_right_hand_strategy_of_flatmap():
     assert result == []
 
 
-@pytest.mark.xfail(reason="integers shrink toward min_value, not toward 0")
 def test_can_ignore_left_hand_side_of_flatmap():
     assert (
         minimal(
@@ -45,7 +45,6 @@ def test_can_ignore_left_hand_side_of_flatmap():
     )
 
 
-@pytest.mark.xfail(reason="integers shrink toward min_value, not toward 0")
 def test_can_simplify_on_both_sides_of_flatmap():
     assert (
         minimal(
