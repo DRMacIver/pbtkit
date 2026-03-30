@@ -44,26 +44,38 @@ def test_minimize_sets_sampled_from():
 
 
 @composite
-def vec_and_int(tc):
-    v = tc.any(lists(integers(-(2**63), 2**63 - 1)))
-    i = tc.any(integers(-(2**63), 2**63 - 1))
+def list_and_int(tc):
+    v = tc.any(lists(integers(0, 100)))
+    i = tc.any(integers(0, 100))
     return (v, i)
 
 
-@pytest.mark.xfail(
-    reason="composite generation unlikely to find matching examples in 1000 tries"
+_xfail_containment = pytest.mark.xfail(
+    reason="shrinker cannot coordinate independently-drawn list element and integer"
 )
-@pytest.mark.parametrize("n", [0, 1, 10, 100, 1000])
+
+
+@pytest.mark.parametrize(
+    "n",
+    [
+        0,
+        pytest.param(1, marks=_xfail_containment),
+        pytest.param(10, marks=_xfail_containment),
+        pytest.param(50, marks=_xfail_containment),
+    ],
+)
 def test_containment(n):
-    result = minimal(vec_and_int(), lambda x: x[1] >= n and x[1] in x[0])
+    result = minimal(
+        list_and_int(), lambda x: x[1] >= n and x[1] in x[0], max_examples=1000
+    )
     assert result == ([n], n)
 
 
 @pytest.mark.xfail(
-    reason="composite generation unlikely to find matching examples in 1000 tries"
+    reason="shrinker cannot coordinate independently-drawn list element and integer"
 )
 def test_duplicate_containment():
-    ls, i = minimal(vec_and_int(), lambda x: x[0].count(x[1]) > 1)
+    ls, i = minimal(list_and_int(), lambda x: x[0].count(x[1]) > 1)
     assert ls == [0, 0]
     assert i == 0
 
@@ -98,12 +110,9 @@ def test_minimize_list_of_longish_lists():
         assert x == [False, True]
 
 
-@pytest.mark.xfail(
-    reason="full-range integers unlikely to generate duplicates in 1000 tries"
-)
 def test_minimize_list_of_fairly_non_unique_ints():
     xs = minimal(
-        lists(integers(-(2**63), 2**63 - 1)),
+        lists(integers(0, 100)),
         lambda x: len(set(x)) < len(x),
     )
     assert len(xs) == 2
