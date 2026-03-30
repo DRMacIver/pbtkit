@@ -62,6 +62,9 @@ performance, so it's mostly a nice to have.
 
 from __future__ import annotations
 
+# Disable modules before importing extensions.
+import minithesis.features
+
 # Public API and internal names re-exported from the core.
 from minithesis.core import (
     Database,
