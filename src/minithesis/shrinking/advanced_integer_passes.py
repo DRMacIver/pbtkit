@@ -44,29 +44,31 @@ def lower_and_bump_adjacent(state: MinithesisState) -> None:
         if state.result[i].value <= 0:
             idx += 1
             continue
-        new_i = state.result[i].value - 1
-        # Run the decrement to observe what happens at position i+1.
-        attempt = list(state.result)
-        attempt[i] = attempt[i].with_value(new_i)
-        tc = TestCase.for_choices([n.value for n in attempt])
-        state.test_function(tc)
-        assert tc.status is not None
         j = i + 1
-        if j < len(tc.nodes):
-            kind_j = tc.nodes[j].kind
-            if isinstance(kind_j, IntegerChoice):
-                # Try the boundary value. Use consider with the probe's
-                # nodes to avoid type mismatch (the current result at j
-                # may have a different kind).
-                probe_attempt = list(tc.nodes[: j + 1])
-                probe_attempt[j] = probe_attempt[j].with_value(kind_j.max_value)
-                state.consider(probe_attempt)
-            elif isinstance(kind_j, BooleanChoice):
-                probe_attempt = list(tc.nodes[: j + 1])
-                probe_attempt[j] = probe_attempt[j].with_value(True)
-                state.consider(probe_attempt)
+        # Try each candidate value for position i (simplest first,
+        # then value-1) and probe what kind appears at position j.
+        simplest = state.result[i].kind.simplest
+        candidates = [simplest] if simplest < state.result[i].value - 1 else []
+        candidates.append(state.result[i].value - 1)
+        for new_i in candidates:
+            attempt = list(state.result)
+            attempt[i] = attempt[i].with_value(new_i)
+            tc = TestCase.for_choices([n.value for n in attempt])
+            state.test_function(tc)
+            assert tc.status is not None
+            if j < len(tc.nodes):
+                kind_j = tc.nodes[j].kind
+                if isinstance(kind_j, IntegerChoice):
+                    probe_attempt = list(tc.nodes[: j + 1])
+                    probe_attempt[j] = probe_attempt[j].with_value(kind_j.max_value)
+                    state.consider(probe_attempt)
+                elif isinstance(kind_j, BooleanChoice):
+                    probe_attempt = list(tc.nodes[: j + 1])
+                    probe_attempt[j] = probe_attempt[j].with_value(True)
+                    state.consider(probe_attempt)
         # Also try powers of 2 for integer choices at position j.
         if j < len(state.result) and isinstance(state.result[j].kind, IntegerChoice):
+            new_i = state.result[i].value - 1
             bump = 1
             while bump <= 256 and j < len(state.result):
                 new_j = state.result[j].value + bump
