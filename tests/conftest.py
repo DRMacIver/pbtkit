@@ -11,7 +11,10 @@ except (ImportError, AttributeError):
         m for m in os.environ.get("MINITHESIS_DISABLED", "").split(",") if m
     )
 
-import minithesis.core as core
+try:
+    import minithesis.database as _db_mod
+except (ImportError, AttributeError):
+    _db_mod = None
 
 
 def pytest_configure(config):
@@ -35,4 +38,5 @@ def pytest_collection_modifyitems(items):
 def _isolate_database(tmp_path, monkeypatch):
     """Ensure each test gets a fresh default database directory
     so tests don't leak state via .minithesis-cache."""
-    monkeypatch.setattr(core, "_DEFAULT_DATABASE_PATH", str(tmp_path / "cache"))
+    if _db_mod is not None and "database" not in DISABLED_MODULES:
+        monkeypatch.setattr(_db_mod, "_DEFAULT_DATABASE_PATH", str(tmp_path / "cache"))

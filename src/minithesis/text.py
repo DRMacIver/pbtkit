@@ -12,12 +12,9 @@ from typing import Any, List
 
 from minithesis.core import (
     ChoiceType,
-    SerializationTag,
-    TestCase,
     MinithesisState,
-    _deserialize_length_prefixed,
+    TestCase,
     _shrink_sequence,
-    register_serializer,
     shrink_pass,
 )
 
@@ -95,14 +92,6 @@ TestCase.draw_string = _draw_string
 # ---------------------------------------------------------------------------
 # Serialization
 # ---------------------------------------------------------------------------
-
-register_serializer(
-    StringChoice,
-    SerializationTag.STRING,
-    lambda v: (e := v.encode("utf-8"), len(e).to_bytes(4, "big") + e)[1],
-    _deserialize_length_prefixed(lambda b: b.decode("utf-8")),
-)
-
 
 # ---------------------------------------------------------------------------
 # Shrink pass

@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src" / "minithesis"
 BUILD = ROOT / "build"
 
-EXTENSIONS = ["bytes", "floats", "text", "collections", "targeting"]
+EXTENSIONS = ["database", "bytes", "floats", "text", "collections", "targeting"]
 
 HEADER = """\
 # Compiled minithesis — generated from the modular source.
@@ -439,10 +439,15 @@ def _generate_init_py(disabled: frozenset[str]) -> str:
     """Generate the __init__.py for the compiled test package."""
     enabled = [
         e
-        for e in ["floats", "bytes", "text", "collections", "targeting", "generators"]
+        for e in ["database", "floats", "bytes", "text", "collections", "targeting", "generators"]
         if e not in disabled
     ]
     disabled_list = sorted(disabled)
+
+    has_database = "database" not in disabled
+    core_imports = ["Generator", "TestCase", "Unsatisfiable", "run_test"]
+    if has_database:
+        core_imports = ["Database", "DirectoryDB"] + core_imports
 
     lines = [
         "from __future__ import annotations",
@@ -453,18 +458,18 @@ def _generate_init_py(disabled: frozenset[str]) -> str:
         "import minithesis.core as _core",
         "",
         "from minithesis.core import (  # noqa: PLC0415",
-        "    Database,",
-        "    DirectoryDB,",
-        "    Generator,",
-        "    TestCase,",
-        "    Unsatisfiable,",
-        "    run_test,",
-        ")",
+    ]
+    for name in core_imports:
+        lines.append(f"    {name},")
+    lines.append(")")
+    lines.extend([
         "",
         "import minithesis as _pkg  # noqa: PLC0415",
         "",
         "# Alias enabled submodules to the compiled core.",
-    ]
+    ])
+
+    all_names = ["Database", "DirectoryDB", "Generator", "TestCase", "Unsatisfiable", "run_test"]
     for name in enabled:
         lines.append(f'sys.modules["minithesis.{name}"] = _core')
         lines.append(f'setattr(_pkg, "{name}", _core)')
@@ -498,16 +503,19 @@ def _generate_init_py(disabled: frozenset[str]) -> str:
             lines.append(
                 f'sys.modules["minithesis.{name}"] = _DisabledModule("{name}", "minithesis.{name}")'
             )
+        if not has_database:
+            lines.append("")
+            lines.append("# Re-export disabled database symbols at package level.")
+            lines.append('Database = _DisabledSymbol("database", "Database")')
+            lines.append('DirectoryDB = _DisabledSymbol("database", "DirectoryDB")')
 
     lines.extend([
         "",
         "__all__ = [",
-        '    "Database",',
-        '    "DirectoryDB",',
-        '    "Generator",',
-        '    "TestCase",',
-        '    "Unsatisfiable",',
-        '    "run_test",',
+    ])
+    for name in all_names:
+        lines.append(f'    "{name}",')
+    lines.extend([
         "]",
         "",
     ])

@@ -12,7 +12,7 @@ import pytest
 from minithesis import run_test
 
 pytestmark = pytest.mark.requires("bytes")
-from minithesis.core import DirectoryDB
+from minithesis.database import DirectoryDB
 from minithesis.generators import binary
 
 
@@ -68,6 +68,7 @@ def test_shrinks_bytes_with_constraints(capsys):
     assert sum(value) == 11
 
 
+@pytest.mark.requires("database")
 def test_mixed_types_database_round_trip(tmpdir):
     """Database round-trip works for all choice types (integer,
     boolean, and bytes)."""

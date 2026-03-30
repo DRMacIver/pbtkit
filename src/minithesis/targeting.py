@@ -13,9 +13,9 @@ from minithesis.core import (
     BUFFER_SIZE,
     ChoiceNode,
     IntegerChoice,
+    MinithesisState,
     Status,
     TestCase,
-    MinithesisState,
     run_phase,
     test_function_hook,
 )

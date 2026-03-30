@@ -12,8 +12,8 @@ import pytest
 from minithesis import DirectoryDB, run_test
 
 pytestmark = pytest.mark.requires("text")
-from minithesis.core import SerializationTag
 from minithesis.core import TestCase as TC
+from minithesis.database import SerializationTag
 from minithesis.generators import text
 from minithesis.text import StringChoice
 
@@ -73,6 +73,7 @@ def test_text_no_surrogates():
             assert not (0xD800 <= ord(c) <= 0xDFFF)
 
 
+@pytest.mark.requires("database")
 def test_text_database_round_trip(tmpdir):
     db = DirectoryDB(tmpdir)
     count = 0
@@ -109,6 +110,7 @@ def test_string_validate():
     assert not kind.validate("abcdef")  # too long
 
 
+@pytest.mark.requires("database")
 def test_truncated_string_database_entry():
     """Truncated string entries in database are handled gracefully."""
     for data in [

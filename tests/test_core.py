@@ -15,12 +15,12 @@ import minithesis.core as core
 from minithesis import Generator, Unsatisfiable, run_test
 from minithesis.core import (
     CachedTestFunction,
-    DirectoryDB,
     Frozen,
     Status,
 )
-from minithesis.core import TestCase as TC
 from minithesis.core import MinithesisState as State
+from minithesis.core import TestCase as TC
+from minithesis.database import DirectoryDB
 from minithesis.generators import integers
 
 
@@ -76,6 +76,7 @@ def test_reduces_additive_pairs(capsys):
     ]
 
 
+@pytest.mark.requires("database")
 def test_reuses_results_from_the_database(tmpdir):
     db = DirectoryDB(tmpdir)
     count = 0
@@ -192,6 +193,7 @@ def test_forced_choice_bounds():
             tc.forced_choice(2**64)
 
 
+@pytest.mark.requires("database")
 def test_malformed_database_entry():
     """Malformed database entries are silently ignored."""
     db = {"_": b"\xff\xff\xff"}
@@ -201,6 +203,7 @@ def test_malformed_database_entry():
         pass
 
 
+@pytest.mark.requires("database")
 def test_empty_database_entry():
     """Empty database entries produce an empty replay."""
     db = {"_": b""}
@@ -210,6 +213,7 @@ def test_empty_database_entry():
         pass
 
 
+@pytest.mark.requires("database")
 @pytest.mark.parametrize(
     "data",
     [

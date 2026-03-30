@@ -67,12 +67,14 @@ import minithesis.features
 
 # Public API and internal names re-exported from the core.
 from minithesis.core import (
-    Database,
-    DirectoryDB,
     Generator,
     TestCase,
     Unsatisfiable,
     run_test,
+)
+from minithesis.database import (
+    Database,
+    DirectoryDB,
 )
 
 __all__ = [
@@ -87,6 +89,7 @@ __all__ = [
 # Import type-specific modules for their side effects: each one
 # registers its serializer, shrink pass, and draw method on TestCase.
 import minithesis.bytes
+import minithesis.database
 import minithesis.floats
 import minithesis.targeting
 import minithesis.text

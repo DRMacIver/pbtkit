@@ -15,12 +15,9 @@ from typing import Any, Callable, Tuple
 
 from minithesis.core import (
     ChoiceType,
-    SerializationTag,
-    TestCase,
     MinithesisState,
-    _deserialize_fixed,
+    TestCase,
     bin_search_down,
-    register_serializer,
     shrink_pass,
 )
 
@@ -240,14 +237,6 @@ TestCase.draw_float = _draw_float
 # ---------------------------------------------------------------------------
 # Serialization
 # ---------------------------------------------------------------------------
-
-register_serializer(
-    FloatChoice,
-    SerializationTag.FLOAT,
-    lambda v: struct.pack("!d", v),
-    _deserialize_fixed(8, lambda b: struct.unpack("!d", b)[0]),
-)
-
 
 # ---------------------------------------------------------------------------
 # Float shrink helper

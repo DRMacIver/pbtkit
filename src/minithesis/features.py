@@ -14,7 +14,6 @@ import os
 import sys
 import types
 
-
 DISABLED_MODULES: frozenset[str] = frozenset(
     m for m in os.environ.get("MINITHESIS_DISABLED", "").split(",") if m
 )

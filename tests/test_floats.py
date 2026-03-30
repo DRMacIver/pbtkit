@@ -16,8 +16,9 @@ import minithesis.floats
 
 pytestmark = pytest.mark.requires("floats")
 from minithesis import DirectoryDB, run_test
-from minithesis.core import SerializationTag, Status, MinithesisState
+from minithesis.core import MinithesisState, Status
 from minithesis.core import TestCase as TC
+from minithesis.database import SerializationTag
 from minithesis.floats import FloatChoice, _draw_unbounded_float
 from minithesis.generators import floats
 
@@ -129,6 +130,7 @@ def test_floats_half_bounded():
         assert math.isfinite(f)
 
 
+@pytest.mark.requires("database")
 def test_floats_database_round_trip(tmpdir):
     db = DirectoryDB(tmpdir)
     count = 0
@@ -315,6 +317,7 @@ def test_floats_shrinks_inf_to_finite():
     assert math.isfinite(v) and v > 1e300
 
 
+@pytest.mark.requires("database")
 def test_floats_deserialize_truncated():
     """Truncated float in database is handled gracefully."""
     db = {"_": bytes([SerializationTag.FLOAT, 0x40, 0x09])}

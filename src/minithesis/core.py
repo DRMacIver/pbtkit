@@ -9,8 +9,7 @@
 
 from __future__ import annotations
 
-import hashlib
-import os
+import types
 from dataclasses import dataclass
 from enum import IntEnum
 from random import Random
@@ -23,7 +22,6 @@ from typing import (
     Mapping,
     NoReturn,
     Optional,
-    Protocol,
     Sequence,
     Tuple,
     TypeVar,
@@ -102,127 +100,17 @@ class ChoiceNode(Generic[U]):
         return self.kind.sort_key(self.value)
 
 
-class Database(Protocol):
-    def __setitem__(self, key: str, value: bytes) -> None: ...
-
-    def get(self, key: str) -> Optional[bytes]: ...
-
-    def __delitem__(self, key: str) -> None: ...
-
-
-class SerializationTag(IntEnum):
-    INTEGER = 0
-    BOOLEAN = 1
-    BYTES = 2
-    FLOAT = 3
-    STRING = 4
-
-
-# Serialization registry. Type modules register their serializers
-# so the database can persist and replay choice sequences.
-_SERIALIZERS: Dict[type, Tuple[int, Callable[[Any], bytes]]] = {}
-_DESERIALIZERS: Dict[int, Callable[[bytes, int], Tuple[Any, int]]] = {}
-
-
-def register_serializer(
-    choice_type: type,
-    tag: int,
-    serialize: Callable[[Any], bytes],
-    deserialize: Callable[[bytes, int], Tuple[Any, int]],
-) -> None:
-    """Register serialization for a ChoiceType subclass.
-
-    serialize(value) -> bytes
-    deserialize(data, offset) -> (value, new_offset)
-        Should raise IndexError or ValueError on truncated data."""
-    _SERIALIZERS[choice_type] = (tag, serialize)
-    _DESERIALIZERS[tag] = deserialize
-
-
-def _serialize_choices(nodes: Sequence[ChoiceNode]) -> bytes:
-    """Serialize a choice sequence to bytes for database storage."""
-    parts: List[bytes] = []
-    for n in nodes:
-        tag, serialize = _SERIALIZERS[type(n.kind)]
-        parts.append(bytes([tag]) + serialize(n.value))
-    return b"".join(parts)
-
-
-def _deserialize_choices(data: bytes) -> Optional[List]:
-    """Deserialize a choice sequence from bytes. Returns None if
-    the data is malformed (e.g. from an old format)."""
-    values: List = []
-    i = 0
-    try:
-        while i < len(data):
-            tag = data[i]
-            i += 1
-            if tag not in _DESERIALIZERS:
-                return None
-            value, i = _DESERIALIZERS[tag](data, i)
-            values.append(value)
-    except (IndexError, ValueError):
-        return None
-    return values
-
-
-def _deserialize_fixed(size: int, convert: Callable[[bytes], Any]) -> Callable:
-    """Helper to create a deserializer for fixed-size values."""
-
-    def deserialize(data: bytes, offset: int) -> Tuple[Any, int]:
-        if offset + size > len(data):
-            raise ValueError("truncated")
-        return convert(data[offset : offset + size]), offset + size
-
-    return deserialize
-
-
-def _deserialize_length_prefixed(
-    convert: Callable[[bytes], Any],
-) -> Callable:
-    """Helper to create a deserializer for length-prefixed values."""
-
-    def deserialize(data: bytes, offset: int) -> Tuple[Any, int]:
-        if offset + 4 > len(data):
-            raise ValueError("truncated")
-        length = int.from_bytes(data[offset : offset + 4], "big")
-        offset += 4
-        if offset + length > len(data):
-            raise ValueError("truncated")
-        return convert(data[offset : offset + length]), offset + length
-
-    return deserialize
-
-
-# Register core types.
-register_serializer(
-    IntegerChoice,
-    SerializationTag.INTEGER,
-    lambda v: v.to_bytes(8, "big"),
-    _deserialize_fixed(8, lambda b: int.from_bytes(b, "big")),
-)
-
-register_serializer(
-    BooleanChoice,
-    SerializationTag.BOOLEAN,
-    lambda v: bytes([int(v)]),
-    _deserialize_fixed(1, lambda b: bool(b[0])),
-)
-
-
 # We cap the maximum amount of entropy a test case can use.
 # This prevents cases where the generated test case size explodes
 # by effectively rejecting test cases that use too many choices.
 BUFFER_SIZE = 8 * 1024
 
-_DEFAULT_DATABASE_PATH = ".minithesis-cache"
-
 
 def run_test(
     max_examples: int = 100,
     random: Optional[Random] = None,
-    database: Optional[Database] = None,
     quiet: bool = False,
+    **kwargs: Any,
 ) -> Callable[[Callable[["TestCase"], None]], None]:
     """Decorator to run a test. Usage is:
 
@@ -251,9 +139,10 @@ def run_test(
       cases than this.
     * random: An instance of random.Random that will be used for all
       nondeterministic choices.
-    * database: A dict-like object in which results will be cached and resumed
-      from, ensuring that if a test is run twice it fails in the same way.
     * quiet: Will not print anything on failure if True.
+
+    Additional keyword arguments are stored on the state object's
+    ``extras`` namespace, where they can be used by extension hooks.
     """
 
     def accept(test: Callable[[TestCase], None]) -> None:
@@ -266,22 +155,15 @@ def run_test(
                 test_case.mark_status(Status.INTERESTING)
 
         state = MinithesisState(
-            random or Random(), mark_failures_interesting, max_examples
+            random or Random(),
+            mark_failures_interesting,
+            max_examples,
+            test_name=test.__name__,
+            **kwargs,
         )
 
-        if database is None:
-            # If the database is not set, use a standard cache directory
-            # location to persist examples.
-            db: Database = DirectoryDB(_DEFAULT_DATABASE_PATH)
-        else:
-            db = database
-
-        previous_failure = db.get(test.__name__)
-
-        if previous_failure is not None:
-            values = _deserialize_choices(previous_failure)
-            if values is not None:
-                state.test_function(TestCase.for_choices(values))
+        for hook in SETUP_HOOKS:
+            hook(state)
 
         if state.result is None:
             state.run()
@@ -289,13 +171,8 @@ def run_test(
         if state.valid_test_cases == 0:
             raise Unsatisfiable()
 
-        if state.result is None:
-            try:
-                del db[test.__name__]
-            except KeyError:
-                pass
-        else:
-            db[test.__name__] = _serialize_choices(state.result)
+        for hook in TEARDOWN_HOOKS:
+            hook(state)
 
         if state.result is not None:
             test(
@@ -541,6 +418,8 @@ class Generator(Generic[T]):
 SHRINK_PASSES: List[Callable[["MinithesisState"], None]] = []
 TEST_FUNCTION_HOOKS: List[Callable[["MinithesisState", "TestCase"], None]] = []
 RUN_PHASES: List[Callable[["MinithesisState"], None]] = []
+SETUP_HOOKS: List[Callable[["MinithesisState"], None]] = []
+TEARDOWN_HOOKS: List[Callable[["MinithesisState"], None]] = []
 
 
 def shrink_pass(
@@ -564,6 +443,22 @@ def run_phase(
 ) -> Callable[["MinithesisState"], None]:
     """Decorator that registers a phase in the test run (between generate and shrink)."""
     RUN_PHASES.append(fn)
+    return fn
+
+
+def setup_hook(
+    fn: Callable[["MinithesisState"], None],
+) -> Callable[["MinithesisState"], None]:
+    """Decorator that registers a hook called before the test run."""
+    SETUP_HOOKS.append(fn)
+    return fn
+
+
+def teardown_hook(
+    fn: Callable[["MinithesisState"], None],
+) -> Callable[["MinithesisState"], None]:
+    """Decorator that registers a hook called after the test run."""
+    TEARDOWN_HOOKS.append(fn)
     return fn
 
 
@@ -648,6 +543,7 @@ class MinithesisState:
         random: Random,
         test_function: Callable[[TestCase], None],
         max_examples: int,
+        **kwargs: Any,
     ):
         self.random = random
         self.max_examples = max_examples
@@ -657,6 +553,7 @@ class MinithesisState:
         self.result: Optional[List[ChoiceNode]] = None
         self.best_scoring: Optional[Tuple[int, List[ChoiceNode]]] = None
         self.test_is_trivial = False
+        self.extras = types.SimpleNamespace(**kwargs)
 
     def test_function(self, test_case: TestCase) -> None:
         try:
@@ -966,42 +863,6 @@ def bin_search_down(lo: int, hi: int, f: Callable[[int], bool]) -> int:
         else:
             lo = mid
     return hi
-
-
-class DirectoryDB:
-    """A very basic key/value store that just uses a file system
-    directory to store values. You absolutely don't have to copy this
-    and should feel free to use a more reasonable key/value store
-    if you have easy access to one."""
-
-    def __init__(self, directory: str):
-        self.directory = directory
-        try:
-            os.mkdir(directory)
-        except FileExistsError:
-            pass
-
-    def __to_file(self, key: str) -> str:
-        return os.path.join(
-            self.directory, hashlib.sha1(key.encode("utf-8")).hexdigest()[:10]
-        )
-
-    def __setitem__(self, key: str, value: bytes) -> None:
-        with open(self.__to_file(key), "wb") as o:
-            o.write(value)
-
-    def get(self, key: str) -> Optional[bytes]:
-        f = self.__to_file(key)
-        if not os.path.exists(f):
-            return None
-        with open(f, "rb") as i:
-            return i.read()
-
-    def __delitem__(self, key: str) -> None:
-        try:
-            os.unlink(self.__to_file(key))
-        except FileNotFoundError:
-            raise KeyError()
 
 
 class Frozen(Exception):

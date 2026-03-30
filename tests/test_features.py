@@ -2,7 +2,9 @@ import sys
 
 import pytest
 
-minithesis_features = pytest.importorskip("minithesis.features", reason="not available in compiled mode")
+minithesis_features = pytest.importorskip(
+    "minithesis.features", reason="not available in compiled mode"
+)
 _DisabledModule = minithesis_features._DisabledModule
 _DisabledSymbol = minithesis_features._DisabledSymbol
 disable_modules = minithesis_features.disable_modules
