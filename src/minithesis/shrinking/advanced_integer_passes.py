@@ -43,24 +43,24 @@ def _bumpable_indices(state: MinithesisState) -> list[int]:
 
 @shrink_pass
 def lower_and_bump(state: MinithesisState) -> None:
-    """For IntegerChoice nodes with value > 0, try decrementing and
-    bumping a later integer or boolean. First runs the decrement alone
-    to discover the kind of the later node in the new context, then
-    tries the boundary and powers of 2.
+    """For IntegerChoice/BooleanChoice nodes with value > 0, try
+    decrementing and bumping a later integer or boolean. First runs
+    the decrement alone to discover the kind of the later node in
+    the new context, then tries the boundary and powers of 2.
 
     Value punning in _make_choice handles the case where decrementing
     changes the type at position j (e.g., one_of branch switch)."""
     assert state.result is not None
     for gap in range(1, min(len(_bumpable_indices(state)), 8)):
         idx = 0
-        while idx < len(_integer_indices(state)):
-            int_indices = _integer_indices(state)
+        while idx < len(_bumpable_indices(state)):
             bump_indices = _bumpable_indices(state)
-            i = int_indices[idx]
+            i = bump_indices[idx]
             if state.result[i].value <= 0:
                 idx += 1
                 continue
             # Find the bump target: the gap'th bumpable index after i.
+            bump_indices = _bumpable_indices(state)
             targets_after_i = [k for k in bump_indices if k > i]
             if gap - 1 >= len(targets_after_i):
                 idx += 1
@@ -77,6 +77,7 @@ def lower_and_bump(state: MinithesisState) -> None:
                 kind_j = tc.nodes[j].kind
                 if isinstance(kind_j, IntegerChoice):
                     state.replace({i: new_i, j: kind_j.max_value})
+                    state.replace({i: new_i, j: kind_j.simplest})
             # Try bumping from current value by powers of 2.
             bump = 1
             found = False
@@ -89,7 +90,8 @@ def lower_and_bump(state: MinithesisState) -> None:
             # If bumps from current value didn't work (e.g. range changed
             # and current+bump is always out of range), try absolute powers
             # of 2 to explore the new range, both positive and negative.
-            if not found:
+            if not found and j < len(state.result):
+                state.replace({i: new_i, j: 0})
                 bump = 1
                 while bump <= 256 and j < len(state.result):
                     if state.replace({i: new_i, j: bump}):

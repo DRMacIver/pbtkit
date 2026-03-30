@@ -414,8 +414,9 @@ def test_sorting_stale_filter_with_punning():
         if len(v0) != len(v1):
             tc.mark_status(Status.INTERESTING)
 
-    state = State(Random(0), tf, 100)
-    state.run()
+    for seed in range(5):
+        state = State(Random(seed), tf, 200)
+        state.run()
 
 
 @pytest.mark.requires("collections")

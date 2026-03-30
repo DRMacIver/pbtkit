@@ -20,15 +20,23 @@ def sort_values(state: MinithesisState) -> None:
     """Group values by choice type and try sorting each group."""
     assert state.result is not None
 
-    # Group indices by choice type.
-    groups: dict[type, list[int]] = defaultdict(list)
-    for i, node in enumerate(state.result):
-        groups[type(node.kind)].append(i)
-
-    for choice_type, indices in groups.items():
-        if len(indices) < 2:
-            continue
-        _try_sort_group(state, choice_type, indices)
+    # Process each choice type. Recompute groups each iteration
+    # since sorting one group can change the result structure.
+    processed: set[type] = set()
+    while True:
+        groups: dict[type, list[int]] = defaultdict(list)
+        for i, node in enumerate(state.result):
+            groups[type(node.kind)].append(i)
+        found = False
+        for choice_type, indices in groups.items():
+            if choice_type in processed or len(indices) < 2:
+                continue
+            found = True
+            processed.add(choice_type)
+            _try_sort_group(state, choice_type, indices)
+            break
+        if not found:
+            break
 
 
 def _try_sort_group(
@@ -38,16 +46,6 @@ def _try_sort_group(
     of the first node's kind. First try a full sort, then fall back
     to insertion sort."""
     assert state.result is not None
-
-    # Filter out indices that are stale (result may have shortened
-    # from a prior group's sort in sort_values).
-    indices = [
-        i
-        for i in indices
-        if i < len(state.result) and type(state.result[i].kind) == choice_type
-    ]
-    if len(indices) < 2:
-        return
 
     # Try a full sort.
     kind = state.result[indices[0]].kind
@@ -59,23 +57,21 @@ def _try_sort_group(
 
     # Fall back to insertion sort: for each element, swap it
     # backward until it's in the right place or a swap fails.
-    # If a swap fails (e.g. due to structural dependency between
-    # adjacent positions), skip one position and try swapping
-    # with the element one further back.
     for pos in range(1, len(indices)):
         j = pos
         while j > 0:
             idx_j = indices[j]
             idx_prev = indices[j - 1]
-            # After a successful replace the result may have changed
-            # length or types. Bail out if our indices are stale.
-            if (
-                idx_j >= len(state.result)
-                or idx_prev >= len(state.result)
-                or type(state.result[idx_j].kind) != choice_type
-                or type(state.result[idx_prev].kind) != choice_type
-            ):
-                break
+            # Recompute valid indices after each swap, since a
+            # successful replace can change the result structure.
+            indices = [
+                i
+                for i in indices
+                if i < len(state.result) and type(state.result[i].kind) == choice_type
+            ]
+            assert j < len(indices)
+            idx_j = indices[j]
+            idx_prev = indices[j - 1]
             if state.result[idx_prev].sort_key <= state.result[idx_j].sort_key:
                 break
             if state.replace(
@@ -86,20 +82,4 @@ def _try_sort_group(
             ):
                 j -= 1
                 continue
-            # Adjacent swap failed; try skipping one position.
-            if j >= 2:
-                idx_skip = indices[j - 2]
-                if (
-                    idx_skip < len(state.result)
-                    and type(state.result[idx_skip].kind) == choice_type
-                    and state.result[idx_skip].sort_key > state.result[idx_j].sort_key
-                ):
-                    if state.replace(
-                        {
-                            idx_skip: state.result[idx_j].value,
-                            idx_j: state.result[idx_skip].value,
-                        }
-                    ):
-                        j -= 2
-                        continue
             break
