@@ -145,6 +145,56 @@ def test_early_exit_via_flag_with_preceding_draws():
     assert result[0] is True
 
 
+def test_one_of_branch_switch_with_trailing_draws():
+    """When one_of(booleans(), floats()) at branch=1 produces a truthy
+    float, switching to branch=0 (boolean True) is simpler but requires
+    fixing the downstream kind AND keeping the trailing composite draws.
+
+    Found by the Hypothesis shrink comparison test."""
+
+    @composite
+    def gen_pair(tc):
+        a = tc.any(booleans())
+        b = tc.any(booleans())
+        return (a, b)
+
+    @composite
+    def test_data(tc):
+        v0 = tc.any(one_of(booleans(), floats(allow_nan=False, allow_infinity=False)))
+        tc.any(gen_pair())
+        return v0
+
+    result = minimal(test_data(), lambda v: bool(v))
+    assert result is True
+
+
+def test_shorter_path_via_later_assertion():
+    """When emptying a list removes one failure but a later assertion
+    still fails with fewer total choices, the shrinker should prefer
+    the shorter path. Found by the Hypothesis shrink comparison test."""
+
+    @composite
+    def pair(tc):
+        a = tc.any(booleans())
+        b = tc.any(floats(allow_nan=False, allow_infinity=False))
+        return (a, b)
+
+    @composite
+    def test_data(tc):
+        v0 = tc.any(pair())
+        v1 = tc.any(lists(integers(0, 20), max_size=10, unique=True))
+        tc.any(pair())
+        return (v0, v1)
+
+    result = minimal(
+        test_data(),
+        # Fails when v1 is non-empty (7 choices) OR always via len(v0)==2
+        # (v0 is a tuple, 6 choices). The shorter path is v1 empty.
+        lambda t: len(t[1]) > 0 or len(t[0]) != 0,
+    )
+    assert len(result[1]) == 0
+
+
 def test_shorter_path_when_guard_precedes_expensive_draw():
     """A guard check (v0 > 0) comes after a cheap draw but before an
     expensive draw (a list). When v0=1 triggers the guard, the expensive

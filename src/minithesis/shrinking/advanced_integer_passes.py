@@ -58,12 +58,16 @@ def lower_and_bump_adjacent(state: MinithesisState) -> None:
             assert tc.status is not None
             if j < len(tc.nodes):
                 kind_j = tc.nodes[j].kind
+                # Use the probe's nodes up to j (correct kind after
+                # decrement) plus the remaining original nodes (to
+                # provide choices for subsequent draws).
+                tail = list(state.result[j + 1 :])
                 if isinstance(kind_j, IntegerChoice):
-                    probe_attempt = list(tc.nodes[: j + 1])
+                    probe_attempt = list(tc.nodes[: j + 1]) + tail
                     probe_attempt[j] = probe_attempt[j].with_value(kind_j.max_value)
                     state.consider(probe_attempt)
                 elif isinstance(kind_j, BooleanChoice):
-                    probe_attempt = list(tc.nodes[: j + 1])
+                    probe_attempt = list(tc.nodes[: j + 1]) + tail
                     probe_attempt[j] = probe_attempt[j].with_value(True)
                     state.consider(probe_attempt)
         # Also try powers of 2 for integer choices at position j.
@@ -150,6 +154,7 @@ def try_shortening_via_increment(state: MinithesisState) -> None:
         state.test_function(tc_zeroed)
         if (
             len(tc_zeroed.nodes) < len(state.result)
+            and tc_zeroed.status is not None
             and tc_zeroed.status < Status.INTERESTING
         ):
             # Bump-and-zero reduced the length but didn't produce an
