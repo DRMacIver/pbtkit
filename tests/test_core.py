@@ -29,6 +29,7 @@ from minithesis.generators import (
     booleans,
     composite,
     dictionaries,
+    floats,
     integers,
     lists,
     one_of,
@@ -581,6 +582,29 @@ def test_lower_and_bump_targets_booleans():
     # v0=0 + v1=True is simpler than v0=1 + v1=False
     # (sort_key position 0: (0,F) < (1,F))
     assert values[0] == 0
+
+
+@pytest.mark.requires("floats")
+def test_float_increment_shortens_via_negative():
+    """Making a float negative can trigger an earlier check and shorten
+    the overall choice sequence. try_shortening_via_increment should
+    try negative float values.
+    Regression for shrink quality found by minismith."""
+
+    def tf(tc):
+        v0 = tc.any(booleans())
+        v1 = tc.any(floats(allow_nan=False, allow_infinity=False))
+        v2 = tc.any(booleans())
+        if v1 < 0.0:
+            tc.mark_status(Status.INTERESTING)
+        tc.any(booleans())
+        if v0:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 1000)
+    state.run()
+    assert state.result is not None
+    assert len(state.result) == 3
 
 
 def test_bind_deletion_valid_but_not_shorter():

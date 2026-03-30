@@ -8,6 +8,8 @@ register as a shrink pass.
 
 from __future__ import annotations
 
+from typing import Any
+
 from minithesis.bytes import BytesChoice
 from minithesis.core import (
     BooleanChoice,
@@ -18,6 +20,7 @@ from minithesis.core import (
     bin_search_down,
     shrink_pass,
 )
+from minithesis.floats import FloatChoice
 
 
 def _integer_indices(state: MinithesisState) -> list[int]:
@@ -155,7 +158,7 @@ def try_shortening_via_increment(state: MinithesisState) -> None:
     while i < len(state.result):
         node = state.result[i]
         if isinstance(node.kind, BytesChoice):
-            candidates: list[bytes | int] = [b"\x00" * node.kind.max_size]
+            candidates: list[Any] = [b"\x00" * node.kind.max_size]
         elif isinstance(node.kind, IntegerChoice):
             # Try both +1 and max_value. +1 catches gradual thresholds,
             # max_value catches sampled_from where only the last index
@@ -168,6 +171,12 @@ def try_shortening_via_increment(state: MinithesisState) -> None:
                 and node.kind.max_value != node.value + 1
             ):
                 candidates.append(node.kind.max_value)
+        elif isinstance(node.kind, FloatChoice):
+            # Try unit, negative unit, and range boundaries.
+            candidates = []
+            for v in [node.kind.unit, -node.kind.unit, node.kind.min_value]:
+                if v != node.value and node.kind.validate(v):
+                    candidates.append(v)
         elif isinstance(node.kind, BooleanChoice):
             if node.value is False:
                 candidates = [True]
