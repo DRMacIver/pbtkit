@@ -605,7 +605,11 @@ def delete_chunks(state: MinithesisState) -> None:
             attempt = state.result[:i] + state.result[i + k :]
             assert len(attempt) < len(state.result)
             if not state.consider(attempt):
-                if i > 0 and attempt[i - 1].value != attempt[i - 1].kind.simplest:
+                if (
+                    i > 0
+                    and isinstance(attempt[i - 1].kind, (IntegerChoice, BooleanChoice))
+                    and attempt[i - 1].value != attempt[i - 1].kind.simplest
+                ):
                     attempt = list(attempt)
                     attempt[i - 1] = attempt[i - 1].with_value(attempt[i - 1].value - 1)
                     if state.consider(attempt):

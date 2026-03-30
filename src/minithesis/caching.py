@@ -74,9 +74,16 @@ class CachedTestFunction:
             c = choice_node.value
             if i + 1 < len(test_case.nodes) or test_case.status == Status.OVERRUN:
                 try:
-                    node = node[c]
+                    existing = node[c]
                 except KeyError:
                     node = node.setdefault(c, {})
+                    continue
+                # A previous recording at this position recorded a
+                # terminal Status. That shorter result takes precedence,
+                # so stop recording here.
+                if isinstance(existing, Status):
+                    return
+                node = existing
             else:
                 node[c] = test_case.status
 
