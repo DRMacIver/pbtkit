@@ -94,7 +94,7 @@ def test_minimize_long_list():
     )
 
 
-@pytest.mark.xfail(reason="boolean lists don't shrink to [False, True] order")
+@pytest.mark.requires("shrinking.sorting")
 def test_minimize_list_of_longish_lists():
     size = 5
     xs = minimal(

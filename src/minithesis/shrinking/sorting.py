@@ -48,6 +48,9 @@ def _try_sort_group(state: MinithesisState, indices: List[int]) -> None:
 
     # Fall back to insertion sort: for each element, swap it
     # backward until it's in the right place or a swap fails.
+    # If a swap fails (e.g. due to structural dependency between
+    # adjacent positions), skip one position and try swapping
+    # with the element one further back.
     for pos in range(1, len(indices)):
         j = pos
         while j > 0:
@@ -55,11 +58,24 @@ def _try_sort_group(state: MinithesisState, indices: List[int]) -> None:
             idx_prev = indices[j - 1]
             if state.result[idx_prev].sort_key <= state.result[idx_j].sort_key:
                 break
-            if not state.replace(
+            if state.replace(
                 {
                     idx_prev: state.result[idx_j].value,
                     idx_j: state.result[idx_prev].value,
                 }
             ):
-                break
-            j -= 1
+                j -= 1
+                continue
+            # Adjacent swap failed; try skipping one position.
+            if j >= 2:
+                idx_skip = indices[j - 2]
+                if state.result[idx_skip].sort_key > state.result[idx_j].sort_key:
+                    if state.replace(
+                        {
+                            idx_skip: state.result[idx_j].value,
+                            idx_j: state.result[idx_skip].value,
+                        }
+                    ):
+                        j -= 2
+                        continue
+            break
