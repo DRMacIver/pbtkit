@@ -487,7 +487,6 @@ class MinithesisState:
         self.result: Optional[List[ChoiceNode]] = None
         self.best_scoring: Optional[Tuple[int, List[ChoiceNode]]] = None
         self.test_is_trivial = False
-        self._cached: Optional[Callable[[Sequence[Any]], Status]] = None
         self.extras = types.SimpleNamespace(**kwargs)
 
     def test_function(self, test_case: TestCase) -> None:
@@ -567,13 +566,7 @@ class MinithesisState:
         assert self.result is not None
         if sort_key(nodes) == sort_key(self.result):
             return True
-        choices = [n.value for n in nodes]
-        # If a caching layer has been installed (e.g. by
-        # minithesis.caching), use it; otherwise call the
-        # test function directly.
-        if self._cached is not None:
-            return self._cached(choices) == Status.INTERESTING
-        test_case = TestCase.for_choices(choices)
+        test_case = TestCase.for_choices([n.value for n in nodes])
         self.test_function(test_case)
         assert test_case.status is not None
         return test_case.status == Status.INTERESTING
