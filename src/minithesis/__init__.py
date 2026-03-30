@@ -93,5 +93,6 @@ import minithesis.caching
 import minithesis.database
 import minithesis.floats
 import minithesis.shrinking.advanced_integer_passes
+import minithesis.shrinking.duplication_passes
 import minithesis.targeting
 import minithesis.text

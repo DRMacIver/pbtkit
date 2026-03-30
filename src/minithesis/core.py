@@ -10,12 +10,14 @@
 from __future__ import annotations
 
 import types
+from collections import defaultdict
 from dataclasses import dataclass
 from enum import IntEnum
 from random import Random
 from typing import (
     Any,
     Callable,
+    Dict,
     Generic,
     List,
     Mapping,
@@ -422,6 +424,9 @@ class Generator(Generic[T]):
 # MinithesisState and attempting to simplify state.result.
 # Passes are run in order, repeating until a fixed point.
 SHRINK_PASSES: List[Callable[["MinithesisState"], None]] = []
+# Value shrinker registry. Maps choice type to list of value
+# shrinker functions (kind, value, try_replace) -> None.
+VALUE_SHRINKERS: Dict[type, List[Callable]] = defaultdict(list)
 TEST_FUNCTION_HOOKS: List[Callable[["MinithesisState", "TestCase"], None]] = []
 RUN_PHASES: List[Callable[["MinithesisState"], None]] = []
 SETUP_HOOKS: List[Callable[["MinithesisState"], None]] = []
@@ -490,6 +495,7 @@ def value_shrinker(
         shrink_pass_fn.__name__ = fn.__name__
         shrink_pass_fn.__qualname__ = fn.__qualname__
         SHRINK_PASSES.append(shrink_pass_fn)
+        VALUE_SHRINKERS[choice_type].append(fn)
         return fn
 
     return accept

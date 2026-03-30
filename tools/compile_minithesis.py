@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src" / "minithesis"
 BUILD = ROOT / "build"
 
-EXTENSIONS = ["caching", "database", "bytes", "floats", "text", "collections", "targeting", "shrinking.advanced_integer_passes"]
+EXTENSIONS = ["caching", "database", "bytes", "floats", "text", "collections", "targeting", "shrinking.advanced_integer_passes", "shrinking.duplication_passes"]
 
 HEADER = """\
 # Compiled minithesis — generated from the modular source.
@@ -445,7 +445,7 @@ def _generate_init_py(disabled: frozenset[str]) -> str:
     enabled = [
         e
         for e in ["caching", "database", "floats", "bytes", "text", "collections", "targeting",
-                   "shrinking.advanced_integer_passes", "generators"]
+                   "shrinking.advanced_integer_passes", "shrinking.duplication_passes", "generators"]
         if e not in disabled
     ]
     disabled_list = sorted(disabled)

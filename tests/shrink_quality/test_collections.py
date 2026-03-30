@@ -50,20 +50,7 @@ def list_and_int(tc):
     return (v, i)
 
 
-_xfail_containment = pytest.mark.xfail(
-    reason="shrinker cannot coordinate independently-drawn list element and integer"
-)
-
-
-@pytest.mark.parametrize(
-    "n",
-    [
-        0,
-        pytest.param(1, marks=_xfail_containment),
-        pytest.param(10, marks=_xfail_containment),
-        pytest.param(50, marks=_xfail_containment),
-    ],
-)
+@pytest.mark.parametrize("n", [0, 1, 10, 50])
 def test_containment(n):
     result = minimal(
         list_and_int(), lambda x: x[1] >= n and x[1] in x[0], max_examples=1000
@@ -71,9 +58,6 @@ def test_containment(n):
     assert result == ([n], n)
 
 
-@pytest.mark.xfail(
-    reason="shrinker cannot coordinate independently-drawn list element and integer"
-)
 def test_duplicate_containment():
     ls, i = minimal(list_and_int(), lambda x: x[0].count(x[1]) > 1)
     assert ls == [0, 0]
