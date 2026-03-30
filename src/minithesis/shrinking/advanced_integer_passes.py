@@ -161,17 +161,13 @@ def try_shortening_via_increment(state: MinithesisState) -> None:
         if isinstance(node.kind, BytesChoice):
             candidates: list[Any] = [b"\x00" * node.kind.max_size]
         elif isinstance(node.kind, IntegerChoice):
-            # Try both +1 and max_value. +1 catches gradual thresholds,
-            # max_value catches sampled_from where only the last index
-            # maps to a value that triggers an early exit.
+            # Try +1, max_value, and min_value. +1 catches gradual
+            # thresholds, max_value catches sampled_from, min_value
+            # catches cases where going negative shortens the path.
             candidates = []
-            if node.kind.validate(node.value + 1):
-                candidates.append(node.value + 1)
-            if (
-                node.kind.max_value != node.value
-                and node.kind.max_value != node.value + 1
-            ):
-                candidates.append(node.kind.max_value)
+            for v in [node.value + 1, node.kind.max_value, node.kind.min_value]:
+                if v != node.value and node.kind.validate(v) and v not in candidates:
+                    candidates.append(v)
         elif isinstance(node.kind, FloatChoice):
             # Try unit, negative unit, and range boundaries.
             candidates = []
