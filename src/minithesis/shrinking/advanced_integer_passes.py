@@ -141,6 +141,20 @@ def try_shortening_via_increment(state: MinithesisState) -> None:
         # shorter interesting path, state.test_function updates state.result.
         attempt = list(state.result)
         attempt[i] = attempt[i].with_value(incremented)
-        tc = TestCase.for_choices([n.value for n in attempt])
-        state.test_function(tc)
+
+        # First try bumping the value and zeroing the rest of the
+        # test case (likely to make it much smaller)
+        tc_zeroed = TestCase.for_choices(
+            [n.value if j <= i else n.kind.simplest for j, n in enumerate(attempt)]
+        )
+        state.test_function(tc_zeroed)
+        if (
+            len(tc_zeroed.nodes) < len(state.result)
+            and tc_zeroed.status < Status.INTERESTING
+        ):
+            # Bump-and-zero reduced the length but didn't produce an
+            # interesting test case. Try with just the bump to sequence
+            # if it produces a shrink on its own.
+            tc = TestCase.for_choices([n.value for n in attempt])
+            state.test_function(tc)
         i += 1

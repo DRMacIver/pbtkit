@@ -121,12 +121,6 @@ def test_one_of_shrinks_branch_selector():
     assert result is True
 
 
-@pytest.mark.xfail(
-    reason="Requires coordinated multi-position shrinking: "
-    "flipping v0 to True only helps if v1 and v2 are also "
-    "shortened, but shortening them first removes the failure.",
-    strict=True,
-)
 def test_early_exit_via_flag_with_preceding_draws():
     """When v0=True triggers an early exit but v1 and v2 are drawn
     BEFORE the v0 check, the shrinker must coordinate: shorten v1/v2
