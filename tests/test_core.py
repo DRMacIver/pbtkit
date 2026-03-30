@@ -22,7 +22,7 @@ from minithesis.core import (
 from minithesis.core import MinithesisState as State
 from minithesis.core import TestCase as TC
 from minithesis.database import DirectoryDB
-from minithesis.generators import integers
+from minithesis.generators import booleans, integers, one_of
 
 
 @pytest.mark.parametrize("seed", range(10))
@@ -239,3 +239,61 @@ def test_truncated_database_entry(data):
     @run_test(database=db, max_examples=1)
     def _(test_case):
         pass
+
+
+def test_lower_and_bump_with_type_change():
+    """Lower-and-bump pass handles the case where decrementing an
+    integer choice changes the type of the next choice (e.g. one_of
+    where branches draw different types)."""
+    with pytest.raises(AssertionError):
+
+        @run_test(database={}, max_examples=1000)
+        def _(tc):
+            # Branch 0 draws a boolean, branch 1 draws an integer.
+            # Lower-and-bump will decrement the branch index and
+            # find a BooleanChoice at the next position.
+            value = tc.any(one_of(booleans(), integers(0, 100)))
+            assert isinstance(value, bool) or value <= 50
+
+
+def test_shrinking_mixed_choice_types_no_sort_crash():
+    """Sorting pass should not crash when the result has a mix of
+    IntegerChoice and BooleanChoice nodes and shrinking changes
+    which type is at a given position.
+
+    Regression test for a TypeError found by minismith."""
+
+    def tf(tc):
+        # Mix integer and boolean choices — shrinking may change
+        # which type appears at each position.
+        x = tc.choice(3)
+        if x > 0:
+            tc.weighted(0.5)
+            tc.weighted(0.5)
+        tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 100)
+    state.run()
+    assert state.result is not None
+
+
+def test_shrinking_stale_indices_no_redistribute_crash():
+    """Redistribute and lower-and-bump passes should not crash when
+    shrinking changes the result length, making pre-computed
+    indices stale.
+
+    Regression test for an IndexError found by minismith."""
+
+    def tf(tc):
+        # Variable-length sequence: the number of integers drawn
+        # depends on a prior choice, so shrinking that choice
+        # changes the result length mid-pass.
+        n = tc.draw_integer(2, 8)
+        vals = [tc.draw_integer(0, 100) for _ in range(n)]
+        tc.weighted(0.5)  # Mix in a non-integer choice
+        if sum(vals) > 150 and len(vals) >= 3:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 500)
+    state.run()
+    assert state.result is not None

@@ -26,13 +26,15 @@ def sort_values(state: MinithesisState) -> None:
     for i, node in enumerate(state.result):
         groups[type(node.kind)].append(i)
 
-    for indices in groups.values():
+    for choice_type, indices in groups.items():
         if len(indices) < 2:
             continue
-        _try_sort_group(state, indices)
+        _try_sort_group(state, choice_type, indices)
 
 
-def _try_sort_group(state: MinithesisState, indices: List[int]) -> None:
+def _try_sort_group(
+    state: MinithesisState, choice_type: type, indices: List[int]
+) -> None:
     """Try sorting the values at the given indices by the sort key
     of the first node's kind. First try a full sort, then fall back
     to insertion sort."""
@@ -56,6 +58,10 @@ def _try_sort_group(state: MinithesisState, indices: List[int]) -> None:
         while j > 0:
             idx_j = indices[j]
             idx_prev = indices[j - 1]
+            assert idx_j < len(state.result)
+            assert idx_prev < len(state.result)
+            assert type(state.result[idx_j].kind) == choice_type
+            assert type(state.result[idx_prev].kind) == choice_type
             if state.result[idx_prev].sort_key <= state.result[idx_j].sort_key:
                 break
             if state.replace(
@@ -69,7 +75,11 @@ def _try_sort_group(state: MinithesisState, indices: List[int]) -> None:
             # Adjacent swap failed; try skipping one position.
             if j >= 2:
                 idx_skip = indices[j - 2]
-                if state.result[idx_skip].sort_key > state.result[idx_j].sort_key:
+                if (
+                    idx_skip < len(state.result)
+                    and type(state.result[idx_skip].kind) == choice_type
+                    and state.result[idx_skip].sort_key > state.result[idx_j].sort_key
+                ):
                     if state.replace(
                         {
                             idx_skip: state.result[idx_j].value,

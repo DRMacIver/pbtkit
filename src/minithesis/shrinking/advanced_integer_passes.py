@@ -38,6 +38,7 @@ def lower_and_bump_adjacent(state: MinithesisState) -> None:
     for idx in range(len(indices) - 1):
         i = indices[idx]
         j = indices[idx + 1]
+        assert i < len(state.result) and j < len(state.result)
         if state.result[i].value <= 0:
             continue
         new_i = state.result[i].value - 1
@@ -73,6 +74,9 @@ def redistribute_integers(state: MinithesisState) -> None:
         for pair_idx in range(len(indices) - gap, 0, -1):
             i = indices[pair_idx - 1]
             j = indices[pair_idx - 1 + gap]
+            assert j < len(state.result) and i < len(state.result)
+            assert isinstance(state.result[i].kind, IntegerChoice)
+            assert isinstance(state.result[j].kind, IntegerChoice)
             # Try to redistribute value from i toward j, reducing |i|.
             # Keep the sum constant: when i changes by delta, j changes
             # by -delta.
