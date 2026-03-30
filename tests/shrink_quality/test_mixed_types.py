@@ -74,7 +74,6 @@ def test_mixed_list_flatmap():
 
 
 # one_of shrinks towards earlier branches
-@pytest.mark.xfail(reason="one_of branch index shrinks to 0, selecting second branch")
 def test_one_of_slip():
     result = minimal(
         one_of(integers(101, 200), integers(0, 100)),
