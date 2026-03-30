@@ -115,8 +115,7 @@ def redistribute_integers(state: MinithesisState) -> None:
             # Recompute indices since previous iterations may have
             # changed the result structure (e.g. via value punning).
             indices = _integer_indices(state)
-            if pair_idx - 1 + gap >= len(indices):
-                continue
+            assert pair_idx - 1 + gap < len(indices)
             i = indices[pair_idx - 1]
             j = indices[pair_idx - 1 + gap]
             assert j < len(state.result) and i < len(state.result)

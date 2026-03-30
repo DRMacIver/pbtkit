@@ -650,8 +650,7 @@ class MinithesisState:
         assert self.result is not None
         attempt = list(self.result)
         for i, v in values.items():
-            if i >= len(attempt):
-                return False
+            assert i < len(attempt)
             attempt[i] = attempt[i].with_value(v)
         return self.consider(attempt)
 
@@ -726,18 +725,26 @@ def swap_integer_sign(
 def binary_search_integer_towards_zero(
     kind: IntegerChoice, value: int, try_replace: Callable[[int], bool]
 ) -> None:
-    """Binary search the absolute value toward 0."""
+    """Binary search the absolute value toward 0, then linear scan
+    small values for non-monotonic functions (e.g. sampled_from)."""
     if value > 0:
         bin_search_down(
             max(kind.simplest, 0),
             value,
             try_replace,
         )
+        # Linear scan small values that binary search may skip
+        # when the function is non-monotonic.
+        for v in range(max(kind.simplest, 0), min(value, 8)):
+            try_replace(v)
         # Also try negative values with smaller absolute value,
         # which are simpler under sort_key (e.g. -1 < 2).
         if kind.min_value < 0:
             upper = min(value - 1, -kind.min_value)
             if upper >= 1:
+                # Explicitly try the upper bound since bin_search_down
+                # assumes f(hi) is True without calling it.
+                try_replace(-upper)
                 bin_search_down(1, upper, lambda a: try_replace(-a))
     elif value < 0:
         bin_search_down(
