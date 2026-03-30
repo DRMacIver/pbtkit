@@ -16,6 +16,7 @@ from minithesis.generators import (
     integers,
     lists,
     one_of,
+    sampled_from,
     text,
     tuples,
 )
@@ -219,6 +220,27 @@ def test_one_of_shorter_branch_needs_non_simplest_value():
         lambda v: bool(v),
     )
     assert result is True
+
+
+def test_switch_failure_mode_for_simpler_sort_key():
+    """When abs(v1) >= 1.0 triggers one assertion but a later assertion
+    also fails for all inputs, the shrinker should prefer the failure
+    mode where v1=0.0 (simpler float) even though it means v4 must
+    be non-zero. Found by the Hypothesis shrink comparison test."""
+
+    @composite
+    def test_data(tc):
+        v1 = tc.any(floats(allow_nan=False, allow_infinity=False))
+        v4 = tc.any(sampled_from([1, 0]))
+        return (v1, v4)
+
+    result = minimal(
+        test_data(),
+        # Fails when |v1| >= 1.0 (via v1) or when v4 > 0 (via v4).
+        # v1=0.0, v4=1 is simpler overall than v1=1.0, v4=0.
+        lambda t: abs(t[0]) >= 1.0 or t[1] > 0,
+    )
+    assert result[0] == 0.0  # Simpler float, later assertion fires.
 
 
 def test_shorter_path_when_guard_precedes_expensive_draw():
