@@ -607,6 +607,32 @@ def test_float_increment_shortens_via_negative():
     assert len(state.result) == 3
 
 
+@pytest.mark.requires("collections")
+def test_increment_with_dependent_continuation():
+    """try_shortening_via_increment must pass prefix_nodes so that
+    value punning maps simplest→simplest when the continuation
+    changes type (e.g. list boolean → integer).
+    Regression for shrink quality found by minismith."""
+
+    def tf(tc):
+        v0 = tc.any(integers(0, 0))
+        v1 = tc.any(booleans())
+        v2 = tc.any(integers(0, 0))
+        v3 = tc.any(lists(integers(-21, -1), max_size=10, unique=True))
+        if len(v3) != 0:
+            tc.mark_status(Status.INTERESTING)
+        if v1:
+            v4 = tc.any(integers(v0, v0 + 1))
+            if v0 + v4 <= 0:
+                tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 1000)
+    state.run()
+    assert state.result is not None
+    # Should shrink to 5 choices (via v1=True path) not 6 (via non-empty list)
+    assert len(state.result) == 5
+
+
 def test_bind_deletion_valid_but_not_shorter():
     """bind_deletion must correctly detect when a replacement produces
     a VALID test case that isn't shorter (no excess choices to delete).

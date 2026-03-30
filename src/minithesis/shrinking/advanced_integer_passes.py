@@ -194,9 +194,13 @@ def try_shortening_via_increment(state: MinithesisState) -> None:
             attempt[i] = attempt[i].with_value(incremented)
 
             # First try bumping the value and zeroing the rest of the
-            # test case (likely to make it much smaller)
+            # test case (likely to make it much smaller). Pass
+            # prefix_nodes so value punning maps simplest→simplest.
+            zeroed = list(attempt)
+            for j in range(i + 1, len(zeroed)):
+                zeroed[j] = zeroed[j].with_value(zeroed[j].kind.simplest)
             tc_zeroed = TestCase.for_choices(
-                [n.value if j <= i else n.kind.simplest for j, n in enumerate(attempt)]
+                [n.value for n in zeroed], prefix_nodes=zeroed
             )
             state.test_function(tc_zeroed)
             if (
@@ -206,6 +210,8 @@ def try_shortening_via_increment(state: MinithesisState) -> None:
             ):
                 # Bump-and-zero reduced the length but didn't produce an
                 # interesting test case. Try with just the bump.
-                tc = TestCase.for_choices([n.value for n in attempt])
+                tc = TestCase.for_choices(
+                    [n.value for n in attempt], prefix_nodes=attempt
+                )
                 state.test_function(tc)
         i += 1
