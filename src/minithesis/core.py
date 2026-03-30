@@ -468,6 +468,33 @@ def teardown_hook(
     return fn
 
 
+def value_shrinker(
+    choice_type: type,
+) -> Callable:
+    """Decorator that registers a value shrinker as a shrink pass.
+
+    The decorated function takes (kind, value, try_replace) and is
+    called for each node of the matching choice type during shrinking.
+    try_replace(v) -> bool attempts to replace the current value with v."""
+
+    def accept(fn: Callable) -> Callable:
+        def shrink_pass_fn(state: "MinithesisState") -> None:
+            assert state.result is not None
+            i = 0
+            while i < len(state.result):
+                node = state.result[i]
+                if isinstance(node.kind, choice_type):
+                    fn(node.kind, node.value, lambda v: state.replace({i: v}))
+                i += 1
+
+        shrink_pass_fn.__name__ = fn.__name__
+        shrink_pass_fn.__qualname__ = fn.__qualname__
+        SHRINK_PASSES.append(shrink_pass_fn)
+        return fn
+
+    return accept
+
+
 def sort_key(nodes: Sequence[ChoiceNode]) -> Tuple:
     """Returns a key that can be used for the shrinking order
     of test cases. Shorter choice sequences are simpler, and
@@ -644,41 +671,34 @@ def zero_choices(state: MinithesisState) -> None:
         k -= 1
 
 
-@shrink_pass
-def shrink_individual_integers(state: MinithesisState) -> None:
-    """Shrink each integer choice toward 0.
+@value_shrinker(IntegerChoice)
+def shrink_integer_toward_zero(
+    kind: IntegerChoice, value: int, try_replace: Callable[[int], bool]
+) -> None:
+    """Try simplest, then flip negative to positive."""
+    if value != kind.simplest:
+        try_replace(kind.simplest)
+    if value < 0 and kind.validate(-value):
+        try_replace(-value)
 
-    Tries the simplest value, then flips negative to positive,
-    then binary searches the absolute value toward 0."""
-    assert state.result is not None
-    i = len(state.result) - 1
-    while i >= 0:
-        node = state.result[i]
-        if isinstance(node.kind, IntegerChoice):
-            kind = node.kind
-            value = node.value
-            # Try the simplest value first.
-            if value != kind.simplest:
-                state.replace({i: kind.simplest})
-            value = state.result[i].value
-            # If negative and the positive counterpart is valid, try it.
-            if value < 0 and kind.validate(-value):
-                state.replace({i: -value})
-            value = state.result[i].value
-            # Binary search |value| toward 0.
-            if value > 0:
-                bin_search_down(
-                    max(kind.simplest, 0),
-                    value,
-                    lambda v: state.replace({i: v}),
-                )
-            elif value < 0:
-                bin_search_down(
-                    abs(min(kind.simplest, 0)),
-                    -value,
-                    lambda a: state.replace({i: -a}),
-                )
-        i -= 1
+
+@value_shrinker(IntegerChoice)
+def binary_search_integer(
+    kind: IntegerChoice, value: int, try_replace: Callable[[int], bool]
+) -> None:
+    """Binary search the absolute value toward 0."""
+    if value > 0:
+        bin_search_down(
+            max(kind.simplest, 0),
+            value,
+            try_replace,
+        )
+    elif value < 0:
+        bin_search_down(
+            abs(min(kind.simplest, 0)),
+            -value,
+            lambda a: try_replace(-a),
+        )
 
 
 def _shrink_sequence(

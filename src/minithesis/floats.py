@@ -15,10 +15,9 @@ from typing import Any, Callable, Tuple
 
 from minithesis.core import (
     ChoiceType,
-    MinithesisState,
     TestCase,
     bin_search_down,
-    shrink_pass,
+    value_shrinker,
 )
 
 # ---------------------------------------------------------------------------
@@ -259,9 +258,10 @@ TestCase.draw_float = _draw_float
 # ---------------------------------------------------------------------------
 
 
+@value_shrinker(FloatChoice)
 def _shrink_float(
-    value: float,
     kind: FloatChoice,
+    value: float,
     try_replace: Callable[[float], bool],
 ) -> None:
     """Shrink a float choice toward human-readable simplicity.
@@ -371,19 +371,3 @@ def _shrink_float(
 # ---------------------------------------------------------------------------
 # Shrink pass
 # ---------------------------------------------------------------------------
-
-
-@shrink_pass
-def shrink_individual_floats(state: MinithesisState) -> None:
-    """Shrink each float choice toward human-readable simplicity."""
-    assert state.result is not None
-    i = len(state.result) - 1
-    while i >= 0:
-        node = state.result[i]
-        if isinstance(node.kind, FloatChoice):
-            _shrink_float(
-                node.value,
-                node.kind,
-                lambda v: state.replace({i: v}),
-            )
-        i -= 1

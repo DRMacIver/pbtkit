@@ -8,14 +8,13 @@ package's __init__.py to register everything.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 from minithesis.core import (
     ChoiceType,
-    MinithesisState,
     TestCase,
     _shrink_sequence,
-    shrink_pass,
+    value_shrinker,
 )
 
 # ---------------------------------------------------------------------------
@@ -38,6 +37,24 @@ class BytesChoice(ChoiceType[bytes]):
     def sort_key(self, value: bytes) -> Any:
         """Shortlex ordering: shorter is simpler, then lexicographic."""
         return (len(value), value)
+
+
+@value_shrinker(BytesChoice)
+def shrink_bytes(
+    kind: BytesChoice,
+    value: bytes,
+    try_replace: Callable[[bytes], bool],
+) -> None:
+    """Shrink a bytes choice: shorten, remove bytes, reduce byte values."""
+    _shrink_sequence(
+        value,
+        kind.min_size,
+        kind.simplest,
+        lambda v, j: v[j],
+        lambda v, j, e: v[:j] + bytes([e]) + v[j + 1 :],
+        0,
+        try_replace,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -67,24 +84,3 @@ TestCase.draw_bytes = _draw_bytes
 # ---------------------------------------------------------------------------
 # Shrink pass
 # ---------------------------------------------------------------------------
-
-
-@shrink_pass
-def shrink_individual_bytes(state: MinithesisState) -> None:
-    """Shrink each bytes choice: shorten, remove bytes,
-    reduce byte values."""
-    assert state.result is not None
-    i = len(state.result) - 1
-    while i >= 0:
-        node = state.result[i]
-        if isinstance(node.kind, BytesChoice):
-            _shrink_sequence(
-                node.value,
-                node.kind.min_size,
-                node.kind.simplest,
-                lambda v, j: v[j],
-                lambda v, j, e: v[:j] + bytes([e]) + v[j + 1 :],
-                0,
-                lambda v: state.replace({i: v}),
-            )
-        i -= 1

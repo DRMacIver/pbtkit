@@ -8,14 +8,13 @@ package's __init__.py to register everything.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, List
+from typing import Any, Callable, List
 
 from minithesis.core import (
     ChoiceType,
-    MinithesisState,
     TestCase,
     _shrink_sequence,
-    shrink_pass,
+    value_shrinker,
 )
 
 # ---------------------------------------------------------------------------
@@ -98,22 +97,19 @@ TestCase.draw_string = _draw_string
 # ---------------------------------------------------------------------------
 
 
-@shrink_pass
-def shrink_individual_strings(state: MinithesisState) -> None:
-    """Shrink each string choice: shorten, remove chars,
-    reduce codepoints."""
-    assert state.result is not None
-    i = len(state.result) - 1
-    while i >= 0:
-        node = state.result[i]
-        if isinstance(node.kind, StringChoice):
-            _shrink_sequence(
-                node.value,
-                node.kind.min_size,
-                node.kind.simplest,
-                lambda v, j: ord(v[j]),
-                lambda v, j, e: v[:j] + chr(e) + v[j + 1 :],
-                node.kind.min_codepoint,
-                lambda v: state.replace({i: v}),
-            )
-        i -= 1
+@value_shrinker(StringChoice)
+def shrink_string(
+    kind: StringChoice,
+    value: str,
+    try_replace: Callable[[str], bool],
+) -> None:
+    """Shrink a string choice: shorten, remove chars, reduce codepoints."""
+    _shrink_sequence(
+        value,
+        kind.min_size,
+        kind.simplest,
+        lambda v, j: ord(v[j]),
+        lambda v, j, e: v[:j] + chr(e) + v[j + 1 :],
+        kind.min_codepoint,
+        try_replace,
+    )
