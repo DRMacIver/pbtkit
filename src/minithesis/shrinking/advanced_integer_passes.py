@@ -70,11 +70,13 @@ def lower_and_bump_adjacent(state: MinithesisState) -> None:
                 bump *= 2
             # If bumps from current value didn't work (e.g. range changed
             # and current+bump is always out of range), try absolute powers
-            # of 2 to explore the new range.
+            # of 2 to explore the new range, both positive and negative.
             if not found:
                 bump = 1
                 while bump <= 256 and j < len(state.result):
                     if state.replace({i: new_i, j: bump}):
+                        break
+                    if state.replace({i: new_i, j: -bump}):
                         break
                     bump *= 2
             idx += 1

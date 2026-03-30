@@ -486,6 +486,39 @@ def test_lower_and_bump_explores_new_range():
     assert values == [0, 0, 32, 0]
 
 
+@pytest.mark.requires("collections")
+def test_lower_and_bump_tries_negative_values():
+    """lower_and_bump should try negative absolute powers of 2 when
+    exploring a new range, not just positive ones.
+    Regression for shrink quality found by minismith."""
+
+    @composite
+    def pair(tc):
+        a = tc.any(booleans())
+        b = tc.any(booleans())
+        return (a, b)
+
+    def tf(tc):
+        v0 = tc.any(pair())
+        v1 = tc.any(pair())
+        v2 = tc.any(one_of(integers(0, 0), booleans()))
+        if len(v0) <= 0:
+            tc.mark_status(Status.INTERESTING)
+        v3 = tc.any(integers(-1, 1))
+        if v2:
+            tc.mark_status(Status.INTERESTING)
+        if not v2 and v3 < 0:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 1000)
+    state.run()
+    assert state.result is not None
+    values = [n.value for n in state.result]
+    # one_of index 0 (integers(0,0)) with v3=-1 is simpler than
+    # one_of index 1 (booleans=True) with v3=0
+    assert values == [False, False, False, False, 0, 0, -1]
+
+
 def test_bind_deletion_valid_but_not_shorter():
     """bind_deletion must correctly detect when a replacement produces
     a VALID test case that isn't shorter (no excess choices to delete).
