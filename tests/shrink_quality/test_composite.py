@@ -209,6 +209,18 @@ def test_one_of_branch_switch_to_float():
     assert result == 0.0
 
 
+def test_one_of_shorter_branch_needs_non_simplest_value():
+    """When one_of(tuples(booleans(), booleans()), booleans()) starts at
+    branch=0 (tuple, 3 choices), branch=1 with True (2 choices) is shorter.
+    But the increment + pun produces branch=1 with False (not interesting).
+    Found by the Hypothesis shrink comparison test."""
+    result = minimal(
+        one_of(tuples(booleans(), booleans()), booleans()),
+        lambda v: bool(v),
+    )
+    assert result is True
+
+
 def test_shorter_path_when_guard_precedes_expensive_draw():
     """A guard check (v0 > 0) comes after a cheap draw but before an
     expensive draw (a list). When v0=1 triggers the guard, the expensive
