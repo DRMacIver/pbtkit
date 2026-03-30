@@ -18,8 +18,13 @@ def int_pair(tc, lo, hi):
 
 
 @pytest.mark.requires("shrinking.advanced_integer_passes")
-def test_sum_of_pair():
+def test_positive_sum_of_pair():
     assert minimal(int_pair(0, 1000), lambda x: x[0] + x[1] > 1000) == (1, 1000)
+
+
+@pytest.mark.requires("shrinking.advanced_integer_passes")
+def test_negative_sum_of_pair():
+    assert minimal(int_pair(-1000, 1000), lambda x: x[0] + x[1] < -1000) == (-1, -1000)
 
 
 @pytest.mark.requires("text")

@@ -62,3 +62,7 @@ def test_can_find_an_int():
 
 def test_can_find_an_int_above_13():
     assert minimal(integers(-(2**63), 2**63 - 1), lambda x: x >= 13) == 13
+
+
+def test_minimizes_towards_zero():
+    assert minimal(integers(-1000, 50), lambda x: x < 0) == -1

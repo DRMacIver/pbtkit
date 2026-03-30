@@ -658,21 +658,22 @@ def zero_choices(state: MinithesisState) -> None:
     """Replace blocks of choices with their simplest values.
     Skip k=1 because we handle that in the per-choice pass."""
     assert state.result is not None
-    k = 8
+    k = len(state.result)
     while k > 0:
-        i = len(state.result) - k
-        while i >= 0:
-            if state.replace(
-                {j: state.result[j].kind.simplest for j in range(i, i + k)}
-            ):
-                i -= k
+        i = 0
+        while i + k <= len(state.result):
+            if state.result[i].value == state.result[i].kind.simplest:
+                i += 1
             else:
-                i -= 1
-        k -= 1
+                state.replace(
+                    {j: state.result[j].kind.simplest for j in range(i, i + k)}
+                )
+                i += k
+        k //= 2
 
 
 @value_shrinker(IntegerChoice)
-def shrink_integer_toward_zero(
+def swap_integer_sign(
     kind: IntegerChoice, value: int, try_replace: Callable[[int], bool]
 ) -> None:
     """Try simplest, then flip negative to positive."""
@@ -683,7 +684,7 @@ def shrink_integer_toward_zero(
 
 
 @value_shrinker(IntegerChoice)
-def binary_search_integer(
+def binary_search_integer_towards_zero(
     kind: IntegerChoice, value: int, try_replace: Callable[[int], bool]
 ) -> None:
     """Binary search the absolute value toward 0."""
@@ -714,9 +715,6 @@ def bin_search_down(lo: int, hi: int, f: Callable[[int], bool]) -> int:
     """
     if f(lo):
         return lo
-    # Try subtracting powers of 10 and dividing by 10. This helps
-    # when the value has structure at decimal boundaries (e.g.
-    # reversed fractional parts of floats).
     while lo + 1 < hi:
         mid = lo + (hi - lo) // 2
         if f(mid):

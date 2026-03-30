@@ -17,10 +17,26 @@ The generated programs exercise minithesis's full API:
 
 from __future__ import annotations
 
+from random import Random
+
 import pytest
 
-from hypothesis import HealthCheck, given, settings
+from hypothesis import HealthCheck, given, note, settings
 from hypothesis import strategies as st
+from minithesis.core import Unsatisfiable, run_test
+from minithesis.generators import (
+    binary,
+    booleans,
+    floats,
+    integers,
+    lists,
+    text,
+)
+
+
+class TestFailed(Exception):
+    pass
+
 
 # ---------------------------------------------------------------------------
 # Python type tags and environment tracking
@@ -32,11 +48,13 @@ TYPE_NAMES = ["bool", "int", "float", "str", "bytes", "list_int", "list_bool"]
 class VarInfo:
     """A variable in scope."""
 
-    __slots__ = ("name", "typ")
+    __slots__ = ("name", "typ", "lo", "hi")
 
-    def __init__(self, name: str, typ: str) -> None:
+    def __init__(self, name: str, typ: str, lo: int = 0, hi: int = 0) -> None:
         self.name = name
         self.typ = typ
+        self.lo = lo
+        self.hi = hi
 
 
 class Env:
@@ -51,8 +69,8 @@ class Env:
         self.next_id += 1
         return name
 
-    def add(self, name: str, typ: str) -> VarInfo:
-        v = VarInfo(name, typ)
+    def add(self, name: str, typ: str, lo: int = 0, hi: int = 0) -> VarInfo:
+        v = VarInfo(name, typ, lo, hi)
         self.vars.append(v)
         return v
 
@@ -253,7 +271,15 @@ def gen_multi_value_predicate(draw: st.DrawFn, env: Env) -> str:
     if len(int_vars) >= 2:
         a = draw(st.sampled_from(int_vars))
         b = draw(st.sampled_from([v for v in int_vars if v.name != a.name]))
-        choice = draw(st.integers(0, 5))
+        # Check if both variables span zero — if so, allow negative sum predicates
+        can_negative_sum = (
+            a.lo < 0
+            and a.hi > 0
+            and b.lo < 0
+            and b.hi > 0
+            and a.lo + b.lo < -max(a.hi, b.hi)
+        )
+        choice = draw(st.integers(0, 6))
         if choice == 0:
             return f"{a.name} + {b.name} > 0"
         elif choice == 1:
@@ -264,8 +290,13 @@ def gen_multi_value_predicate(draw: st.DrawFn, env: Env) -> str:
             return f"{a.name} != {b.name}"
         elif choice == 4:
             return f"{a.name} + {b.name} == {b.name} + {a.name}"
-        else:
+        elif choice == 5:
             return f"{a.name} - {b.name} > 0"
+        elif can_negative_sum:
+            threshold = max(a.hi, b.hi)
+            return f"{a.name} + {b.name} >= -{threshold}"
+        else:
+            return f"{a.name} + {b.name} > 0"
     elif len(int_vars) == 1:
         a = int_vars[0]
         choice = draw(st.integers(0, 2))
@@ -450,7 +481,7 @@ def gen_draw(draw: st.DrawFn, env: Env) -> tuple[str, str]:
     var = env.fresh_var()
     expr = gen_expr_code(typ, int_lo, int_hi)
     code = f"{var} = tc.any({expr})"
-    env.add(var, typ)
+    env.add(var, typ, int_lo, int_hi)
     return (typ, code)
 
 
@@ -663,7 +694,7 @@ def program(draw: st.DrawFn) -> str:
     """
     env = Env()
     lines: list[str] = []
-    indent = "    "
+    indent = "        "
 
     # Phase 1: initial draws
     num_draws = draw(st.integers(1, 5))
@@ -696,8 +727,23 @@ def program(draw: st.DrawFn) -> str:
         code = draw(gen_misc_statement(env))
         lines.append(f"{indent}{code}")
 
-    body = "\n".join(lines)
-    return f"def _test_body(tc):\n{body}\n"
+    max_examples = draw(st.integers(1, 1000))
+    seed = draw(st.integers(0, 2**32 - 1))
+
+    result = (
+        f"""\
+try:
+    @run_test(max_examples={max_examples}, database={{}}, quiet=True, random=Random({seed}))
+    def _(tc):
+"""
+        + "\n".join(lines)
+        + """
+except (Unsatisfiable, TestFailed):
+    pass
+    """
+    )
+    print(result)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -705,34 +751,7 @@ def program(draw: st.DrawFn) -> str:
 # ---------------------------------------------------------------------------
 
 PROGRAM_PREAMBLE = """\
-from minithesis.core import Unsatisfiable, run_test
-from minithesis.generators import (
-    binary, booleans, floats, integers, lists, text,
-)
-
-class TestFailed(Exception):
-    pass
-
 """
-
-
-def render_full_test(program_code: str, max_examples: int) -> str:
-    """Render a complete executable test script."""
-    return f"""\
-{PROGRAM_PREAMBLE}
-{program_code}
-
-try:
-    @run_test(max_examples={max_examples}, database={{}})
-    def _(tc):
-        try:
-            _test_body(tc)
-        except TestFailed:
-            pass
-except Unsatisfiable:
-    pass
-"""
-
 
 # ---------------------------------------------------------------------------
 # Test
@@ -748,13 +767,38 @@ pytestmark = [
 ]
 
 
-@given(code=program(), max_examples=st.integers(1, 1000))
+@given(program())
 @settings(
-    max_examples=200,
+    max_examples=1000,
     suppress_health_check=[HealthCheck.too_slow],
 )
-def test_minismith_no_internal_errors(code: str, max_examples: int) -> None:
+def test_minismith_no_internal_errors(minithesis_program: str) -> None:
     """Generated programs either succeed or fail with TestFailed,
     never with internal crashes."""
-    full = render_full_test(code, max_examples)
-    exec(compile(full, "<minismith>", "exec"), {})
+    note(minithesis_program)
+    exec(minithesis_program, globals())
+
+
+def test_regression_1():
+    try:
+
+        @run_test(max_examples=1, database={}, quiet=True, random=Random(0))
+        def _(tc):
+            v0 = tc.any(integers(-1, -1))
+            if not (v0 > 0):
+                raise TestFailed("v0 > 0")
+    except TestFailed:
+        pass
+
+
+def test_regression_2():
+    try:
+
+        @run_test(max_examples=1, database={}, quiet=True, random=Random(0))
+        def _(tc):
+            v0 = tc.any(lists(booleans(), max_size=10))
+            v1 = tc.any(lists(integers(0, 0), max_size=10))
+            if not (len(v0) == len(v1)):
+                raise TestFailed("len(v0) == len(v1)")
+    except (Unsatisfiable, TestFailed):
+        pass
