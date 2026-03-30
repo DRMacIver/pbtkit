@@ -46,7 +46,8 @@ def _try_sort_group(
         for i in indices
         if i < len(state.result) and type(state.result[i].kind) == choice_type
     ]
-    assert len(indices) >= 2
+    if len(indices) < 2:
+        return
 
     # Try a full sort.
     kind = state.result[indices[0]].kind

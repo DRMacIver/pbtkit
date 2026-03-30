@@ -24,7 +24,7 @@ from minithesis.core import MinithesisState as State
 from minithesis.core import TestCase as TC
 from minithesis.database import DirectoryDB
 from minithesis.floats import FloatChoice
-from minithesis.generators import booleans, integers, lists, one_of
+from minithesis.generators import booleans, composite, integers, lists, one_of
 
 
 @pytest.mark.parametrize("seed", range(10))
@@ -382,6 +382,29 @@ def test_sorting_full_sort_survives_stale_indices():
                     raise AssertionError
     except AssertionError:
         pass
+
+
+@pytest.mark.requires("collections")
+def test_sorting_stale_filter_with_punning():
+    """Sorting stale-index filter must handle the case where punning
+    changes node types so that a group has fewer than 2 members.
+    Regression for AssertionError in sorting.py found by shrink comparison."""
+
+    @composite
+    def pair(tc):
+        a = tc.any(booleans())
+        b = tc.any(booleans())
+        return (a, b)
+
+    def tf(tc):
+        v0 = tc.any(lists(integers(0, 0), max_size=10))
+        v1 = tc.any(integers(0, 0).flat_map(lambda x: lists(booleans(), max_size=1)))
+        tc.any(pair())
+        if len(v0) != len(v1):
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 100)
+    state.run()
 
 
 def test_bind_deletion_valid_but_not_shorter():
