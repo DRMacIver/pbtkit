@@ -166,8 +166,8 @@ def _deserialize_length_prefixed(
 register_serializer(
     int,
     SerializationTag.INTEGER,
-    lambda v: v.to_bytes(8, "big"),
-    _deserialize_fixed(8, lambda b: int.from_bytes(b, "big")),
+    lambda v: v.to_bytes(8, "big", signed=True),
+    _deserialize_fixed(8, lambda b: int.from_bytes(b, "big", signed=True)),
 )
 
 register_serializer(
