@@ -68,20 +68,8 @@ def test_flatmap_rectangles():
 
 # From nocover/test_flatmap.py
 
-_xfail_flatmap_binding = pytest.mark.xfail(
-    reason="cannot shrink list size through flatmap binding"
-)
 
-
-@pytest.mark.parametrize(
-    "n",
-    [
-        1,
-        pytest.param(3, marks=_xfail_flatmap_binding),
-        pytest.param(5, marks=_xfail_flatmap_binding),
-        pytest.param(9, marks=_xfail_flatmap_binding),
-    ],
-)
+@pytest.mark.parametrize("n", [1, 3, 5, 9])
 def test_can_shrink_through_a_binding(n):
     result = minimal(
         integers(0, 100).flat_map(lambda k: lists(booleans(), min_size=k, max_size=k)),
@@ -90,7 +78,6 @@ def test_can_shrink_through_a_binding(n):
     assert result == [True] * n
 
 
-@pytest.mark.xfail(reason="cannot shrink list size through flatmap binding")
 @pytest.mark.parametrize("n", [1, 3, 5, 9])
 def test_can_delete_in_middle_of_a_binding(n):
     result = minimal(
