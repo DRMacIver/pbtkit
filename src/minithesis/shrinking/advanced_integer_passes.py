@@ -123,13 +123,17 @@ def try_shortening_via_increment(state: MinithesisState) -> None:
     while i < len(state.result):
         node = state.result[i]
         if isinstance(node.kind, BytesChoice):
-            incremented = node.value + b"\x00"
+            # Try max-length all-zeros bytes to maximize the chance that
+            # subsequent choices become unnecessary. Value shrinkers will
+            # reduce the length afterward.
+            incremented: bytes | int = b"\x00" * node.kind.max_size
+            assert node.kind.validate(incremented)
         elif isinstance(node.kind, (BooleanChoice, IntegerChoice)):
             incremented = node.value + 1
+            if not node.kind.validate(incremented):
+                i += 1
+                continue
         else:
-            i += 1
-            continue
-        if not node.kind.validate(incremented):
             i += 1
             continue
         # Run the test with the incremented value. If the test takes a
