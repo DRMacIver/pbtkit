@@ -17,6 +17,25 @@ from minithesis.core import (
 )
 from minithesis.shrinking.sequence import shrink_sequence
 
+
+def _codepoint_key(c: int) -> int:
+    """Map a codepoint to a sort key where ord('0') is simplest.
+
+    Reorders the low 128 codepoints so that '0' maps to 0,
+    '1' to 1, ..., '/' to 47, and anything above 127 keeps
+    its natural position."""
+    if c < 128:
+        return (c - ord("0")) % 128
+    return c
+
+
+def _key_to_codepoint(k: int) -> int:
+    """Inverse of _codepoint_key."""
+    if k < 128:
+        return (k + ord("0")) % 128
+    return k
+
+
 # ---------------------------------------------------------------------------
 # StringChoice
 # ---------------------------------------------------------------------------
@@ -31,7 +50,13 @@ class StringChoice(ChoiceType[str]):
 
     @property
     def simplest(self) -> str:
-        return chr(self.min_codepoint) * self.min_size
+        # The simplest codepoint in range under _codepoint_key ordering.
+        best = min(
+            range(self.min_codepoint, min(self.max_codepoint + 1, 128)),
+            key=_codepoint_key,
+            default=self.min_codepoint,
+        )
+        return chr(best) * self.min_size
 
     def validate(self, value: str) -> bool:
         if not isinstance(value, str):
@@ -45,8 +70,9 @@ class StringChoice(ChoiceType[str]):
         )
 
     def sort_key(self, value: str) -> Any:
-        """Shortlex ordering: shorter is simpler, then by codepoints."""
-        return (len(value), value)
+        """Shortlex ordering: shorter is simpler, then by mapped
+        codepoint key (where '0' is simplest)."""
+        return (len(value), tuple(_codepoint_key(ord(c)) for c in value))
 
 
 # ---------------------------------------------------------------------------
@@ -103,13 +129,14 @@ def shrink_string(
     value: str,
     try_replace: Callable[[str], bool],
 ) -> None:
-    """Shrink a string choice: shorten, remove chars, reduce codepoints."""
+    """Shrink a string choice: shorten, remove chars, reduce
+    codepoints toward '0' using the mapped codepoint ordering."""
     shrink_sequence(
         value,
         kind.min_size,
         kind.simplest,
-        lambda v, j: ord(v[j]),
-        lambda v, j, e: v[:j] + chr(e) + v[j + 1 :],
-        kind.min_codepoint,
+        lambda v, j: _codepoint_key(ord(v[j])),
+        lambda v, j, e: v[:j] + chr(_key_to_codepoint(e)) + v[j + 1 :],
+        0,
         try_replace,
     )

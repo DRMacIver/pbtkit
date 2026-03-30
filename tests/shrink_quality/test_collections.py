@@ -53,12 +53,15 @@ def list_and_int(tc):
 _requires_duplication = pytest.mark.requires("shrinking.duplication_passes")
 
 
-@pytest.mark.parametrize("n", [
-    0,
-    pytest.param(1, marks=_requires_duplication),
-    pytest.param(10, marks=_requires_duplication),
-    pytest.param(50, marks=_requires_duplication),
-])
+@pytest.mark.parametrize(
+    "n",
+    [
+        0,
+        pytest.param(1, marks=_requires_duplication),
+        pytest.param(10, marks=_requires_duplication),
+        pytest.param(50, marks=_requires_duplication),
+    ],
+)
 def test_containment(n):
     result = minimal(
         list_and_int(), lambda x: x[1] >= n and x[1] in x[0], max_examples=1000

@@ -110,6 +110,20 @@ def test_string_validate():
     assert not kind.validate("abcdef")  # too long
 
 
+def test_text_unicode_shrinks(capsys):
+    """Strings with high codepoints shrink toward the lowest in range."""
+    with pytest.raises(AssertionError):
+
+        @run_test(database={}, max_examples=1000)
+        def _(tc):
+            s = tc.any(
+                text(min_codepoint=128, max_codepoint=256, min_size=1, max_size=3)
+            )
+            # Must contain a high character, so the shrinker has to
+            # search through codepoints >= 128.
+            assert all(ord(c) < 200 for c in s)
+
+
 @pytest.mark.requires("database")
 def test_truncated_string_database_entry():
     """Truncated string entries in database are handled gracefully."""

@@ -16,9 +16,6 @@ def test_minimize_string_to_empty():
     assert minimal(text()) == ""
 
 
-@pytest.mark.xfail(
-    reason="string shrinker minimizes codepoints toward 0, not toward printable characters"
-)
 def test_minimize_longer_string():
     result = minimal(text(max_size=50), lambda x: len(x) >= 10)
     assert result == "0" * 10
