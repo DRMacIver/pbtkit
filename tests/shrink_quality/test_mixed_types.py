@@ -23,7 +23,6 @@ def test_minimize_one_of_integers():
 
 
 # Mixed types via tagged tuples
-@pytest.mark.xfail(reason="type mismatch during shrinking across one_of branches")
 def test_minimize_one_of_mixed():
     for _ in range(10):
         result = minimal(
@@ -37,7 +36,7 @@ def test_minimize_one_of_mixed():
 
 
 # Mixed list
-@pytest.mark.xfail(reason="type mismatch during shrinking across one_of branches")
+@pytest.mark.xfail(reason="integers shrink toward min_value, not toward 0")
 def test_minimize_mixed_list():
     result = minimal(
         lists(

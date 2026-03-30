@@ -62,7 +62,7 @@ class IntegerChoice(ChoiceType[int]):
         return self.min_value
 
     def validate(self, value: int) -> bool:
-        return self.min_value <= value <= self.max_value
+        return isinstance(value, int) and self.min_value <= value <= self.max_value
 
 
 @dataclass(frozen=True)
@@ -74,7 +74,7 @@ class BooleanChoice(ChoiceType[bool]):
         return False
 
     def validate(self, value: bool) -> bool:
-        return value in (0, 1)
+        return isinstance(value, int) and value in (0, 1)
 
 
 @dataclass(frozen=True)
