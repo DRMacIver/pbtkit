@@ -124,7 +124,7 @@ def redistribute_integers(state: MinithesisState) -> None:
 
 @shrink_pass
 def try_shortening_via_increment(state: MinithesisState) -> None:
-    """Try incrementing each boolean/integer value to see if the test
+    """Try incrementing each boolean/integer/bytes value to see if the test
     takes a shorter path (e.g., triggering an earlier assertion).
 
     A value shrinker can only make values simpler, but sometimes making
@@ -135,38 +135,48 @@ def try_shortening_via_increment(state: MinithesisState) -> None:
     while i < len(state.result):
         node = state.result[i]
         if isinstance(node.kind, BytesChoice):
-            # Try max-length all-zeros bytes to maximize the chance that
-            # subsequent choices become unnecessary. Value shrinkers will
-            # reduce the length afterward.
-            incremented: bytes | int = b"\x00" * node.kind.max_size
-            assert node.kind.validate(incremented)
-        elif isinstance(node.kind, (BooleanChoice, IntegerChoice)):
-            incremented = node.value + 1
-            if not node.kind.validate(incremented):
+            candidates: list[bytes | int] = [b"\x00" * node.kind.max_size]
+        elif isinstance(node.kind, IntegerChoice):
+            # Try both +1 and max_value. +1 catches gradual thresholds,
+            # max_value catches sampled_from where only the last index
+            # maps to a value that triggers an early exit.
+            candidates = []
+            if node.kind.validate(node.value + 1):
+                candidates.append(node.value + 1)
+            if (
+                node.kind.max_value != node.value
+                and node.kind.max_value != node.value + 1
+            ):
+                candidates.append(node.kind.max_value)
+        elif isinstance(node.kind, BooleanChoice):
+            if node.value is False:
+                candidates = [True]
+            else:
                 i += 1
                 continue
         else:
             i += 1
             continue
-        # Run the test with the incremented value. If the test takes a
-        # shorter interesting path, state.test_function updates state.result.
-        attempt = list(state.result)
-        attempt[i] = attempt[i].with_value(incremented)
 
-        # First try bumping the value and zeroing the rest of the
-        # test case (likely to make it much smaller)
-        tc_zeroed = TestCase.for_choices(
-            [n.value if j <= i else n.kind.simplest for j, n in enumerate(attempt)]
-        )
-        state.test_function(tc_zeroed)
-        if (
-            len(tc_zeroed.nodes) < len(state.result)
-            and tc_zeroed.status is not None
-            and tc_zeroed.status < Status.INTERESTING
-        ):
-            # Bump-and-zero reduced the length but didn't produce an
-            # interesting test case. Try with just the bump to sequence
-            # if it produces a shrink on its own.
-            tc = TestCase.for_choices([n.value for n in attempt])
-            state.test_function(tc)
+        for incremented in candidates:
+            # Run the test with the incremented value. If the test takes a
+            # shorter interesting path, state.test_function updates state.result.
+            attempt = list(state.result)
+            attempt[i] = attempt[i].with_value(incremented)
+
+            # First try bumping the value and zeroing the rest of the
+            # test case (likely to make it much smaller)
+            tc_zeroed = TestCase.for_choices(
+                [n.value if j <= i else n.kind.simplest for j, n in enumerate(attempt)]
+            )
+            state.test_function(tc_zeroed)
+            if (
+                len(tc_zeroed.nodes) < len(state.result)
+                and tc_zeroed.status is not None
+                and tc_zeroed.status < Status.INTERESTING
+            ):
+                # Bump-and-zero reduced the length but didn't produce an
+                # interesting test case. Try with just the bump.
+                tc = TestCase.for_choices([n.value for n in attempt])
+                state.test_function(tc)
         i += 1

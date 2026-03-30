@@ -519,6 +519,27 @@ def test_lower_and_bump_tries_negative_values():
     assert values == [False, False, False, False, 0, 0, -1]
 
 
+@pytest.mark.requires("collections")
+def test_increment_to_max_shortens_via_sampled_from():
+    """try_shortening_via_increment should try max_value, not just +1.
+    For sampled_from([1, 1, 0]), index 2 maps to 0 which triggers an
+    early exit (1 choice instead of 2).
+    Regression for shrink quality found by minismith."""
+
+    def tf(tc):
+        v0 = tc.any(sampled_from([1, 1, 0]))
+        if v0 <= 0:
+            tc.mark_status(Status.INTERESTING)
+        v1 = tc.any(booleans())
+        if v1:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 1000)
+    state.run()
+    assert state.result is not None
+    assert len(state.result) == 1
+
+
 def test_bind_deletion_valid_but_not_shorter():
     """bind_deletion must correctly detect when a replacement produces
     a VALID test case that isn't shorter (no excess choices to delete).
