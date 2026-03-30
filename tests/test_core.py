@@ -407,6 +407,25 @@ def test_sorting_stale_filter_with_punning():
     state.run()
 
 
+@pytest.mark.requires("collections")
+def test_unique_list_shrinks_using_negative_values():
+    """Unique signed integer lists should shrink to use negative values
+    when that gives smaller absolute values (e.g. [0,1,-1,2,-2] not [0,1,2,3,4]).
+    Regression for shrink quality found by minismith."""
+
+    def tf(tc):
+        v0 = tc.any(lists(integers(-10, 10), max_size=5, unique=True))
+        if len(v0) >= 5:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 1000)
+    state.run()
+    assert state.result is not None
+    # Extract the integer values from the list choices (skip booleans)
+    int_values = [n.value for n in state.result if isinstance(n.kind, IntegerChoice)]
+    assert int_values == [0, 1, -1, 2, -2]
+
+
 def test_bind_deletion_valid_but_not_shorter():
     """bind_deletion must correctly detect when a replacement produces
     a VALID test case that isn't shorter (no excess choices to delete).

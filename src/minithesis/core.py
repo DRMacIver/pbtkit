@@ -733,6 +733,12 @@ def binary_search_integer_towards_zero(
             value,
             try_replace,
         )
+        # Also try negative values with smaller absolute value,
+        # which are simpler under sort_key (e.g. -1 < 2).
+        if kind.min_value < 0:
+            upper = min(value - 1, -kind.min_value)
+            if upper >= 1:
+                bin_search_down(1, upper, lambda a: try_replace(-a))
     elif value < 0:
         bin_search_down(
             abs(min(kind.simplest, 0)),

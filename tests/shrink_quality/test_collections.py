@@ -29,7 +29,7 @@ def test_minimize_3_set():
         lists(integers(-(2**63), 2**63 - 1), unique=True),
         lambda x: len(x) >= 3,
     )
-    assert result in [[0, 1, 2], [-1, 0, 1]]
+    assert result == [0, 1, -1]
 
 
 @pytest.mark.requires("shrinking.sorting")
