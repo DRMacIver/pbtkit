@@ -89,6 +89,7 @@ __all__ = [
 # Import type-specific modules for their side effects: each one
 # registers its serializer, shrink pass, and draw method on TestCase.
 import minithesis.bytes
+import minithesis.caching
 import minithesis.database
 import minithesis.floats
 import minithesis.shrinking.advanced_integer_passes

@@ -16,7 +16,6 @@ from random import Random
 from typing import (
     Any,
     Callable,
-    Dict,
     Generic,
     List,
     Mapping,
@@ -25,7 +24,6 @@ from typing import (
     Sequence,
     Tuple,
     TypeVar,
-    Union,
 )
 
 T = TypeVar("T", covariant=True)
@@ -473,70 +471,6 @@ def sort_key(nodes: Sequence[ChoiceNode]) -> Tuple:
     return (len(nodes), [n.sort_key for n in nodes])
 
 
-class CachedTestFunction:
-    """Returns a cached version of a function that maps
-    a choice sequence to the status of calling a test function
-    on a test case populated with it. Is able to take advantage
-    of the structure of the test function to predict the result
-    even if exact sequence of choices has not been seen
-    previously.
-
-    You can safely omit implementing this at the cost of
-    somewhat increased shrinking time.
-    """
-
-    def __init__(self, test_function: Callable[[TestCase], None]):
-        self.test_function = test_function
-
-        # Tree nodes are either a point at which a choice occurs
-        # in which case they map the result of the choice to the
-        # tree node we are in after, or a Status object indicating
-        # mark_status was called at this point and all future
-        # choices are irrelevant.
-        #
-        # Note that a better implementation of this would use
-        # a Patricia trie, which implements long non-branching
-        # paths as an array inline. For simplicity we don't
-        # do that here.
-        self.tree: Dict[Any, Union[Status, Dict[Any, Any]]] = {}
-
-    def __call__(self, choices: Sequence[Any]) -> Status:
-        node: Any = self.tree
-        try:
-            for c in choices:
-                node = node[c]
-                # mark_status was called, thus future choices
-                # will be ignored.
-                if isinstance(node, Status):
-                    assert node != Status.OVERRUN
-                    return node
-            # If we never entered an unknown region of the tree
-            # or hit a Status value, then we know that another
-            # choice will be made next and the result will overrun.
-            return Status.OVERRUN
-        except KeyError:
-            pass
-
-        # We now have to actually call the test function to find out
-        # what happens.
-        test_case = TestCase.for_choices(choices)
-        self.test_function(test_case)
-        assert test_case.status is not None
-
-        # We enter the choices made in a tree.
-        node = self.tree
-        for i, choice_node in enumerate(test_case.nodes):
-            c = choice_node.value
-            if i + 1 < len(test_case.nodes) or test_case.status == Status.OVERRUN:
-                try:
-                    node = node[c]
-                except KeyError:
-                    node = node.setdefault(c, {})
-            else:
-                node[c] = test_case.status
-        return test_case.status
-
-
 class MinithesisState:
     def __init__(
         self,
@@ -553,6 +487,7 @@ class MinithesisState:
         self.result: Optional[List[ChoiceNode]] = None
         self.best_scoring: Optional[Tuple[int, List[ChoiceNode]]] = None
         self.test_is_trivial = False
+        self._cached: Optional[Callable[[Sequence[Any]], Status]] = None
         self.extras = types.SimpleNamespace(**kwargs)
 
     def test_function(self, test_case: TestCase) -> None:
@@ -617,13 +552,6 @@ class MinithesisState:
         if not self.result:
             return
 
-        # Shrinking will typically try the same choice sequences over
-        # and over again, so we cache the test function in order to
-        # not end up reevaluating it in those cases. This also allows
-        # us to catch cases where we try something that is e.g. a prefix
-        # of something we've previously tried, which is guaranteed
-        # not to work.
-        self._cached = CachedTestFunction(self.test_function)
         assert self.consider(self.result)
 
         # Run registered shrink passes repeatedly until none of
@@ -639,7 +567,16 @@ class MinithesisState:
         assert self.result is not None
         if sort_key(nodes) == sort_key(self.result):
             return True
-        return self._cached([n.value for n in nodes]) == Status.INTERESTING
+        choices = [n.value for n in nodes]
+        # If a caching layer has been installed (e.g. by
+        # minithesis.caching), use it; otherwise call the
+        # test function directly.
+        if self._cached is not None:
+            return self._cached(choices) == Status.INTERESTING
+        test_case = TestCase.for_choices(choices)
+        self.test_function(test_case)
+        assert test_case.status is not None
+        return test_case.status == Status.INTERESTING
 
     def replace(self, values: Mapping[int, Any]) -> bool:
         """Attempt to replace node values at given indices."""

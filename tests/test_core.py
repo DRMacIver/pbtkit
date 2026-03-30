@@ -13,8 +13,8 @@ import pytest
 
 import minithesis.core as core
 from minithesis import Generator, Unsatisfiable, run_test
+from minithesis.caching import CachedTestFunction
 from minithesis.core import (
-    CachedTestFunction,
     Frozen,
     Status,
 )
@@ -129,6 +129,7 @@ def test_error_on_unbounded_test_function(monkeypatch):
                 test_case.choice(10)
 
 
+@pytest.mark.requires("caching")
 def test_function_cache():
     def tf(tc):
         if tc.choice(1000) >= 200:

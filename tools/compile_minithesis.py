@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src" / "minithesis"
 BUILD = ROOT / "build"
 
-EXTENSIONS = ["database", "bytes", "floats", "text", "collections", "targeting", "shrinking.advanced_integer_passes"]
+EXTENSIONS = ["caching", "database", "bytes", "floats", "text", "collections", "targeting", "shrinking.advanced_integer_passes"]
 
 HEADER = """\
 # Compiled minithesis — generated from the modular source.
@@ -444,7 +444,7 @@ def _generate_init_py(disabled: frozenset[str]) -> str:
     """Generate the __init__.py for the compiled test package."""
     enabled = [
         e
-        for e in ["database", "floats", "bytes", "text", "collections", "targeting",
+        for e in ["caching", "database", "floats", "bytes", "text", "collections", "targeting",
                    "shrinking.advanced_integer_passes", "generators"]
         if e not in disabled
     ]
