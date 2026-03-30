@@ -7,8 +7,9 @@ package's __init__.py to register everything.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, List
+from typing import Any
 
 from minithesis.core import (
     ChoiceType,
@@ -97,7 +98,7 @@ def _draw_string(
 
     def generate() -> str:
         length = self.random.randint(min_size, max_size)
-        chars: List[str] = []
+        chars: list[str] = []
         for _ in range(length):
             # Rejection-sample to avoid surrogates (0xD800-0xDFFF).
             while True:

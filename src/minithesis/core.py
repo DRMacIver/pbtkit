@@ -11,20 +11,14 @@ from __future__ import annotations
 
 import types
 from collections import defaultdict
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import IntEnum
 from random import Random
 from typing import (
     Any,
-    Callable,
-    Dict,
     Generic,
-    List,
-    Mapping,
     NoReturn,
-    Optional,
-    Sequence,
-    Tuple,
     TypeVar,
 )
 
@@ -116,7 +110,7 @@ BUFFER_SIZE = 8 * 1024
 
 def run_test(
     max_examples: int = 100,
-    random: Optional[Random] = None,
+    random: Random | None = None,
     quiet: bool = False,
     **kwargs: Any,
 ) -> Callable[[Callable[["TestCase"], None]], None]:
@@ -213,18 +207,18 @@ class TestCase:
     def __init__(
         self,
         prefix: Sequence[Any],
-        random: Optional[Random],
+        random: Random | None,
         max_size: float = float("inf"),
         print_results: bool = False,
     ):
         self.prefix = prefix
         self._random = random
         self.max_size = max_size
-        self.nodes: List[ChoiceNode] = []
-        self.status: Optional[Status] = None
+        self.nodes: list[ChoiceNode] = []
+        self.status: Status | None = None
         self.print_results = print_results
         self.depth = 0
-        self.targeting_score: Optional[int] = None
+        self.targeting_score: int | None = None
 
     def draw_integer(self, min_value: int, max_value: int) -> int:
         """Returns a number in the range [min_value, max_value]."""
@@ -270,7 +264,7 @@ class TestCase:
             print(f"choice({n}): {result}")
         return result
 
-    def weighted(self, p: float, *, forced: Optional[bool] = None) -> bool:
+    def weighted(self, p: float, *, forced: bool | None = None) -> bool:
         """Return True with probability ``p``. If ``forced`` is
         provided, the result is forced to that value (no randomness)."""
         if p <= 0:
@@ -350,7 +344,7 @@ class TestCase:
         kind: ChoiceType[U],
         rnd_method: Callable[[], U],
         *,
-        forced: Optional[U] = None,
+        forced: U | None = None,
     ) -> U:
         """Core method for recording a choice. Uses the forced value,
         prefix, or rnd_method, then validates against kind."""
@@ -377,7 +371,7 @@ class Generator(Generic[T]):
     Pass one of these to TestCase.any to get a concrete value.
     """
 
-    def __init__(self, produce: Callable[[TestCase], T], name: Optional[str] = None):
+    def __init__(self, produce: Callable[[TestCase], T], name: str | None = None):
         self.produce = produce
         self.name = produce.__name__ if name is None else name
 
@@ -423,14 +417,14 @@ class Generator(Generic[T]):
 # Shrink pass registry. Each pass is a function taking a
 # MinithesisState and attempting to simplify state.result.
 # Passes are run in order, repeating until a fixed point.
-SHRINK_PASSES: List[Callable[["MinithesisState"], None]] = []
+SHRINK_PASSES: list[Callable[["MinithesisState"], None]] = []
 # Value shrinker registry. Maps choice type to list of value
 # shrinker functions (kind, value, try_replace) -> None.
-VALUE_SHRINKERS: Dict[type, List[Callable]] = defaultdict(list)
-TEST_FUNCTION_HOOKS: List[Callable[["MinithesisState", "TestCase"], None]] = []
-RUN_PHASES: List[Callable[["MinithesisState"], None]] = []
-SETUP_HOOKS: List[Callable[["MinithesisState"], None]] = []
-TEARDOWN_HOOKS: List[Callable[["MinithesisState"], None]] = []
+VALUE_SHRINKERS: dict[type, list[Callable]] = defaultdict(list)
+TEST_FUNCTION_HOOKS: list[Callable[["MinithesisState", "TestCase"], None]] = []
+RUN_PHASES: list[Callable[["MinithesisState"], None]] = []
+SETUP_HOOKS: list[Callable[["MinithesisState"], None]] = []
+TEARDOWN_HOOKS: list[Callable[["MinithesisState"], None]] = []
 
 
 def shrink_pass(
@@ -501,7 +495,7 @@ def value_shrinker(
     return accept
 
 
-def sort_key(nodes: Sequence[ChoiceNode]) -> Tuple:
+def sort_key(nodes: Sequence[ChoiceNode]) -> tuple:
     """Returns a key that can be used for the shrinking order
     of test cases. Shorter choice sequences are simpler, and
     among equal lengths we prefer smaller values.
@@ -525,8 +519,8 @@ class MinithesisState:
         self.__test_function = test_function
         self.valid_test_cases = 0
         self.calls = 0
-        self.result: Optional[List[ChoiceNode]] = None
-        self.best_scoring: Optional[Tuple[int, List[ChoiceNode]]] = None
+        self.result: list[ChoiceNode] | None = None
+        self.best_scoring: tuple[int, list[ChoiceNode]] | None = None
         self.test_is_trivial = False
         self.extras = types.SimpleNamespace(**kwargs)
 
@@ -602,7 +596,7 @@ class MinithesisState:
             for pass_fn in SHRINK_PASSES:
                 pass_fn(self)
 
-    def consider(self, nodes: List[ChoiceNode]) -> bool:
+    def consider(self, nodes: list[ChoiceNode]) -> bool:
         """Test whether a choice sequence is interesting."""
         assert self.result is not None
         if sort_key(nodes) == sort_key(self.result):

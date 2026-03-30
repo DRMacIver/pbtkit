@@ -5,8 +5,9 @@ Ported from Hypothesis's shrink quality test suite via hegel-rust.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from random import Random
-from typing import Callable, TypeVar
+from typing import TypeVar
 
 from minithesis.core import Generator, MinithesisState, Status, StopTest, TestCase
 

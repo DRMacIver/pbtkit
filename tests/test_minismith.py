@@ -17,8 +17,6 @@ The generated programs exercise minithesis's full API:
 
 from __future__ import annotations
 
-from typing import List, Tuple
-
 import pytest
 
 from hypothesis import HealthCheck, given, settings
@@ -45,7 +43,7 @@ class Env:
     """Track variables in scope during program generation."""
 
     def __init__(self) -> None:
-        self.vars: List[VarInfo] = []
+        self.vars: list[VarInfo] = []
         self.next_id = 0
 
     def fresh_var(self) -> str:
@@ -64,25 +62,25 @@ class Env:
     def restore(self, point: int) -> None:
         del self.vars[point:]
 
-    def of_type(self, *typs: str) -> List[VarInfo]:
+    def of_type(self, *typs: str) -> list[VarInfo]:
         return [v for v in self.vars if v.typ in typs]
 
-    def int_vars(self) -> List[VarInfo]:
+    def int_vars(self) -> list[VarInfo]:
         return self.of_type("int")
 
-    def bool_vars(self) -> List[VarInfo]:
+    def bool_vars(self) -> list[VarInfo]:
         return self.of_type("bool")
 
-    def float_vars(self) -> List[VarInfo]:
+    def float_vars(self) -> list[VarInfo]:
         return self.of_type("float")
 
-    def str_vars(self) -> List[VarInfo]:
+    def str_vars(self) -> list[VarInfo]:
         return self.of_type("str")
 
-    def bytes_vars(self) -> List[VarInfo]:
+    def bytes_vars(self) -> list[VarInfo]:
         return self.of_type("bytes")
 
-    def collection_vars(self) -> List[VarInfo]:
+    def collection_vars(self) -> list[VarInfo]:
         return self.of_type("list_int", "list_bool", "bytes")
 
     def has_vars(self) -> bool:
@@ -444,7 +442,7 @@ def gen_rich_assertion(draw: st.DrawFn, env: Env) -> str:
 
 
 @st.composite
-def gen_draw(draw: st.DrawFn, env: Env) -> Tuple[str, str]:
+def gen_draw(draw: st.DrawFn, env: Env) -> tuple[str, str]:
     """Generate a simple draw statement. Returns (type, code_line)."""
     typ = draw(st.sampled_from(TYPE_NAMES))
     int_lo = draw(st.integers(-100, 100))
@@ -514,7 +512,7 @@ def gen_assume(draw: st.DrawFn, env: Env) -> str:
     col_vars = env.collection_vars()
     str_vars = env.str_vars()
 
-    options: List[str] = []
+    options: list[str] = []
     if int_vars:
         options.append("int")
     if col_vars:
@@ -575,10 +573,10 @@ def gen_if_condition(draw: st.DrawFn, env: Env) -> str:
 @st.composite
 def gen_block_body(
     draw: st.DrawFn, env: Env, indent: str, block_depth: int
-) -> List[str]:
+) -> list[str]:
     """Generate the body of an if/else block."""
     save = env.save()
-    lines: List[str] = []
+    lines: list[str] = []
 
     num_stmts = draw(st.integers(1, 3))
     for _ in range(num_stmts):
@@ -611,7 +609,7 @@ def gen_block_body(
 @st.composite
 def gen_if_block(
     draw: st.DrawFn, env: Env, indent: str, block_depth: int = 0
-) -> List[str]:
+) -> list[str]:
     """Generate an if block (possibly with else)."""
     cond = draw(gen_if_condition(env))
     then_lines = draw(gen_block_body(env, indent + "    ", block_depth))
@@ -664,7 +662,7 @@ def program(draw: st.DrawFn) -> str:
     4. Phase 4: optional trailing statements (draws/assumes)
     """
     env = Env()
-    lines: List[str] = []
+    lines: list[str] = []
     indent = "    "
 
     # Phase 1: initial draws

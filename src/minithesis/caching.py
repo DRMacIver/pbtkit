@@ -11,7 +11,8 @@ and register the run phase that activates caching.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Optional, Sequence, Union
+from collections.abc import Callable, Sequence
+from typing import Any
 
 from minithesis.core import (
     MinithesisState,
@@ -33,7 +34,7 @@ class CachedTestFunction:
     somewhat increased shrinking time.
     """
 
-    def __init__(self, test_function: Optional[Callable[[TestCase], None]] = None):
+    def __init__(self, test_function: Callable[[TestCase], None] | None = None):
         self._test_function = test_function
         # Tree nodes are either a point at which a choice occurs
         # in which case they map the result of the choice to the
@@ -45,9 +46,9 @@ class CachedTestFunction:
         # a Patricia trie, which implements long non-branching
         # paths as an array inline. For simplicity we don't
         # do that here.
-        self.tree: Dict[Any, Union[Status, Dict[Any, Any]]] = {}
+        self.tree: dict[Any, Status | dict[Any, Any]] = {}
 
-    def lookup(self, choices: Sequence[Any]) -> Optional[Status]:
+    def lookup(self, choices: Sequence[Any]) -> Status | None:
         """Check if the outcome can be predicted from the cache.
         Returns the Status if known, or None on cache miss."""
         node: Any = self.tree
@@ -107,7 +108,7 @@ def cached_test_function(fn: Callable) -> Callable:
     activates the cache before shrinking begins."""
 
     def wrapper(self: MinithesisState, test_case: TestCase) -> None:
-        cache: Optional[CachedTestFunction] = getattr(self.extras, "cache", None)
+        cache: CachedTestFunction | None = getattr(self.extras, "cache", None)
         # Only cache deterministic test cases (from for_choices).
         # Test cases with a random source (generation, targeting)
         # must always run the real test function.

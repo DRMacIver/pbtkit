@@ -7,14 +7,10 @@ analogous to hypothesis.strategies in Hypothesis.
 from __future__ import annotations
 
 import functools
+from collections.abc import Callable, Sequence
 from typing import (
     Any,
-    Callable,
-    Dict,
-    List,
     NoReturn,
-    Optional,
-    Sequence,
     TypeVar,
 )
 
@@ -95,8 +91,8 @@ def lists(
     min_size: int = 0,
     max_size: float = float("inf"),
     unique: bool = False,
-    unique_by: Optional[Callable[[U], Any]] = None,
-) -> Generator[List[U]]:
+    unique_by: Callable[[U], Any] | None = None,
+) -> Generator[list[U]]:
     """Generates lists whose elements are drawn from ``elements``.
 
     Uses a geometric distribution for list length, with forced
@@ -111,8 +107,8 @@ def lists(
 
     if needs_unique:
 
-        def produce(test_case: TestCase) -> List[U]:
-            result: List[U] = []
+        def produce(test_case: TestCase) -> list[U]:
+            result: list[U] = []
             seen: set = set()
             elems = many(test_case, min_size=min_size, max_size=max_size)
             while elems.more():
@@ -127,14 +123,14 @@ def lists(
 
     else:
 
-        def produce(test_case: TestCase) -> List[U]:
-            result: List[U] = []
+        def produce(test_case: TestCase) -> list[U]:
+            result: list[U] = []
             elems = many(test_case, min_size=min_size, max_size=max_size)
             while elems.more():
                 result.append(test_case.any(elements))
             return result
 
-    return Generator[List[U]](
+    return Generator[list[U]](
         produce,
         name=f"lists({elements.name}, min_size={min_size}, max_size={max_size})",
     )
@@ -195,13 +191,13 @@ def dictionaries(
     values: Generator[V],
     min_size: int = 0,
     max_size: float = float("inf"),
-) -> Generator[Dict[U, V]]:
+) -> Generator[dict[U, V]]:
     """Generates dictionaries with keys from ``keys`` and values
     from ``values``. Duplicate keys are rejected using many()'s
     rejection mechanism."""
 
-    def produce(test_case: TestCase) -> Dict[U, V]:
-        result: Dict[U, V] = {}
+    def produce(test_case: TestCase) -> dict[U, V]:
+        result: dict[U, V] = {}
         elems = many(test_case, min_size=min_size, max_size=max_size)
         while elems.more():
             k = test_case.any(keys)
@@ -212,7 +208,7 @@ def dictionaries(
                 result[k] = v
         return result
 
-    return Generator[Dict[U, V]](
+    return Generator[dict[U, V]](
         produce,
         name=f"dictionaries({keys.name}, {values.name}, min_size={min_size}, max_size={max_size})",
     )

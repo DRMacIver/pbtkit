@@ -8,7 +8,6 @@ each swap is validated.
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Dict, List, Tuple
 
 from minithesis.core import (
     MinithesisState,
@@ -22,7 +21,7 @@ def sort_values(state: MinithesisState) -> None:
     assert state.result is not None
 
     # Group indices by choice type.
-    groups: Dict[type, List[int]] = defaultdict(list)
+    groups: dict[type, list[int]] = defaultdict(list)
     for i, node in enumerate(state.result):
         groups[type(node.kind)].append(i)
 
@@ -33,7 +32,7 @@ def sort_values(state: MinithesisState) -> None:
 
 
 def _try_sort_group(
-    state: MinithesisState, choice_type: type, indices: List[int]
+    state: MinithesisState, choice_type: type, indices: list[int]
 ) -> None:
     """Try sorting the values at the given indices by the sort key
     of the first node's kind. First try a full sort, then fall back

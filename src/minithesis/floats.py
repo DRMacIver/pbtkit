@@ -10,8 +10,9 @@ from __future__ import annotations
 import math
 import struct
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Tuple
+from typing import Any
 
 from minithesis.core import (
     ChoiceType,
@@ -78,12 +79,12 @@ def _lex_to_float(bits: int) -> float:
     return struct.unpack("!d", struct.pack("!Q", bits))[0]
 
 
-def _shortlex(s: str) -> Tuple[int, str]:
+def _shortlex(s: str) -> tuple[int, str]:
     """Shortlex key: shorter strings are simpler, then lexicographic."""
     return (len(s), s)
 
 
-def _parse_float_string(value: float) -> Tuple[str, str, str, str]:
+def _parse_float_string(value: float) -> tuple[str, str, str, str]:
     """Parse a finite float's string representation into components.
 
     Returns (exp_part, frac_part, int_part, sign) where:
@@ -110,7 +111,7 @@ def _parse_float_string(value: float) -> Tuple[str, str, str, str]:
     return exp_part, frac_part, int_part, sign
 
 
-def _float_string_key(value: float) -> Tuple:
+def _float_string_key(value: float) -> tuple:
     """Sort key for finite floats based on their string representation.
 
     Compares the (exponent, fractional, integer) triple in shortlex

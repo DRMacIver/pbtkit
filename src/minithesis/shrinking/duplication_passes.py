@@ -8,7 +8,7 @@ time, so that values which must stay equal can be shrunk together.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any
 
 from minithesis.core import (
     VALUE_SHRINKERS,
@@ -19,11 +19,11 @@ from minithesis.core import (
 
 def _find_duplicate_groups(
     state: MinithesisState,
-) -> List[Tuple[type, List[int]]]:
+) -> list[tuple[type, list[int]]]:
     """Find groups of indices sharing the same (type, value),
     with at least 2 members."""
     assert state.result is not None
-    groups: Dict[Tuple[type, Any], List[int]] = {}
+    groups: dict[tuple[type, Any], list[int]] = {}
     for i, node in enumerate(state.result):
         key = (type(node.kind), node.value)
         groups.setdefault(key, []).append(i)

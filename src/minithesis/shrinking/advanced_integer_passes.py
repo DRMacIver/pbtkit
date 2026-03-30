@@ -8,8 +8,6 @@ register as a shrink pass.
 
 from __future__ import annotations
 
-from typing import List
-
 from minithesis.core import (
     IntegerChoice,
     MinithesisState,
@@ -19,7 +17,7 @@ from minithesis.core import (
 )
 
 
-def _integer_indices(state: MinithesisState) -> List[int]:
+def _integer_indices(state: MinithesisState) -> list[int]:
     """Return indices of all IntegerChoice nodes in the result."""
     assert state.result is not None
     return [

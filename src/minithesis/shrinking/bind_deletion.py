@@ -8,7 +8,7 @@ deleting the now-excess choices to recover an interesting result.
 
 from __future__ import annotations
 
-from typing import Any, List
+from typing import Any
 
 from minithesis.core import (
     VALUE_SHRINKERS,
@@ -79,7 +79,7 @@ def _try_replace_with_deletion(state: MinithesisState, idx: int, value: Any) -> 
 
 def _try_deletions(
     state: MinithesisState,
-    attempt: List[ChoiceNode],
+    attempt: list[ChoiceNode],
     idx: int,
     k: int,
 ) -> bool:

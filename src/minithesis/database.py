@@ -11,16 +11,11 @@ from __future__ import annotations
 import hashlib
 import os
 import struct
+from collections.abc import Callable, Sequence
 from enum import IntEnum
 from typing import (
     Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
     Protocol,
-    Sequence,
-    Tuple,
 )
 
 from minithesis.core import (
@@ -34,7 +29,7 @@ from minithesis.core import (
 class Database(Protocol):
     def __setitem__(self, key: str, value: bytes) -> None: ...
 
-    def get(self, key: str) -> Optional[bytes]: ...
+    def get(self, key: str) -> bytes | None: ...
 
     def __delitem__(self, key: str) -> None: ...
 
@@ -64,7 +59,7 @@ class DirectoryDB:
         with open(self.__to_file(key), "wb") as o:
             o.write(value)
 
-    def get(self, key: str) -> Optional[bytes]:
+    def get(self, key: str) -> bytes | None:
         f = self.__to_file(key)
         if not os.path.exists(f):
             return None
@@ -92,15 +87,15 @@ class SerializationTag(IntEnum):
 
 
 # Serialization registry keyed on Python value types (int, bool, etc.).
-_SERIALIZERS: Dict[type, Tuple[int, Callable[[Any], bytes]]] = {}
-_DESERIALIZERS: Dict[int, Callable[[bytes, int], Tuple[Any, int]]] = {}
+_SERIALIZERS: dict[type, tuple[int, Callable[[Any], bytes]]] = {}
+_DESERIALIZERS: dict[int, Callable[[bytes, int], tuple[Any, int]]] = {}
 
 
 def register_serializer(
     value_type: type,
     tag: int,
     serialize: Callable[[Any], bytes],
-    deserialize: Callable[[bytes, int], Tuple[Any, int]],
+    deserialize: Callable[[bytes, int], tuple[Any, int]],
 ) -> None:
     """Register serialization for a Python value type.
 
@@ -113,17 +108,17 @@ def register_serializer(
 
 def _serialize_choices(values: Sequence[Any]) -> bytes:
     """Serialize a choice value sequence to bytes for database storage."""
-    parts: List[bytes] = []
+    parts: list[bytes] = []
     for v in values:
         tag, serialize = _SERIALIZERS[type(v)]
         parts.append(bytes([tag]) + serialize(v))
     return b"".join(parts)
 
 
-def _deserialize_choices(data: bytes) -> Optional[List]:
+def _deserialize_choices(data: bytes) -> list | None:
     """Deserialize a choice sequence from bytes. Returns None if
     the data is malformed (e.g. from an old format)."""
-    values: List = []
+    values: list = []
     i = 0
     try:
         while i < len(data):
@@ -141,7 +136,7 @@ def _deserialize_choices(data: bytes) -> Optional[List]:
 def _deserialize_fixed(size: int, convert: Callable[[bytes], Any]) -> Callable:
     """Helper to create a deserializer for fixed-size values."""
 
-    def deserialize(data: bytes, offset: int) -> Tuple[Any, int]:
+    def deserialize(data: bytes, offset: int) -> tuple[Any, int]:
         if offset + size > len(data):
             raise ValueError("truncated")
         return convert(data[offset : offset + size]), offset + size
@@ -154,7 +149,7 @@ def _deserialize_length_prefixed(
 ) -> Callable:
     """Helper to create a deserializer for length-prefixed values."""
 
-    def deserialize(data: bytes, offset: int) -> Tuple[Any, int]:
+    def deserialize(data: bytes, offset: int) -> tuple[Any, int]:
         if offset + 4 > len(data):
             raise ValueError("truncated")
         length = int.from_bytes(data[offset : offset + 4], "big")

@@ -7,8 +7,6 @@ and registers the targeting phase and test-function hook.
 
 from __future__ import annotations
 
-from typing import List, Tuple
-
 from minithesis.core import (
     BUFFER_SIZE,
     ChoiceNode,
@@ -41,7 +39,7 @@ def _targeting_hook(state: MinithesisState, test_case: TestCase) -> None:
     """Track the best targeting score seen so far."""
     if test_case.status is not None and test_case.status >= Status.VALID:
         if test_case.targeting_score is not None:
-            relevant_info: Tuple[int, List[ChoiceNode]] = (
+            relevant_info: tuple[int, list[ChoiceNode]] = (
                 test_case.targeting_score,
                 test_case.nodes,
             )
