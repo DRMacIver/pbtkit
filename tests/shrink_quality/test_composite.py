@@ -9,10 +9,12 @@ import pytest
 
 from minithesis.core import MinithesisState, Status
 from minithesis.generators import (
+    binary,
     booleans,
     composite,
     floats,
     integers,
+    lists,
     one_of,
     text,
     tuples,
@@ -117,3 +119,57 @@ def test_one_of_shrinks_branch_selector():
     # Branch 0 (booleans) with value True is simpler than
     # branch 1 (floats) with any truthy float.
     assert result is True
+
+
+@pytest.mark.xfail(
+    reason="Requires coordinated multi-position shrinking: "
+    "flipping v0 to True only helps if v1 and v2 are also "
+    "shortened, but shortening them first removes the failure.",
+    strict=True,
+)
+def test_early_exit_via_flag_with_preceding_draws():
+    """When v0=True triggers an early exit but v1 and v2 are drawn
+    BEFORE the v0 check, the shrinker must coordinate: shorten v1/v2
+    AND flip v0 simultaneously. Hypothesis finds [True, b'', False]
+    (3 choices) but minithesis gets stuck at 5 choices with v0=False.
+
+    Found by the Hypothesis shrink comparison test."""
+
+    @composite
+    def test_data(tc):
+        v0 = tc.any(booleans())
+        v1 = tc.any(binary(max_size=20))
+        v2 = tc.any(lists(integers(0, 0), max_size=10))
+        return (v0, v1, v2)
+
+    result = minimal(
+        test_data(),
+        lambda t: t[0] or len(t[1]) + len(t[2]) >= 20,
+    )
+    # Optimal: v0=True with minimal v1 and v2 → 3 choices total.
+    # Suboptimal: v0=False with long v1/v2 → 5+ choices.
+    assert result[0] is True
+
+
+def test_shorter_path_when_guard_precedes_expensive_draw():
+    """A guard check (v0 > 0) comes after a cheap draw but before an
+    expensive draw (a list). When v0=1 triggers the guard, the expensive
+    draw is skipped, producing a shorter sequence. But the shrinker
+    reduces v0 to 0 (simplest) first, which forces the longer path.
+
+    Found by the Hypothesis shrink comparison test."""
+
+    @composite
+    def test_data(tc):
+        v0 = tc.any(integers(0, 10))
+        v1 = tc.any(booleans())
+        v2 = tc.any(lists(integers(0, 100), max_size=10))
+        return (v0, v1, v2)
+
+    result = minimal(
+        test_data(),
+        lambda t: t[0] > 0 or len(t[2]) >= 3,
+    )
+    # Optimal: v0=1 exits early → 3 choices (v0, v1, list_stop).
+    # Suboptimal: v0=0 needs len(v2) >= 3 → 8+ choices.
+    assert result[0] > 0
