@@ -27,10 +27,17 @@ from minithesis.core import Unsatisfiable, run_test
 from minithesis.generators import (
     binary,
     booleans,
+    composite,
+    dictionaries,
     floats,
     integers,
+    just,
     lists,
+    nothing,
+    one_of,
+    sampled_from,
     text,
+    tuples,
 )
 
 
@@ -99,7 +106,7 @@ class Env:
         return self.of_type("bytes")
 
     def collection_vars(self) -> list[VarInfo]:
-        return self.of_type("list_int", "list_bool", "bytes")
+        return self.of_type("list_int", "list_bool", "bytes", "dict", "tuple")
 
     def has_vars(self) -> bool:
         return len(self.vars) > 0
@@ -253,7 +260,7 @@ def gen_predicate_for_var(draw: st.DrawFn, var: VarInfo) -> str:
         return draw(gen_string_predicate(var.name))
     elif var.typ == "bytes":
         return draw(gen_bytes_predicate(var.name))
-    elif var.typ in ("list_int", "list_bool"):
+    elif var.typ in ("list_int", "list_bool", "dict", "tuple"):
         return draw(gen_collection_predicate(var.name))
     else:
         raise ValueError(f"Unknown type: {var.typ}")
@@ -473,15 +480,218 @@ def gen_rich_assertion(draw: st.DrawFn, env: Env) -> str:
 
 
 @st.composite
-def gen_draw(draw: st.DrawFn, env: Env) -> tuple[str, str]:
-    """Generate a simple draw statement. Returns (type, code_line)."""
+def gen_base_generator_expr(draw: st.DrawFn) -> tuple[str, str, int, int]:
+    """Generate a (typ, expr, lo, hi) for a base generator."""
     typ = draw(st.sampled_from(TYPE_NAMES))
     int_lo = draw(st.integers(-100, 100))
     int_hi = draw(st.integers(int_lo, int_lo + 200))
+    return (typ, gen_expr_code(typ, int_lo, int_hi), int_lo, int_hi)
+
+
+@st.composite
+def gen_generator_expr(draw: st.DrawFn, depth: int = 0) -> tuple[str, str, int, int]:
+    """Generate a (typ, expr, lo, hi) for any generator expression.
+
+    depth limits recursion for nested generators."""
+    if depth >= 2:
+        return draw(gen_base_generator_expr())
+
+    choice = draw(st.integers(0, 15))
+    if choice <= 6:
+        # Base generators (majority of draws)
+        return draw(gen_base_generator_expr())
+    elif choice == 7:
+        # just(value)
+        val_choice = draw(st.integers(0, 3))
+        if val_choice == 0:
+            v = draw(st.integers(-100, 100))
+            return ("int", f"just({v})", v, v)
+        elif val_choice == 1:
+            return ("bool", f"just({draw(st.booleans())})", 0, 0)
+        elif val_choice == 2:
+            s = draw(st.text(min_size=0, max_size=5, alphabet="abcde "))
+            return ("str", f"just({s!r})", 0, 0)
+        else:
+            return (
+                "float",
+                f"just({draw(st.floats(-100, 100, allow_nan=False))})",
+                0,
+                0,
+            )
+    elif choice == 8:
+        # sampled_from(elements)
+        val_choice = draw(st.integers(0, 1))
+        if val_choice == 0:
+            elems = draw(st.lists(st.integers(-50, 50), min_size=2, max_size=6))
+            return ("int", f"sampled_from({elems!r})", min(elems), max(elems))
+        else:
+            elems = draw(
+                st.lists(
+                    st.text(min_size=0, max_size=3, alphabet="abc"),
+                    min_size=2,
+                    max_size=5,
+                )
+            )
+            return ("str", f"sampled_from({elems!r})", 0, 0)
+    elif choice == 9:
+        # one_of(*generators) — homogeneous (same output type)
+        base_typ = draw(st.sampled_from(["int", "bool", "str", "float"]))
+        n = draw(st.integers(2, 4))
+        sub_exprs = []
+        lo_min, hi_max = 0, 0
+        for _ in range(n):
+            _, sub_expr, lo, hi = draw(gen_generator_expr(depth + 1))
+            # Override to ensure same type
+            if base_typ == "int":
+                lo = draw(st.integers(-100, 100))
+                hi = draw(st.integers(lo, lo + 200))
+                sub_expr = f"integers({lo}, {hi})"
+                lo_min = min(lo_min, lo) if sub_exprs else lo
+                hi_max = max(hi_max, hi) if sub_exprs else hi
+            elif base_typ == "bool":
+                sub_expr = "booleans()"
+            elif base_typ == "str":
+                sub_expr = "text(min_codepoint=32, max_codepoint=126, max_size=10)"
+            else:
+                sub_expr = "floats(allow_nan=False, allow_infinity=False)"
+            sub_exprs.append(sub_expr)
+        # Sometimes include nothing() as one branch
+        if draw(st.integers(0, 4)) == 0:
+            sub_exprs.append("nothing()")
+        return (base_typ, f"one_of({', '.join(sub_exprs)})", lo_min, hi_max)
+    elif choice == 10:
+        # dictionaries(keys, values)
+        key_typ = draw(st.sampled_from(["int", "str"]))
+        if key_typ == "int":
+            lo = draw(st.integers(-50, 50))
+            hi = draw(st.integers(lo, lo + 100))
+            key_expr = f"integers({lo}, {hi})"
+        else:
+            key_expr = "text(min_codepoint=32, max_codepoint=126, max_size=5)"
+        _, val_expr, _, _ = draw(gen_generator_expr(depth + 1))
+        return ("dict", f"dictionaries({key_expr}, {val_expr}, max_size=5)", 0, 0)
+    elif choice == 11:
+        # tuples(*generators)
+        n = draw(st.integers(2, 4))
+        sub_exprs = []
+        for _ in range(n):
+            _, sub_expr, _, _ = draw(gen_generator_expr(depth + 1))
+            sub_exprs.append(sub_expr)
+        return ("tuple", f"tuples({', '.join(sub_exprs)})", 0, 0)
+    elif choice == 12:
+        # lists(integers(...), unique=True) — need wide enough range
+        lo = draw(st.integers(-100, 0))
+        hi = draw(st.integers(lo + 20, lo + 200))
+        return (
+            "list_int",
+            f"lists(integers({lo}, {hi}), max_size=10, unique=True)",
+            lo,
+            hi,
+        )
+    elif choice == 13:
+        # .filter on a base generator
+        typ, expr, lo, hi = draw(gen_base_generator_expr())
+        filt = _filter_for_type(draw, typ)
+        if filt is not None:
+            return (typ, f"{expr}.filter({filt})", lo, hi)
+        return (typ, expr, lo, hi)
+    elif choice == 14:
+        # .map on a base generator
+        typ, expr, lo, hi = draw(gen_base_generator_expr())
+        mapped = _map_for_type(draw, typ)
+        if mapped is not None:
+            out_typ, map_fn = mapped
+            return (out_typ, f"{expr}.map({map_fn})", 0, 0)
+        return (typ, expr, lo, hi)
+    else:
+        # .flat_map on a base generator
+        typ, expr, lo, hi = draw(gen_base_generator_expr())
+        fm = _flat_map_for_type(draw, typ)
+        if fm is not None:
+            out_typ, fm_fn = fm
+            return (out_typ, f"{expr}.flat_map({fm_fn})", 0, 0)
+        return (typ, expr, lo, hi)
+
+
+def _filter_for_type(draw: st.DrawFn, typ: str) -> str | None:
+    """Return a lambda string for filtering values of the given type."""
+    if typ == "int":
+        return draw(
+            st.sampled_from(
+                ["lambda x: x > 0", "lambda x: x % 2 == 0", "lambda x: x != 0"]
+            )
+        )
+    if typ == "float":
+        return "lambda x: x >= 0.0"
+    if typ == "str":
+        return draw(st.sampled_from(["lambda x: len(x) > 0", "lambda x: len(x) < 10"]))
+    if typ == "bytes":
+        return "lambda x: len(x) > 0"
+    if typ in ("list_int", "list_bool"):
+        return draw(st.sampled_from(["lambda x: len(x) > 0", "lambda x: len(x) < 8"]))
+    return None
+
+
+def _map_for_type(draw: st.DrawFn, typ: str) -> tuple[str, str] | None:
+    """Return (output_type, lambda_string) for mapping values of the given type."""
+    if typ == "int":
+        return draw(
+            st.sampled_from(
+                [
+                    ("int", "lambda x: abs(x)"),
+                    ("int", "lambda x: x * 2"),
+                    ("bool", "lambda x: x > 0"),
+                    ("str", "lambda x: str(x)"),
+                ]
+            )
+        )
+    if typ == "str":
+        return draw(
+            st.sampled_from(
+                [
+                    ("int", "lambda x: len(x)"),
+                    ("str", "lambda x: x.upper()"),
+                ]
+            )
+        )
+    if typ in ("list_int", "list_bool"):
+        return ("int", "lambda x: len(x)")
+    if typ == "bool":
+        return ("int", "lambda x: int(x)")
+    return None
+
+
+def _flat_map_for_type(draw: st.DrawFn, typ: str) -> tuple[str, str] | None:
+    """Return (output_type, lambda_string) for flat_map on the given type."""
+    if typ == "int":
+        return draw(
+            st.sampled_from(
+                [
+                    ("int", "lambda x: integers(0, abs(x) + 1)"),
+                    (
+                        "str",
+                        "lambda x: text(min_codepoint=32, max_codepoint=126,"
+                        " max_size=abs(x) % 10 + 1)",
+                    ),
+                    (
+                        "list_bool",
+                        "lambda x: lists(booleans(), max_size=abs(x) % 5 + 1)",
+                    ),
+                ]
+            )
+        )
+    if typ == "bool":
+        return ("int", "lambda x: integers(0, 10) if x else integers(-10, 0)")
+    return None
+
+
+@st.composite
+def gen_draw(draw: st.DrawFn, env: Env) -> tuple[str, str]:
+    """Generate a simple draw statement. Returns (type, code_line)."""
+    typ, expr, lo, hi = draw(gen_generator_expr())
     var = env.fresh_var()
-    expr = gen_expr_code(typ, int_lo, int_hi)
     code = f"{var} = tc.any({expr})"
-    env.add(var, typ, int_lo, int_hi)
+    env.add(var, typ, lo, hi)
     return (typ, code)
 
 
@@ -678,6 +888,39 @@ def gen_misc_statement(draw: st.DrawFn, env: Env) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Composite generator generation
+# ---------------------------------------------------------------------------
+
+
+_composite_counter = 0
+
+
+@st.composite
+def gen_composite_function(draw: st.DrawFn) -> tuple[str, str, str]:
+    """Generate a @composite function definition.
+
+    Returns (func_name, func_code, output_type) where output_type is
+    the type tag of the value the composite produces ("tuple")."""
+    global _composite_counter
+    _composite_counter += 1
+    name = f"_gen{_composite_counter}"
+
+    n_draws = draw(st.integers(2, 4))
+    body_lines = []
+    return_names = []
+    for i in range(n_draws):
+        arg = f"_{name}_v{i}"
+        _, expr, _, _ = draw(gen_base_generator_expr())
+        body_lines.append(f"    {arg} = tc.any({expr})")
+        return_names.append(arg)
+
+    body = "\n".join(body_lines)
+    ret = ", ".join(return_names)
+    func_code = f"@composite\ndef {name}(tc):\n{body}\n    return ({ret},)\n"
+    return (name, func_code, "tuple")
+
+
+# ---------------------------------------------------------------------------
 # Full program generation
 # ---------------------------------------------------------------------------
 
@@ -687,20 +930,37 @@ def program(draw: st.DrawFn) -> str:
     """Generate a complete minismith program as Python source code.
 
     Structure mirrors hegelsmith:
-    1. Phase 1: 1-5 initial draws (some dependent)
-    2. Phase 2: 1-3 assertion blocks with optional interleaved draws
-    3. Phase 3: optional if block
-    4. Phase 4: optional trailing statements (draws/assumes)
+    1. Phase 0: optional @composite helper functions
+    2. Phase 1: 1-5 initial draws (some dependent)
+    3. Phase 2: 1-3 assertion blocks with optional interleaved draws
+    4. Phase 3: optional if block
+    5. Phase 4: optional trailing statements (draws/assumes)
     """
     env = Env()
     lines: list[str] = []
+    preamble_lines: list[str] = []
     indent = "        "
 
-    # Phase 1: initial draws
+    # Phase 0: optional composite functions
+    composite_names: list[str] = []
+    if draw(st.booleans()):
+        n_composites = draw(st.integers(1, 2))
+        for _ in range(n_composites):
+            name, func_code, out_typ = draw(gen_composite_function())
+            preamble_lines.append(func_code)
+            composite_names.append(name)
+
+    # Phase 1: initial draws (sometimes from composites)
     num_draws = draw(st.integers(1, 5))
     for _ in range(num_draws):
-        code = draw(gen_draw_or_dependent(env))
-        lines.append(f"{indent}{code}")
+        if composite_names and draw(st.integers(0, 3)) == 0:
+            cname = draw(st.sampled_from(composite_names))
+            var = env.fresh_var()
+            lines.append(f"{indent}{var} = tc.any({cname}())")
+            env.add(var, "tuple")
+        else:
+            code = draw(gen_draw_or_dependent(env))
+            lines.append(f"{indent}{code}")
 
     # Phase 2: assertion blocks
     num_blocks = draw(st.integers(1, 3))
@@ -730,19 +990,17 @@ def program(draw: st.DrawFn) -> str:
     max_examples = draw(st.integers(1, 1000))
     seed = draw(st.integers(0, 2**32 - 1))
 
-    result = (
-        f"""\
+    preamble = "\n".join(preamble_lines)
+    body = "\n".join(lines)
+    result = f"""\
+{preamble}
 try:
     @run_test(max_examples={max_examples}, database={{}}, quiet=True, random=Random({seed}))
     def _(tc):
-"""
-        + "\n".join(lines)
-        + """
+{body}
 except (Unsatisfiable, TestFailed):
     pass
     """
-    )
-    print(result)
     return result
 
 
