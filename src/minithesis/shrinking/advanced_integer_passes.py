@@ -9,11 +9,14 @@ register as a shrink pass.
 from __future__ import annotations
 
 from minithesis.core import (
+    BooleanChoice,
     IntegerChoice,
     MinithesisState,
+    Status,
     TestCase,
     bin_search_down,
     shrink_pass,
+    sort_key,
 )
 
 
@@ -98,3 +101,31 @@ def redistribute_integers(state: MinithesisState) -> None:
                             {i: -a, j: previous_j + (previous_i + a)}
                         ),
                     )
+
+
+@shrink_pass
+def try_shortening_via_increment(state: MinithesisState) -> None:
+    """Try incrementing each boolean/integer value to see if the test
+    takes a shorter path (e.g., triggering an earlier assertion).
+
+    A value shrinker can only make values simpler, but sometimes making
+    a value LESS simple (e.g., False→True) causes an earlier exit,
+    producing a shorter and thus overall simpler choice sequence."""
+    assert state.result is not None
+    i = 0
+    while i < len(state.result):
+        node = state.result[i]
+        if not isinstance(node.kind, (BooleanChoice, IntegerChoice)):
+            i += 1
+            continue
+        incremented = node.value + 1
+        if not node.kind.validate(incremented):
+            i += 1
+            continue
+        # Run the test with the incremented value. If the test takes a
+        # shorter interesting path, state.test_function updates state.result.
+        attempt = list(state.result)
+        attempt[i] = attempt[i].with_value(incremented)
+        tc = TestCase.for_choices([n.value for n in attempt])
+        state.test_function(tc)
+        i += 1

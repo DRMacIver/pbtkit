@@ -3,8 +3,11 @@
 Ported from Hypothesis via hegel-rust/tests/test_shrink_quality/composite.rs.
 """
 
+from random import Random
+
 import pytest
 
+from minithesis.core import MinithesisState, Status
 from minithesis.generators import booleans, composite, integers, text, tuples
 
 from .conftest import minimal
@@ -60,3 +63,37 @@ def int_struct(tc):
 def test_minimize_namedtuple():
     tab = minimal(int_struct(), lambda x: x[0] < x[1])
     assert tab[1] == tab[0] + 1
+
+
+def test_earlier_exit_produces_shorter_sequence():
+    """When v0=True triggers an early exit with fewer choices than
+    v0=False followed by more draws, the shrinker should prefer the
+    shorter path. Found by shrink comparison test."""
+
+    @composite
+    def pair_of_bools(tc):
+        a = tc.any(booleans())
+        b = tc.any(booleans())
+        return (a, b)
+
+    def tf(tc):
+        v0 = tc.any(booleans())
+        v1 = tc.any(pair_of_bools())
+        v2 = tc.any(pair_of_bools())
+        # First exit: when v0=True (5 choices used)
+        if v0:
+            tc.mark_status(Status.INTERESTING)
+        # More draws only reached when v0=False
+        tc.any(booleans())
+        # Second exit: len(v1) is always 2, so this always fires (6 choices)
+        if len(v1) != 0:
+            tc.mark_status(Status.INTERESTING)
+
+    state = MinithesisState(Random(0), tf, 100)
+    state.run()
+    assert state.result is not None
+    # v0=True exits after 5 choices; v0=False needs 6.
+    # The shrinker should find the shorter 5-choice path.
+    vals = [n.value for n in state.result]
+    assert len(vals) == 5
+    assert vals[0]  # v0 is truthy (triggers early exit)
