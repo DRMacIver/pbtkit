@@ -28,26 +28,41 @@ def _integer_indices(state: MinithesisState) -> list[int]:
     ]
 
 
+def _bumpable_indices(state: MinithesisState) -> list[int]:
+    """Return indices of IntegerChoice and BooleanChoice nodes."""
+    assert state.result is not None
+    return [
+        i
+        for i, node in enumerate(state.result)
+        if isinstance(node.kind, (IntegerChoice, BooleanChoice))
+    ]
+
+
 @shrink_pass
-def lower_and_bump_adjacent(state: MinithesisState) -> None:
-    """For IntegerChoice pairs where the first is > 0,
-    try subtracting 1 from it and bumping a later integer. First runs
-    the decrement alone to discover the kind of the later node in the
-    new context, then tries the boundary and powers of 2.
+def lower_and_bump(state: MinithesisState) -> None:
+    """For IntegerChoice nodes with value > 0, try decrementing and
+    bumping a later integer or boolean. First runs the decrement alone
+    to discover the kind of the later node in the new context, then
+    tries the boundary and powers of 2.
 
     Value punning in _make_choice handles the case where decrementing
     changes the type at position j (e.g., one_of branch switch)."""
     assert state.result is not None
-    indices = _integer_indices(state)
-    for gap in range(1, min(len(indices), 8)):
+    for gap in range(1, min(len(_bumpable_indices(state)), 8)):
         idx = 0
-        while idx < len(_integer_indices(state)) - gap:
-            indices = _integer_indices(state)
-            i = indices[idx]
-            j = indices[idx + gap]
+        while idx < len(_integer_indices(state)):
+            int_indices = _integer_indices(state)
+            bump_indices = _bumpable_indices(state)
+            i = int_indices[idx]
             if state.result[i].value <= 0:
                 idx += 1
                 continue
+            # Find the bump target: the gap'th bumpable index after i.
+            targets_after_i = [k for k in bump_indices if k > i]
+            if gap - 1 >= len(targets_after_i):
+                idx += 1
+                continue
+            j = targets_after_i[gap - 1]
             new_i = state.result[i].value - 1
             # Run the decrement to observe the kind at position j.
             attempt = list(state.result)
@@ -92,6 +107,11 @@ def redistribute_integers(state: MinithesisState) -> None:
     indices = _integer_indices(state)
     for gap in range(1, min(len(indices), 8)):
         for pair_idx in range(len(indices) - gap, 0, -1):
+            # Recompute indices since previous iterations may have
+            # changed the result structure (e.g. via value punning).
+            indices = _integer_indices(state)
+            if pair_idx - 1 + gap >= len(indices):
+                continue
             i = indices[pair_idx - 1]
             j = indices[pair_idx - 1 + gap]
             assert j < len(state.result) and i < len(state.result)

@@ -540,6 +540,49 @@ def test_increment_to_max_shortens_via_sampled_from():
     assert len(state.result) == 1
 
 
+@pytest.mark.requires("collections")
+def test_redistribute_stale_indices_after_type_change():
+    """redistribute_integers must handle stale indices when previous passes
+    change the result structure, causing a node that was IntegerChoice to
+    become BooleanChoice. Regression for AssertionError found by minismith."""
+
+    def tf(tc):
+        v0 = tc.any(booleans())
+        v1 = tc.any(booleans().map(lambda x: int(x)))
+        v2 = tc.any(integers(1, 7).filter(lambda x: x % 2 == 0))
+        v3 = tc.any(booleans())
+        v4 = tc.any(one_of(integers(0, 0), booleans()))
+        if v0:
+            tc.mark_status(Status.INTERESTING)
+
+    # Should not crash.
+    state = State(Random(0), tf, 1000)
+    state.run()
+
+
+def test_lower_and_bump_targets_booleans():
+    """lower_and_bump should try bumping boolean targets, not just
+    integer ones. Decrementing an integer while bumping a boolean
+    from False to True can produce a simpler overall sort_key.
+    Regression for shrink quality found by minismith."""
+
+    def tf(tc):
+        v0 = tc.any(integers(0, 1))
+        v1 = tc.any(booleans())
+        if v0 >= 1:
+            tc.mark_status(Status.INTERESTING)
+        if v1:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 1000)
+    state.run()
+    assert state.result is not None
+    values = [n.value for n in state.result]
+    # v0=0 + v1=True is simpler than v0=1 + v1=False
+    # (sort_key position 0: (0,F) < (1,F))
+    assert values[0] == 0
+
+
 def test_bind_deletion_valid_but_not_shorter():
     """bind_deletion must correctly detect when a replacement produces
     a VALID test case that isn't shorter (no excess choices to delete).
