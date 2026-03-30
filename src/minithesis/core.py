@@ -265,7 +265,7 @@ def run_test(
                     raise
                 test_case.mark_status(Status.INTERESTING)
 
-        state = TestingState(
+        state = MinithesisState(
             random or Random(), mark_failures_interesting, max_examples
         )
 
@@ -536,32 +536,32 @@ class Generator(Generic[T]):
 
 
 # Shrink pass registry. Each pass is a function taking a
-# TestingState and attempting to simplify state.result.
+# MinithesisState and attempting to simplify state.result.
 # Passes are run in order, repeating until a fixed point.
-SHRINK_PASSES: List[Callable[["TestingState"], None]] = []
-TEST_FUNCTION_HOOKS: List[Callable[["TestingState", "TestCase"], None]] = []
-RUN_PHASES: List[Callable[["TestingState"], None]] = []
+SHRINK_PASSES: List[Callable[["MinithesisState"], None]] = []
+TEST_FUNCTION_HOOKS: List[Callable[["MinithesisState", "TestCase"], None]] = []
+RUN_PHASES: List[Callable[["MinithesisState"], None]] = []
 
 
 def shrink_pass(
-    fn: Callable[["TestingState"], None],
-) -> Callable[["TestingState"], None]:
+    fn: Callable[["MinithesisState"], None],
+) -> Callable[["MinithesisState"], None]:
     """Decorator that registers a function as a shrink pass."""
     SHRINK_PASSES.append(fn)
     return fn
 
 
 def test_function_hook(
-    fn: Callable[["TestingState", "TestCase"], None],
-) -> Callable[["TestingState", "TestCase"], None]:
+    fn: Callable[["MinithesisState", "TestCase"], None],
+) -> Callable[["MinithesisState", "TestCase"], None]:
     """Decorator that registers a hook called after each test function run."""
     TEST_FUNCTION_HOOKS.append(fn)
     return fn
 
 
 def run_phase(
-    fn: Callable[["TestingState"], None],
-) -> Callable[["TestingState"], None]:
+    fn: Callable[["MinithesisState"], None],
+) -> Callable[["MinithesisState"], None]:
     """Decorator that registers a phase in the test run (between generate and shrink)."""
     RUN_PHASES.append(fn)
     return fn
@@ -642,7 +642,7 @@ class CachedTestFunction:
         return test_case.status
 
 
-class TestingState:
+class MinithesisState:
     def __init__(
         self,
         random: Random,
@@ -756,7 +756,7 @@ class TestingState:
 
 
 @shrink_pass
-def delete_chunks(state: TestingState) -> None:
+def delete_chunks(state: MinithesisState) -> None:
     """Try deleting chunks of choices from the sequence.
 
     We try longer chunks because this allows us to delete whole
@@ -788,7 +788,7 @@ def delete_chunks(state: TestingState) -> None:
 
 
 @shrink_pass
-def zero_choices(state: TestingState) -> None:
+def zero_choices(state: MinithesisState) -> None:
     """Replace blocks of choices with their simplest values.
     Skip k=1 because we handle that in the per-choice pass."""
     assert state.result is not None
@@ -806,7 +806,7 @@ def zero_choices(state: TestingState) -> None:
 
 
 @shrink_pass
-def shrink_individual_integers(state: TestingState) -> None:
+def shrink_individual_integers(state: MinithesisState) -> None:
     """Binary search each integer choice toward its min_value."""
     assert state.result is not None
     i = len(state.result) - 1
@@ -822,7 +822,7 @@ def shrink_individual_integers(state: TestingState) -> None:
 
 
 @shrink_pass
-def shrink_individual_booleans(state: TestingState) -> None:
+def shrink_individual_booleans(state: MinithesisState) -> None:
     """Try replacing each boolean choice with False."""
     assert state.result is not None
     i = len(state.result) - 1
@@ -834,7 +834,7 @@ def shrink_individual_booleans(state: TestingState) -> None:
 
 
 @shrink_pass
-def sort_integer_ranges(state: TestingState) -> None:
+def sort_integer_ranges(state: MinithesisState) -> None:
     """Try sorting out of order ranges of integer choices.
     sort(x) <= x, so this is always a lexicographic reduction."""
     assert state.result is not None
@@ -853,7 +853,7 @@ def sort_integer_ranges(state: TestingState) -> None:
 
 
 @shrink_pass
-def redistribute_integers(state: TestingState) -> None:
+def redistribute_integers(state: MinithesisState) -> None:
     """Try adjusting nearby pairs of integer choices by
     redistributing value between them. Useful for tests that
     depend on the sum of some generated values."""

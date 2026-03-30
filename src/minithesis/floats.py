@@ -17,7 +17,7 @@ from minithesis.core import (
     ChoiceType,
     SerializationTag,
     TestCase,
-    TestingState,
+    MinithesisState,
     _deserialize_fixed,
     bin_search_down,
     register_serializer,
@@ -358,7 +358,7 @@ def _shrink_float(
 
 
 @shrink_pass
-def shrink_individual_floats(state: TestingState) -> None:
+def shrink_individual_floats(state: MinithesisState) -> None:
     """Shrink each float choice toward human-readable simplicity."""
     assert state.result is not None
     i = len(state.result) - 1

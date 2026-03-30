@@ -14,7 +14,7 @@ from minithesis.core import (
     ChoiceType,
     SerializationTag,
     TestCase,
-    TestingState,
+    MinithesisState,
     _deserialize_length_prefixed,
     _shrink_sequence,
     register_serializer,
@@ -81,7 +81,7 @@ register_serializer(
 
 
 @shrink_pass
-def shrink_individual_bytes(state: TestingState) -> None:
+def shrink_individual_bytes(state: MinithesisState) -> None:
     """Shrink each bytes choice: shorten, remove bytes,
     reduce byte values."""
     assert state.result is not None

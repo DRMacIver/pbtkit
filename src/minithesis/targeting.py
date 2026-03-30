@@ -15,7 +15,7 @@ from minithesis.core import (
     IntegerChoice,
     Status,
     TestCase,
-    TestingState,
+    MinithesisState,
     run_phase,
     test_function_hook,
 )
@@ -37,7 +37,7 @@ TestCase.target = _target
 
 
 @test_function_hook
-def _targeting_hook(state: TestingState, test_case: TestCase) -> None:
+def _targeting_hook(state: MinithesisState, test_case: TestCase) -> None:
     """Track the best targeting score seen so far."""
     if test_case.status is not None and test_case.status >= Status.VALID:
         if test_case.targeting_score is not None:
@@ -54,7 +54,7 @@ def _targeting_hook(state: TestingState, test_case: TestCase) -> None:
 
 
 @run_phase
-def _targeting_phase(state: TestingState) -> None:
+def _targeting_phase(state: MinithesisState) -> None:
     """If any test cases have had ``target()`` called on them, do a simple
     hill climbing algorithm to attempt to optimise that target score."""
     if state.result is not None or state.best_scoring is None:

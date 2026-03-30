@@ -20,7 +20,7 @@ from minithesis.core import (
     Status,
 )
 from minithesis.core import TestCase as TC
-from minithesis.core import TestingState as State
+from minithesis.core import MinithesisState as State
 from minithesis.generators import integers
 
 

@@ -16,7 +16,7 @@ import minithesis.floats
 
 pytestmark = pytest.mark.requires("floats")
 from minithesis import DirectoryDB, run_test
-from minithesis.core import SerializationTag, Status, TestingState
+from minithesis.core import SerializationTag, Status, MinithesisState
 from minithesis.core import TestCase as TC
 from minithesis.floats import FloatChoice, _draw_unbounded_float
 from minithesis.generators import floats
@@ -179,7 +179,7 @@ def test_floats_shrinks_negative_exponent():
         if 0 < f < 1e-100:
             tc.mark_status(Status.INTERESTING)
 
-    state = TestingState(Random(0), tf, 1)
+    state = MinithesisState(Random(0), tf, 1)
     state.test_function(TC.for_choices([1e-200]))
     assert state.result is not None
     state.shrink()
@@ -243,7 +243,7 @@ def test_floats_shrinks_nan_only():
         if math.isnan(f):
             tc.mark_status(Status.INTERESTING)
 
-    state = TestingState(Random(0), tf, 1)
+    state = MinithesisState(Random(0), tf, 1)
     state.test_function(TC.for_choices([math.nan]))
     assert state.result is not None
     state.shrink()
@@ -259,7 +259,7 @@ def test_floats_shrinks_nan_to_simpler():
         if math.isnan(f) or math.isinf(f):
             tc.mark_status(Status.INTERESTING)
 
-    state = TestingState(Random(0), tf, 1)
+    state = MinithesisState(Random(0), tf, 1)
     state.test_function(TC.for_choices([math.nan]))
     assert state.result is not None
     state.shrink()
@@ -275,7 +275,7 @@ def test_floats_shrinks_neg_inf():
         if math.isinf(f):
             tc.mark_status(Status.INTERESTING)
 
-    state = TestingState(Random(0), tf, 1)
+    state = MinithesisState(Random(0), tf, 1)
     state.test_function(TC.for_choices([-math.inf]))
     assert state.result is not None
     state.shrink()
@@ -290,7 +290,7 @@ def test_floats_shrinks_neg_inf_to_finite():
         if abs(f) > 1e300:
             tc.mark_status(Status.INTERESTING)
 
-    state = TestingState(Random(0), tf, 1)
+    state = MinithesisState(Random(0), tf, 1)
     state.test_function(TC.for_choices([-math.inf]))
     assert state.result is not None
     state.shrink()
@@ -307,7 +307,7 @@ def test_floats_shrinks_inf_to_finite():
         if f > 1e300:
             tc.mark_status(Status.INTERESTING)
 
-    state = TestingState(Random(0), tf, 1)
+    state = MinithesisState(Random(0), tf, 1)
     state.test_function(TC.for_choices([math.inf]))
     assert state.result is not None
     state.shrink()
@@ -335,7 +335,7 @@ def test_floats_shrinks_large_exponent():
         if f >= 1e15:
             tc.mark_status(Status.INTERESTING)
 
-    state = TestingState(Random(0), tf, 1)
+    state = MinithesisState(Random(0), tf, 1)
     state.test_function(TC.for_choices([1e20]))
     assert state.result is not None
     state.shrink()
@@ -393,7 +393,7 @@ def test_floats_shrinks_small_positive():
         if 0.01 < f < 0.5:
             tc.mark_status(Status.INTERESTING)
 
-    state = TestingState(Random(0), tf, 1)
+    state = MinithesisState(Random(0), tf, 1)
     state.test_function(TC.for_choices([0.3]))
     assert state.result is not None
     state.shrink()
