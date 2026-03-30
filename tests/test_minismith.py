@@ -534,31 +534,44 @@ def gen_generator_expr(draw: st.DrawFn, depth: int = 0) -> tuple[str, str, int, 
             )
             return ("str", f"sampled_from({elems!r})", 0, 0)
     elif choice == 9:
-        # one_of(*generators) — homogeneous (same output type)
-        base_typ = draw(st.sampled_from(["int", "bool", "str", "float"]))
-        n = draw(st.integers(2, 4))
-        sub_exprs = []
-        lo_min, hi_max = 0, 0
-        for _ in range(n):
-            _, sub_expr, lo, hi = draw(gen_generator_expr(depth + 1))
-            # Override to ensure same type
-            if base_typ == "int":
-                lo = draw(st.integers(-100, 100))
-                hi = draw(st.integers(lo, lo + 200))
-                sub_expr = f"integers({lo}, {hi})"
-                lo_min = min(lo_min, lo) if sub_exprs else lo
-                hi_max = max(hi_max, hi) if sub_exprs else hi
-            elif base_typ == "bool":
-                sub_expr = "booleans()"
-            elif base_typ == "str":
-                sub_expr = "text(min_codepoint=32, max_codepoint=126, max_size=10)"
-            else:
-                sub_expr = "floats(allow_nan=False, allow_infinity=False)"
-            sub_exprs.append(sub_expr)
-        # Sometimes include nothing() as one branch
-        if draw(st.integers(0, 4)) == 0:
-            sub_exprs.append("nothing()")
-        return (base_typ, f"one_of({', '.join(sub_exprs)})", lo_min, hi_max)
+        # one_of(*generators)
+        heterogeneous = draw(st.booleans())
+        if heterogeneous:
+            # Heterogeneous one_of — different types per branch.
+            # Use "bool" as the result type since truthiness predicates
+            # (v0, not v0) are safe for any Python type, and bool vars
+            # aren't used in type-specific dependent draws.
+            sub_exprs = []
+            for _ in range(draw(st.integers(2, 4))):
+                _, sub_expr, _, _ = draw(gen_generator_expr(depth + 1))
+                sub_exprs.append(sub_expr)
+            return ("bool", f"one_of({', '.join(sub_exprs)})", 0, 0)
+        else:
+            # Homogeneous one_of — same output type
+            base_typ = draw(st.sampled_from(["int", "bool", "str", "float"]))
+            n = draw(st.integers(2, 4))
+            sub_exprs = []
+            lo_min, hi_max = 0, 0
+            for _ in range(n):
+                _, sub_expr, lo, hi = draw(gen_generator_expr(depth + 1))
+                # Override to ensure same type
+                if base_typ == "int":
+                    lo = draw(st.integers(-100, 100))
+                    hi = draw(st.integers(lo, lo + 200))
+                    sub_expr = f"integers({lo}, {hi})"
+                    lo_min = min(lo_min, lo) if sub_exprs else lo
+                    hi_max = max(hi_max, hi) if sub_exprs else hi
+                elif base_typ == "bool":
+                    sub_expr = "booleans()"
+                elif base_typ == "str":
+                    sub_expr = "text(min_codepoint=32, max_codepoint=126, max_size=10)"
+                else:
+                    sub_expr = "floats(allow_nan=False, allow_infinity=False)"
+                sub_exprs.append(sub_expr)
+            # Sometimes include nothing() as one branch
+            if draw(st.integers(0, 4)) == 0:
+                sub_exprs.append("nothing()")
+            return (base_typ, f"one_of({', '.join(sub_exprs)})", lo_min, hi_max)
     elif choice == 10:
         # dictionaries(keys, values)
         key_typ = draw(st.sampled_from(["int", "str"]))
@@ -677,11 +690,31 @@ def _flat_map_for_type(draw: st.DrawFn, typ: str) -> tuple[str, str] | None:
                         "list_bool",
                         "lambda x: lists(booleans(), max_size=abs(x) % 5 + 1)",
                     ),
+                    # Length-controlling: the int value determines the exact
+                    # list size, creating a strong structural dependency.
+                    (
+                        "list_int",
+                        "lambda n: lists(integers(0, 100),"
+                        " min_size=abs(n) % 5, max_size=abs(n) % 5 + 1)",
+                    ),
                 ]
             )
         )
     if typ == "bool":
-        return ("int", "lambda x: integers(0, 10) if x else integers(-10, 0)")
+        return draw(
+            st.sampled_from(
+                [
+                    ("int", "lambda x: integers(0, 10) if x else integers(-10, 0)"),
+                    # Branch on bool to produce different types — exercises
+                    # type changes during shrinking.
+                    (
+                        "str",
+                        "lambda x: text(min_codepoint=32, max_codepoint=126, max_size=5)"
+                        " if x else just('')",
+                    ),
+                ]
+            )
+        )
     return None
 
 
