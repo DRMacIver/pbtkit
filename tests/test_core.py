@@ -24,7 +24,16 @@ from minithesis.core import MinithesisState as State
 from minithesis.core import TestCase as TC
 from minithesis.database import DirectoryDB
 from minithesis.floats import FloatChoice
-from minithesis.generators import booleans, composite, integers, lists, one_of
+from minithesis.generators import (
+    binary,
+    booleans,
+    composite,
+    dictionaries,
+    integers,
+    lists,
+    one_of,
+    text,
+)
 
 
 @pytest.mark.parametrize("seed", range(10))
@@ -424,6 +433,34 @@ def test_unique_list_shrinks_using_negative_values():
     # Extract the integer values from the list choices (skip booleans)
     int_values = [n.value for n in state.result if isinstance(n.kind, IntegerChoice)]
     assert int_values == [0, 1, -1, 2, -2]
+
+
+@pytest.mark.requires("bytes")
+@pytest.mark.requires("collections")
+@pytest.mark.requires("text")
+def test_bytes_increment_shortens_sequence():
+    """Growing a bytes value by one byte can eliminate subsequent choices,
+    producing a shorter (and thus simpler) overall sequence.
+    Regression for shrink quality found by minismith."""
+
+    def tf(tc):
+        v0 = tc.any(binary(max_size=20))
+        v1 = tc.any(
+            dictionaries(
+                integers(0, 0),
+                text(min_codepoint=32, max_codepoint=126, max_size=20),
+                max_size=5,
+            )
+        )
+        if len(v0) + len(v1) >= 20:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 1000)
+    state.run()
+    assert state.result is not None
+    # Should shrink to just a 20-byte binary + empty dict (2 choices),
+    # not 19 bytes + dict entry (5 choices).
+    assert len(state.result) == 2
 
 
 def test_bind_deletion_valid_but_not_shorter():

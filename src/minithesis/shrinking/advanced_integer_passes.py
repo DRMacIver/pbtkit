@@ -8,6 +8,7 @@ register as a shrink pass.
 
 from __future__ import annotations
 
+from minithesis.bytes import BytesChoice
 from minithesis.core import (
     BooleanChoice,
     IntegerChoice,
@@ -121,10 +122,13 @@ def try_shortening_via_increment(state: MinithesisState) -> None:
     i = 0
     while i < len(state.result):
         node = state.result[i]
-        if not isinstance(node.kind, (BooleanChoice, IntegerChoice)):
+        if isinstance(node.kind, BytesChoice):
+            incremented = node.value + b"\x00"
+        elif isinstance(node.kind, (BooleanChoice, IntegerChoice)):
+            incremented = node.value + 1
+        else:
             i += 1
             continue
-        incremented = node.value + 1
         if not node.kind.validate(incremented):
             i += 1
             continue
