@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src" / "minithesis"
 BUILD = ROOT / "build"
 
-EXTENSIONS = ["caching", "database", "bytes", "floats", "text", "collections", "targeting", "shrinking.advanced_integer_passes", "shrinking.bind_deletion", "shrinking.duplication_passes"]
+EXTENSIONS = ["caching", "database", "bytes", "floats", "text", "collections", "targeting", "shrinking.advanced_integer_passes", "shrinking.bind_deletion", "shrinking.duplication_passes", "shrinking.sorting"]
 
 # Utility modules that are always compiled (not independently disableable).
 UTILITY_MODULES = ["shrinking.sequence"]
@@ -449,7 +449,7 @@ def _generate_init_py(disabled: frozenset[str]) -> str:
         e
         for e in ["caching", "database", "floats", "bytes", "text", "collections", "targeting",
                    "shrinking.advanced_integer_passes", "shrinking.bind_deletion",
-                   "shrinking.duplication_passes", "generators"]
+                   "shrinking.duplication_passes", "shrinking.sorting", "generators"]
         if e not in disabled
     ]
     disabled_list = sorted(disabled)

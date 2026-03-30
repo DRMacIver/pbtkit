@@ -23,7 +23,7 @@ pytestmark = pytest.mark.requires("collections")
 # --- Sets (using unique lists as proxy) ---
 
 
-@pytest.mark.requires("shrinking.advanced_integer_passes")
+@pytest.mark.requires("shrinking.sorting")
 def test_minimize_3_set():
     result = minimal(
         lists(integers(-(2**63), 2**63 - 1), unique=True),
@@ -32,7 +32,7 @@ def test_minimize_3_set():
     assert result in [[0, 1, 2], [-1, 0, 1]]
 
 
-@pytest.mark.requires("shrinking.advanced_integer_passes")
+@pytest.mark.requires("shrinking.sorting")
 def test_minimize_sets_sampled_from():
     items = list(range(10))
     assert minimal(
@@ -79,7 +79,7 @@ def test_duplicate_containment():
 # --- List ordering and structure ---
 
 
-@pytest.mark.requires("shrinking.advanced_integer_passes")
+@pytest.mark.requires("shrinking.sorting")
 def test_reordering_bytes():
     ls = minimal(
         lists(integers(0, 1000)),
