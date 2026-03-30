@@ -193,9 +193,8 @@ def try_shortening_via_increment(state: MinithesisState) -> None:
             attempt = list(state.result)
             attempt[i] = attempt[i].with_value(incremented)
 
-            # First try bumping the value and zeroing the rest of the
-            # test case (likely to make it much smaller). Pass
-            # prefix_nodes so value punning maps simplest→simplest.
+            # Try bumping the value and filling the rest with simplest.
+            # Pass prefix_nodes so value punning works correctly.
             zeroed = list(attempt)
             for j in range(i + 1, len(zeroed)):
                 zeroed[j] = zeroed[j].with_value(zeroed[j].kind.simplest)
@@ -203,15 +202,14 @@ def try_shortening_via_increment(state: MinithesisState) -> None:
                 [n.value for n in zeroed], prefix_nodes=zeroed
             )
             state.test_function(tc_zeroed)
-            if (
-                len(tc_zeroed.nodes) < len(state.result)
-                and tc_zeroed.status is not None
-                and tc_zeroed.status < Status.INTERESTING
-            ):
-                # Bump-and-zero reduced the length but didn't produce an
-                # interesting test case. Try with just the bump.
-                tc = TestCase.for_choices(
-                    [n.value for n in attempt], prefix_nodes=attempt
+            # Also try with position i+1 set to 1/True, which handles
+            # one_of branch switches where the continuation kind changes
+            # (e.g. IntegerChoice→BooleanChoice that needs True).
+            if i + 1 < len(attempt):
+                one_fill = list(zeroed)
+                one_fill[i + 1] = one_fill[i + 1].with_value(1)
+                tc_one = TestCase.for_choices(
+                    [n.value for n in one_fill], prefix_nodes=one_fill
                 )
-                state.test_function(tc)
+                state.test_function(tc_one)
         i += 1
