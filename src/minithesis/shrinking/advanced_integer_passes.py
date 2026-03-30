@@ -16,7 +16,6 @@ from minithesis.core import (
     TestCase,
     bin_search_down,
     shrink_pass,
-    sort_key,
 )
 
 
@@ -30,60 +29,43 @@ def _integer_indices(state: MinithesisState) -> list[int]:
 
 @shrink_pass
 def lower_and_bump_adjacent(state: MinithesisState) -> None:
-    """For each IntegerChoice with value > 0, try subtracting 1 and
-    bumping the next choice. First runs the decrement alone to discover
-    the kind at the next position in the new context, then tries
-    boundary values for that kind."""
+    """For adjacent IntegerChoice pairs where the first is > 0,
+    try subtracting 1 from it and bumping the next. First runs
+    the decrement alone to discover the max_value of the next
+    node's kind in the new context, then tries the boundary.
+
+    Value punning in _make_choice handles the case where decrementing
+    changes the type at position j (e.g., one_of branch switch)."""
     assert state.result is not None
     # Recompute indices each iteration so we never use stale
     # positions after a successful replace changes the result.
     idx = 0
-    while idx < len(_integer_indices(state)):
+    while idx < len(_integer_indices(state)) - 1:
         indices = _integer_indices(state)
         i = indices[idx]
+        j = indices[idx + 1]
         if state.result[i].value <= 0:
             idx += 1
             continue
-        j = i + 1
-        # Try each candidate value for position i (simplest first,
-        # then value-1) and probe what kind appears at position j.
-        simplest = state.result[i].kind.simplest
-        candidates = [simplest] if simplest < state.result[i].value - 1 else []
-        candidates.append(state.result[i].value - 1)
-        for new_i in candidates:
-            attempt = list(state.result)
-            attempt[i] = attempt[i].with_value(new_i)
-            tc = TestCase.for_choices([n.value for n in attempt])
-            state.test_function(tc)
-            assert tc.status is not None
-            if j < len(tc.nodes):
-                kind_j = tc.nodes[j].kind
-                # Use the probe's nodes up to j (correct kind after
-                # decrement) plus the remaining original nodes (to
-                # provide choices for subsequent draws).
-                tail = list(state.result[j + 1 :])
-                # Try the simplest value for the new kind at position j.
-                probe_attempt = list(tc.nodes[: j + 1]) + tail
-                probe_attempt[j] = probe_attempt[j].with_value(kind_j.simplest)
-                state.consider(probe_attempt)
-                # For integer/boolean, also try the non-simplest direction.
-                if isinstance(kind_j, IntegerChoice):
-                    probe_attempt = list(tc.nodes[: j + 1]) + tail
-                    probe_attempt[j] = probe_attempt[j].with_value(kind_j.max_value)
-                    state.consider(probe_attempt)
-                elif isinstance(kind_j, BooleanChoice):
-                    probe_attempt = list(tc.nodes[: j + 1]) + tail
-                    probe_attempt[j] = probe_attempt[j].with_value(True)
-                    state.consider(probe_attempt)
-        # Also try powers of 2 for integer choices at position j.
-        if j < len(state.result) and isinstance(state.result[j].kind, IntegerChoice):
-            new_i = state.result[i].value - 1
-            bump = 1
-            while bump <= 256 and j < len(state.result):
-                new_j = state.result[j].value + bump
-                if state.replace({i: new_i, j: new_j}):
-                    break
-                bump *= 2
+        new_i = state.result[i].value - 1
+        # Run the decrement to observe the kind at position j.
+        attempt = list(state.result)
+        attempt[i] = attempt[i].with_value(new_i)
+        tc = TestCase.for_choices([n.value for n in attempt], prefix_nodes=attempt)
+        state.test_function(tc)
+        assert tc.status is not None
+        if j < len(tc.nodes):
+            kind_j = tc.nodes[j].kind
+            if isinstance(kind_j, IntegerChoice):
+                # Try the boundary value directly.
+                state.replace({i: new_i, j: kind_j.max_value})
+        # Also try powers of 2 for cases where max_value is large.
+        bump = 1
+        while bump <= 256 and j < len(state.result):
+            new_j = state.result[j].value + bump
+            if state.replace({i: new_i, j: new_j}):
+                break
+            bump *= 2
         idx += 1
 
 

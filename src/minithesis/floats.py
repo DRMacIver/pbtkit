@@ -158,6 +158,15 @@ class FloatChoice(ChoiceType[float]):
         else:
             return self.max_value
 
+    @property
+    def unit(self) -> float:
+        s = self.simplest
+        if self.validate(s + 1.0):
+            return s + 1.0
+        if self.validate(s - 1.0):
+            return s - 1.0
+        return s
+
     def validate(self, value: float) -> bool:
         if not isinstance(value, float):
             return False

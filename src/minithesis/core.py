@@ -38,6 +38,14 @@ class ChoiceType(Generic[U]):
         shrink target."""
         raise NotImplementedError
 
+    @property
+    def unit(self) -> U:
+        """The second simplest value for this choice type.
+
+        Used when punning a value from one choice type to another:
+        simplest maps to simplest, everything else maps to unit."""
+        raise NotImplementedError
+
     def validate(self, value: U) -> bool:
         """Return True if value is valid for this choice type."""
         raise NotImplementedError
@@ -62,6 +70,17 @@ class IntegerChoice(ChoiceType[int]):
         else:
             return self.max_value
 
+    @property
+    def unit(self) -> int:
+        s = self.simplest
+        # Try s+1 first (next positive), then s-1 (next negative).
+        # Falls back to simplest for single-value ranges.
+        if self.validate(s + 1):
+            return s + 1
+        if self.validate(s - 1):
+            return s - 1
+        return s
+
     def validate(self, value: int) -> bool:
         return isinstance(value, int) and self.min_value <= value <= self.max_value
 
@@ -76,6 +95,10 @@ class BooleanChoice(ChoiceType[bool]):
     @property
     def simplest(self) -> bool:
         return False
+
+    @property
+    def unit(self) -> bool:
+        return True
 
     def validate(self, value: bool) -> bool:
         return isinstance(value, int) and value in (0, 1)
@@ -195,6 +218,7 @@ class TestCase:
         cls,
         choices: Sequence[Any],
         print_results: bool = False,
+        prefix_nodes: Sequence[ChoiceNode] | None = None,
     ) -> TestCase:
         """Returns a test case that makes this series of choices."""
         return TestCase(
@@ -202,6 +226,7 @@ class TestCase:
             random=None,
             max_size=len(choices),
             print_results=print_results,
+            prefix_nodes=prefix_nodes,
         )
 
     def __init__(
@@ -210,6 +235,7 @@ class TestCase:
         random: Random | None,
         max_size: float = float("inf"),
         print_results: bool = False,
+        prefix_nodes: Sequence[ChoiceNode] | None = None,
     ):
         self.prefix = prefix
         self._random = random
@@ -219,6 +245,7 @@ class TestCase:
         self.print_results = print_results
         self.depth = 0
         self.targeting_score: int | None = None
+        self.prefix_nodes = prefix_nodes
 
     def draw_integer(self, min_value: int, max_value: int) -> int:
         """Returns a number in the range [min_value, max_value]."""
@@ -356,11 +383,23 @@ class TestCase:
             value = forced
         elif len(self.nodes) < len(self.prefix):
             value = self.prefix[len(self.nodes)]
+            # When replaying from a prefix and the value doesn't validate
+            # (e.g., a one_of branch changed the downstream type), pun
+            # the value: simplest→simplest, anything else→unit.
+            if not kind.validate(value):
+                idx = len(self.nodes)
+                if (
+                    self.prefix_nodes is not None
+                    and idx < len(self.prefix_nodes)
+                    and value == self.prefix_nodes[idx].kind.simplest
+                ):
+                    value = kind.simplest
+                else:
+                    value = kind.unit
         else:
             value = rnd_method()
         self.nodes.append(ChoiceNode(kind, value, forced is not None))
-        if forced is None and not kind.validate(value):
-            self.mark_status(Status.EARLY_STOP)
+        assert forced is not None or kind.validate(value)
         return value
 
 
@@ -601,7 +640,7 @@ class MinithesisState:
         assert self.result is not None
         if sort_key(nodes) == sort_key(self.result):
             return True
-        test_case = TestCase.for_choices([n.value for n in nodes])
+        test_case = TestCase.for_choices([n.value for n in nodes], prefix_nodes=nodes)
         self.test_function(test_case)
         assert test_case.status is not None
         return test_case.status == Status.INTERESTING

@@ -59,6 +59,17 @@ class StringChoice(ChoiceType[str]):
         )
         return chr(best) * self.min_size
 
+    @property
+    def unit(self) -> str:
+        # One character longer than simplest (shortlex: longer = less simple).
+        s = self.simplest
+        best = min(
+            range(self.min_codepoint, min(self.max_codepoint + 1, 128)),
+            key=_codepoint_key,
+            default=self.min_codepoint,
+        )
+        return s + chr(best)
+
     def validate(self, value: str) -> bool:
         if not isinstance(value, str):
             return False

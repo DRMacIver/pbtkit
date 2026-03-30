@@ -13,6 +13,7 @@ import pytest
 
 import minithesis.core as core
 from minithesis import Generator, Unsatisfiable, run_test
+from minithesis.bytes import BytesChoice
 from minithesis.caching import CachedTestFunction
 from minithesis.core import (
     Frozen,
@@ -22,6 +23,7 @@ from minithesis.core import (
 from minithesis.core import MinithesisState as State
 from minithesis.core import TestCase as TC
 from minithesis.database import DirectoryDB
+from minithesis.floats import FloatChoice
 from minithesis.generators import booleans, integers, lists, one_of
 
 
@@ -192,6 +194,53 @@ def test_integer_choice_simplest():
     assert IntegerChoice(-10, 10).simplest == 0
     assert IntegerChoice(5, 100).simplest == 5
     assert IntegerChoice(-100, -5).simplest == -5
+
+
+def test_integer_choice_unit():
+    assert IntegerChoice(-10, 10).unit == 1
+    assert IntegerChoice(5, 100).unit == 6
+    # When simplest is at the top of the range, unit is simplest - 1.
+    assert IntegerChoice(-100, -5).unit == -6
+    # Single-value range: unit falls back to simplest.
+    assert IntegerChoice(5, 5).unit == 5
+
+
+@pytest.mark.requires("floats")
+def test_float_choice_unit():
+    assert FloatChoice(-10.0, 10.0, False, False).unit == 1.0
+    # When simplest is at the top, unit goes down.
+    assert FloatChoice(-10.0, -5.0, False, False).unit == -6.0
+    # Single-value range: falls back to simplest.
+    assert FloatChoice(5.0, 5.0, False, False).unit == 5.0
+
+
+@pytest.mark.requires("bytes")
+def test_bytes_choice_unit():
+    assert BytesChoice(0, 10).unit == b"\x00"
+    assert BytesChoice(3, 10).unit == b"\x00\x00\x00\x00"
+
+
+def test_value_punning_on_type_change():
+    """When replaying a choice sequence and the type at a position
+    changes (e.g., from FloatChoice to BooleanChoice), the value
+    is punned: simplest→simplest, anything else→unit."""
+
+    def tf(tc):
+        # Branch 0 = booleans, branch 1 = integers
+        branch = tc.draw_integer(0, 1)
+        if branch == 0:
+            tc.weighted(0.5)
+        else:
+            tc.draw_integer(0, 100)
+        tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 100)
+    state.run()
+    # The result should have branch=0 (simplest).
+    # If the initial result had branch=1 with integer value 50,
+    # switching to branch=0 puns 50 → BooleanChoice.unit (True).
+    assert state.result is not None
+    assert state.result[0].value == 0  # branch = simplest
 
 
 def test_forced_choice_bounds():
