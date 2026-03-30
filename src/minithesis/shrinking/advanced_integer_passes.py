@@ -60,13 +60,24 @@ def lower_and_bump_adjacent(state: MinithesisState) -> None:
             if isinstance(kind_j, IntegerChoice):
                 # Try the boundary value directly.
                 state.replace({i: new_i, j: kind_j.max_value})
-        # Also try powers of 2 for cases where max_value is large.
+        # Try bumping from current value by powers of 2.
         bump = 1
+        found = False
         while bump <= 256 and j < len(state.result):
             new_j = state.result[j].value + bump
             if state.replace({i: new_i, j: new_j}):
+                found = True
                 break
             bump *= 2
+        # If bumps from current value didn't work (e.g. range changed
+        # and current+bump is always out of range), try absolute powers
+        # of 2 to explore the new range.
+        if not found:
+            bump = 1
+            while bump <= 256 and j < len(state.result):
+                if state.replace({i: new_i, j: bump}):
+                    break
+                bump *= 2
         idx += 1
 
 
