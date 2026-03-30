@@ -13,9 +13,9 @@ from typing import Any, Callable, List
 from minithesis.core import (
     ChoiceType,
     TestCase,
-    _shrink_sequence,
     value_shrinker,
 )
+from minithesis.shrinking.sequence import shrink_sequence
 
 # ---------------------------------------------------------------------------
 # StringChoice
@@ -104,7 +104,7 @@ def shrink_string(
     try_replace: Callable[[str], bool],
 ) -> None:
     """Shrink a string choice: shorten, remove chars, reduce codepoints."""
-    _shrink_sequence(
+    shrink_sequence(
         value,
         kind.min_size,
         kind.simplest,

@@ -23,6 +23,9 @@ BUILD = ROOT / "build"
 
 EXTENSIONS = ["caching", "database", "bytes", "floats", "text", "collections", "targeting", "shrinking.advanced_integer_passes", "shrinking.duplication_passes"]
 
+# Utility modules that are always compiled (not independently disableable).
+UTILITY_MODULES = ["shrinking.sequence"]
+
 HEADER = """\
 # Compiled minithesis — generated from the modular source.
 # Do not edit by hand.
@@ -376,7 +379,7 @@ def compile_minithesis(disabled: frozenset[str] = frozenset()) -> str:
     # Read and parse all modules
     sources: dict[str, str] = {}
     trees: dict[str, cst.Module] = {}
-    for name in ["core", "__init__"] + extensions + ["generators"]:
+    for name in ["core", "__init__"] + UTILITY_MODULES + extensions + ["generators"]:
         src = module_path(name).read_text()
         sources[name] = src
         trees[name] = cst.parse_module(src)
@@ -413,9 +416,9 @@ def compile_minithesis(disabled: frozenset[str] = frozenset()) -> str:
     # Process core (replace enabled stubs with real methods, remove disabled stubs)
     core_body = process_core(sources["core"], method_texts, all_stub_names)
 
-    # Process extensions (remove imports, monkey-patches, moved functions)
+    # Process extensions and utility modules (remove imports, monkey-patches, moved functions)
     ext_bodies: list[str] = []
-    for ext in extensions:
+    for ext in UTILITY_MODULES + extensions:
         moved = {func for _, (en, func) in all_patches.items() if en == ext}
         body = process_extension(sources[ext], moved)
         if body.strip():

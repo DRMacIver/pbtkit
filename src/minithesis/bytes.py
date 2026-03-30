@@ -13,9 +13,9 @@ from typing import Any, Callable
 from minithesis.core import (
     ChoiceType,
     TestCase,
-    _shrink_sequence,
     value_shrinker,
 )
+from minithesis.shrinking.sequence import shrink_sequence
 
 # ---------------------------------------------------------------------------
 # BytesChoice
@@ -46,7 +46,7 @@ def shrink_bytes(
     try_replace: Callable[[bytes], bool],
 ) -> None:
     """Shrink a bytes choice: shorten, remove bytes, reduce byte values."""
-    _shrink_sequence(
+    shrink_sequence(
         value,
         kind.min_size,
         kind.simplest,

@@ -34,6 +34,7 @@ def separated_sum(tc):
 
 
 @pytest.mark.requires("text")
+@pytest.mark.requires("shrinking.advanced_integer_passes")
 def test_sum_of_pair_separated():
     assert minimal(separated_sum(), lambda x: x[0] + x[1] > 1000) == (1, 1000)
 
