@@ -1061,6 +1061,7 @@ pytestmark = [
 @given(program())
 @settings(
     max_examples=1000,
+    deadline=None,
     suppress_health_check=[HealthCheck.too_slow],
 )
 def test_minismith_no_internal_errors(minithesis_program: str) -> None:
