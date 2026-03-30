@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src" / "minithesis"
 BUILD = ROOT / "build"
 
-EXTENSIONS = ["floats", "bytes", "text", "collections", "targeting"]
+EXTENSIONS = ["bytes", "floats", "text", "collections", "targeting"]
 
 HEADER = """\
 # Compiled minithesis — generated from the modular source.
