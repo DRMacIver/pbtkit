@@ -52,22 +52,15 @@ class CachedTestFunction:
         Returns the Status if known, or None on cache miss."""
         node: Any = self.tree
         try:
-            for i, c in enumerate(choices):
+            for c in choices:
                 node = node[c]
+                # mark_status was called at this point, so future
+                # choices are irrelevant.
                 if isinstance(node, Status):
-                    if i + 1 == len(choices) or node == Status.INTERESTING:
-                        # Exact match, or the shorter sequence was
-                        # interesting (which means any extension is too).
-                        return node
-                    # We hit a terminal for a shorter sequence but have
-                    # more choices remaining. For non-interesting
-                    # statuses, this could be a false match due to
-                    # Python's hash equality (True == 1 == 1.0), so
-                    # treat as overrun rather than trusting the status.
-                    return Status.OVERRUN
-            # If we consumed all choices without hitting a terminal,
-            # another choice will be needed and the result will overrun.
-            return Status.OVERRUN
+                    assert node != Status.EARLY_STOP
+                    return node
+            # All choices consumed but more would be needed — overrun.
+            return Status.EARLY_STOP
         except KeyError:
             return None
 
@@ -77,17 +70,15 @@ class CachedTestFunction:
         node: Any = self.tree
         for i, choice_node in enumerate(test_case.nodes):
             c = choice_node.value
-            if i + 1 < len(test_case.nodes) or test_case.status == Status.OVERRUN:
+            if i + 1 < len(test_case.nodes) or test_case.status == Status.EARLY_STOP:
                 try:
                     existing = node[c]
                 except KeyError:
                     node = node.setdefault(c, {})
                     continue
-                # A previous recording at this position recorded a
-                # terminal Status. That shorter result takes precedence,
-                # so stop recording here.
-                if isinstance(existing, Status):
-                    return
+                # A previous recording at this position was a terminal
+                # Status, which should have been caught by lookup.
+                assert not isinstance(existing, Status)
                 node = existing
             else:
                 node[c] = test_case.status

@@ -143,7 +143,7 @@ def test_function_cache():
     cache = CachedTestFunction(state.test_function)
 
     assert cache([1, 1]) == Status.VALID
-    assert cache([1]) == Status.OVERRUN
+    assert cache([1]) == Status.EARLY_STOP
     assert cache([1000]) == Status.INTERESTING
     assert cache([1000]) == Status.INTERESTING
     assert cache([1000, 1]) == Status.INTERESTING

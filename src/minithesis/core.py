@@ -357,7 +357,7 @@ class TestCase:
         if self.status is not None:
             raise Frozen()
         if len(self.nodes) >= self.max_size:
-            self.mark_status(Status.OVERRUN)
+            self.mark_status(Status.EARLY_STOP)
         if forced is not None:
             value = forced
         elif len(self.nodes) < len(self.prefix):
@@ -366,7 +366,7 @@ class TestCase:
             value = rnd_method()
         self.nodes.append(ChoiceNode(kind, value, forced is not None))
         if forced is None and not kind.validate(value):
-            self.mark_status(Status.INVALID)
+            self.mark_status(Status.EARLY_STOP)
         return value
 
 
@@ -795,8 +795,9 @@ class Unsatisfiable(Exception):
 
 
 class Status(IntEnum):
-    # Test case didn't have enough data to complete
-    OVERRUN = 0
+    # Test case stopped before completing: either ran out of
+    # data, or a replayed value failed type validation.
+    EARLY_STOP = 0
 
     # Test case contained something that prevented completion
     INVALID = 1

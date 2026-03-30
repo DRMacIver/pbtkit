@@ -22,21 +22,7 @@ def test_shrinks_to_simple_float_above_0():
     assert minimal(floats(allow_nan=False), lambda x: x > 0.0) == 1.0
 
 
-_xfail_list_context = pytest.mark.xfail(
-    reason="float shrinker doesn't simplify within list context"
-)
-
-
-@pytest.mark.parametrize(
-    "n",
-    [
-        1,
-        pytest.param(2, marks=_xfail_list_context),
-        pytest.param(3, marks=_xfail_list_context),
-        pytest.param(8, marks=_xfail_list_context),
-        pytest.param(10, marks=_xfail_list_context),
-    ],
-)
+@pytest.mark.parametrize("n", [1, 2, 3, 8, 10])
 def test_can_shrink_in_variable_sized_context(n):
     x = minimal(
         lists(floats(allow_nan=False, allow_infinity=False), min_size=n),
