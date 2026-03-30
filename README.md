@@ -1,39 +1,10 @@
-# Minithesis
+# Minithesis 2
 
-This is is an incredibly minimal implementation of the core idea of [Hypothesis](https://github.com/HypothesisWorks/hypothesis).
-It is mostly intended to provide a minimal implementation of a powerful modern property-based testing library
-that is easy to port to new languages.
+[Minithesis](https://github.com/DRMacIver/minithesis) was a minimalist implementation of the core idea of the original [Hypothesis](https://github.com/HypothesisWorks/hypothesis) implementation
 
-Minithesis supports the following features absent from most property-based testing libraries.:
+This is a successor project, that originally started out as an attempt to port over the new underpinnings of Hypothesis (which moved to a single uniform representation to a small number of primitives).
+This bloated it enough that I started thinking about how to modularise it.
 
-* Generating arbitrary values inline in the test, including based on previous test results
-* Fully generic shrinking
-* A test database
-* Targeted Property-Based Testing
+Now, this is an attempt to show how all the different pieces of a property based testing library based on Hypothesis can fit together, or not.
 
-It achieves all of this in less than 500 lines of relatively straightforward Python (plus comments).
-
-## Notes
-
-* The algorithms for both shrinking and targeting are a bit naive but they're not *terrible* - they should be good enough that using them is better than not having them.
-* The database uses Python's DBM module for simplicity. 
-* This is probably best read after or in tandem with [our paper about test-case reduction in Hypothesis](https://drmaciver.github.io/papers/reduction-via-generation-preview.pdf)
-* This does not necessarily track the core Hypothesis implementation that closely and is more an "in spirit" implementation.
-* This probably doesn't work all that well - it's tolerably well tested, but nobody has ever used it for real and probably nobody ever will because why would they when Hypothesis exists?
-* Pull requests to improve clarity *extremely* welcome. It probably won't ever grow many features (I might implement the database at some point) though because you're not supposed to use it in anger.
-* I've used the (sadly defunct) Hypothesis-for-Ruby naming conventions because those are better than the Python ones because I actually put some thought into them.
-* There is a fairly minimal generator library just to get you started but it's nothing resembling comprehensive and is unlikely to ever be.
-
-
-## Minithesis Ports
-
-There are a number of ports of minithesis (:tada:). The following are the ones I'm aware of:
-
-* Martin Janiczek's Elm port, [elm-minithesis](https://github.com/Janiczek/elm-minithesis)
-* Jack Firth's racket port, [miniracksis](https://github.com/jackfirth/miniracksis/)
-* Amanda Walker's Haskell port, [haskell-minithesis](https://github.com/AnOctopus/haskell-minithesis)
-* Dmitry Dygalo and Rik de Kort's Rust port, [minithesis-rust](https://github.com/Rik-de-Kort/minithesis-rust)
-* Justin Blank's Java port, [jiminy-thesis](https://github.com/hyperpape/jiminy-thesis)
-* Valentin Bogad's Julia port, [MiniThesis.jl](https://github.com/Seelengrab/MiniThesis.jl)
-
-If you write a port, please submit a pull request to add it to the list!
+It is extremely work in progress, but feel free to have a look around.
