@@ -52,16 +52,21 @@ class CachedTestFunction:
         Returns the Status if known, or None on cache miss."""
         node: Any = self.tree
         try:
-            for c in choices:
+            for i, c in enumerate(choices):
                 node = node[c]
-                # mark_status was called, thus future choices
-                # will be ignored.
                 if isinstance(node, Status):
-                    assert node != Status.OVERRUN
-                    return node
-            # If we never entered an unknown region of the tree
-            # or hit a Status value, then we know that another
-            # choice will be made next and the result will overrun.
+                    if i + 1 == len(choices) or node == Status.INTERESTING:
+                        # Exact match, or the shorter sequence was
+                        # interesting (which means any extension is too).
+                        return node
+                    # We hit a terminal for a shorter sequence but have
+                    # more choices remaining. For non-interesting
+                    # statuses, this could be a false match due to
+                    # Python's hash equality (True == 1 == 1.0), so
+                    # treat as overrun rather than trusting the status.
+                    return Status.OVERRUN
+            # If we consumed all choices without hitting a terminal,
+            # another choice will be needed and the result will overrun.
             return Status.OVERRUN
         except KeyError:
             return None

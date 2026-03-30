@@ -404,6 +404,24 @@ def test_floats_shrinks_small_positive():
     assert 0.01 < v < 0.5
 
 
+def test_shrinks_float_with_large_fractional():
+    """Floats with many fractional digits use shrink_by_tens to
+    reduce the reversed fractional part by factors of 10."""
+
+    def tf(tc):
+        f = tc.draw_float(0.0, 0.5, allow_nan=False)
+        # Require a specific range that forces a non-trivial fractional.
+        if 0.001 < f < 0.5:
+            tc.mark_status(Status.INTERESTING)
+
+    state = MinithesisState(Random(0), tf, 1)
+    state.test_function(TC.for_choices([0.123456789]))
+    assert state.result is not None
+    state.shrink()
+    v = state.result[0].value
+    assert 0.001 < v < 0.5
+
+
 def test_draw_unbounded_float_rejects_nan():
     """_draw_unbounded_float rejects NaN via rejection sampling."""
     rnd = Random(0)

@@ -338,6 +338,13 @@ def _shrink_float(
         exp_part, frac_part, int_part, _ = _parse_float_string(current[0])
 
     if frac_part and frac_part != "0":
+        # Try rounding up to remove the fraction entirely.
+        # e.g. 1.1 -> 2.0, which may be simpler by sort key.
+        try_positive(float(int(int_part) + 1))
+        current[0] = abs(current[0])
+        exp_part, frac_part, int_part, _ = _parse_float_string(current[0])
+
+    if frac_part and frac_part != "0":
         reversed_frac = int(frac_part[::-1])
         reversed_frac = shrink_by_tens(
             reversed_frac,

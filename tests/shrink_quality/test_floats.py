@@ -14,7 +14,6 @@ from .conftest import minimal
 pytestmark = [pytest.mark.requires("floats"), pytest.mark.requires("collections")]
 
 
-@pytest.mark.xfail(reason="float shrinker doesn't find round numbers")
 def test_shrinks_to_simple_float_above_1():
     assert minimal(floats(allow_nan=False), lambda x: x > 1.0) == 2.0
 
