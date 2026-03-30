@@ -9,6 +9,12 @@ test-core:
     MINITHESIS_DISABLED=collections uv run pytest tests/ -m 'not hypothesis' --verbose
     MINITHESIS_DISABLED=targeting uv run pytest tests/ -m 'not hypothesis' --verbose
 
+compile:
+    uv run python tools/compile_minithesis.py
+
+test-compiled: compile
+    uv run pytest tests/ -m 'not hypothesis' --override-ini='pythonpath=build/pkg' --verbose
+
 typecheck:
     uv run pyright src/
 
