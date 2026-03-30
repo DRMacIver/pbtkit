@@ -22,7 +22,7 @@ from minithesis.core import (
 from minithesis.core import MinithesisState as State
 from minithesis.core import TestCase as TC
 from minithesis.database import DirectoryDB
-from minithesis.generators import booleans, integers, one_of
+from minithesis.generators import booleans, integers, lists, one_of
 
 
 @pytest.mark.parametrize("seed", range(10))
@@ -297,3 +297,18 @@ def test_shrinking_stale_indices_no_redistribute_crash():
     state = State(Random(0), tf, 500)
     state.run()
     assert state.result is not None
+
+
+@pytest.mark.requires("collections")
+def test_sorting_pass_survives_type_changes_from_lists():
+    """Sorting insertion-sort must not crash when a successful swap
+    changes the result so that choice types at pre-computed indices
+    shift. Regression for AssertionError in sorting.py found by minismith."""
+
+    with pytest.raises(AssertionError):
+
+        @run_test(max_examples=1, database={}, quiet=True, random=Random(0))
+        def _(tc):
+            v0 = tc.any(lists(booleans(), max_size=10))
+            v1 = tc.any(lists(integers(0, 0), max_size=10))
+            assert len(v0) == len(v1)

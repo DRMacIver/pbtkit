@@ -57,10 +57,15 @@ def _try_sort_group(
         while j > 0:
             idx_j = indices[j]
             idx_prev = indices[j - 1]
-            assert idx_j < len(state.result)
-            assert idx_prev < len(state.result)
-            assert type(state.result[idx_j].kind) == choice_type
-            assert type(state.result[idx_prev].kind) == choice_type
+            # After a successful replace the result may have changed
+            # length or types. Bail out if our indices are stale.
+            if (
+                idx_j >= len(state.result)
+                or idx_prev >= len(state.result)
+                or type(state.result[idx_j].kind) != choice_type
+                or type(state.result[idx_prev].kind) != choice_type
+            ):
+                break
             if state.result[idx_prev].sort_key <= state.result[idx_j].sort_key:
                 break
             if state.replace(
