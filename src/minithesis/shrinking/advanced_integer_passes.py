@@ -30,55 +30,54 @@ def _integer_indices(state: MinithesisState) -> list[int]:
 
 @shrink_pass
 def lower_and_bump_adjacent(state: MinithesisState) -> None:
-    """For adjacent IntegerChoice pairs where the first is > 0,
-    try subtracting 1 from it and bumping the next. First runs
-    the decrement alone to discover the max_value of the next
-    node's kind in the new context, then tries the boundary.
+    """For IntegerChoice pairs where the first is > 0,
+    try subtracting 1 from it and bumping a later integer. First runs
+    the decrement alone to discover the kind of the later node in the
+    new context, then tries the boundary and powers of 2.
 
     Value punning in _make_choice handles the case where decrementing
     changes the type at position j (e.g., one_of branch switch)."""
     assert state.result is not None
-    # Recompute indices each iteration so we never use stale
-    # positions after a successful replace changes the result.
-    idx = 0
-    while idx < len(_integer_indices(state)) - 1:
-        indices = _integer_indices(state)
-        i = indices[idx]
-        j = indices[idx + 1]
-        if state.result[i].value <= 0:
-            idx += 1
-            continue
-        new_i = state.result[i].value - 1
-        # Run the decrement to observe the kind at position j.
-        attempt = list(state.result)
-        attempt[i] = attempt[i].with_value(new_i)
-        tc = TestCase.for_choices([n.value for n in attempt], prefix_nodes=attempt)
-        state.test_function(tc)
-        assert tc.status is not None
-        if j < len(tc.nodes):
-            kind_j = tc.nodes[j].kind
-            if isinstance(kind_j, IntegerChoice):
-                # Try the boundary value directly.
-                state.replace({i: new_i, j: kind_j.max_value})
-        # Try bumping from current value by powers of 2.
-        bump = 1
-        found = False
-        while bump <= 256 and j < len(state.result):
-            new_j = state.result[j].value + bump
-            if state.replace({i: new_i, j: new_j}):
-                found = True
-                break
-            bump *= 2
-        # If bumps from current value didn't work (e.g. range changed
-        # and current+bump is always out of range), try absolute powers
-        # of 2 to explore the new range.
-        if not found:
+    indices = _integer_indices(state)
+    for gap in range(1, min(len(indices), 8)):
+        idx = 0
+        while idx < len(_integer_indices(state)) - gap:
+            indices = _integer_indices(state)
+            i = indices[idx]
+            j = indices[idx + gap]
+            if state.result[i].value <= 0:
+                idx += 1
+                continue
+            new_i = state.result[i].value - 1
+            # Run the decrement to observe the kind at position j.
+            attempt = list(state.result)
+            attempt[i] = attempt[i].with_value(new_i)
+            tc = TestCase.for_choices([n.value for n in attempt], prefix_nodes=attempt)
+            state.test_function(tc)
+            assert tc.status is not None
+            if j < len(tc.nodes):
+                kind_j = tc.nodes[j].kind
+                if isinstance(kind_j, IntegerChoice):
+                    state.replace({i: new_i, j: kind_j.max_value})
+            # Try bumping from current value by powers of 2.
             bump = 1
+            found = False
             while bump <= 256 and j < len(state.result):
-                if state.replace({i: new_i, j: bump}):
+                new_j = state.result[j].value + bump
+                if state.replace({i: new_i, j: new_j}):
+                    found = True
                     break
                 bump *= 2
-        idx += 1
+            # If bumps from current value didn't work (e.g. range changed
+            # and current+bump is always out of range), try absolute powers
+            # of 2 to explore the new range.
+            if not found:
+                bump = 1
+                while bump <= 256 and j < len(state.result):
+                    if state.replace({i: new_i, j: bump}):
+                        break
+                    bump *= 2
+            idx += 1
 
 
 @shrink_pass

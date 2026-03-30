@@ -466,14 +466,16 @@ def test_bytes_increment_shortens_sequence():
 
 @pytest.mark.requires("collections")
 def test_lower_and_bump_explores_new_range():
-    """When decrementing an integer changes the range of a later integer,
-    lower_and_bump_adjacent should explore the new range via absolute
-    power-of-2 values, not just bump from the (now out-of-range) current value.
+    """When decrementing an integer changes the range of a non-adjacent
+    later integer, lower_and_bump should explore the new range via
+    absolute power-of-2 values at various gaps.
     Regression for shrink quality found by minismith."""
 
     def tf(tc):
         v0 = tc.any(sampled_from([32, 46]))
+        v1 = tc.any(sampled_from([32, 46]))
         v2 = tc.any(integers(-abs(v0) - 1, abs(v0) + 1))
+        v3 = tc.any(integers(-abs(v2) - 1, abs(v2) + 1))
         if v2 == v0:
             tc.mark_status(Status.INTERESTING)
 
@@ -481,7 +483,7 @@ def test_lower_and_bump_explores_new_range():
     state.run()
     assert state.result is not None
     values = [n.value for n in state.result]
-    assert values == [0, 32]
+    assert values == [0, 0, 32, 0]
 
 
 def test_bind_deletion_valid_but_not_shorter():
