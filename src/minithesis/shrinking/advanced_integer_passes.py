@@ -62,6 +62,11 @@ def lower_and_bump_adjacent(state: MinithesisState) -> None:
                 # decrement) plus the remaining original nodes (to
                 # provide choices for subsequent draws).
                 tail = list(state.result[j + 1 :])
+                # Try the simplest value for the new kind at position j.
+                probe_attempt = list(tc.nodes[: j + 1]) + tail
+                probe_attempt[j] = probe_attempt[j].with_value(kind_j.simplest)
+                state.consider(probe_attempt)
+                # For integer/boolean, also try the non-simplest direction.
                 if isinstance(kind_j, IntegerChoice):
                     probe_attempt = list(tc.nodes[: j + 1]) + tail
                     probe_attempt[j] = probe_attempt[j].with_value(kind_j.max_value)

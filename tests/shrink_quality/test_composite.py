@@ -195,6 +195,20 @@ def test_shorter_path_via_later_assertion():
     assert len(result[1]) == 0
 
 
+def test_one_of_branch_switch_to_float():
+    """When one_of(floats(), booleans()) starts at branch=1 (booleans),
+    switching to branch=0 (floats) is simpler but requires replacing
+    the boolean value with a valid float. Found by shrink comparison test."""
+    result = minimal(
+        one_of(floats(allow_nan=False, allow_infinity=False), booleans()),
+        lambda _: True,
+    )
+    # Branch 0 (floats) with simplest value 0.0 is simpler than
+    # branch 1 (booleans) with simplest value False.
+    assert isinstance(result, float)
+    assert result == 0.0
+
+
 def test_shorter_path_when_guard_precedes_expensive_draw():
     """A guard check (v0 > 0) comes after a cheap draw but before an
     expensive draw (a list). When v0=1 triggers the guard, the expensive
