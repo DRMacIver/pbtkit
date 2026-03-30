@@ -25,3 +25,5 @@ typecheck:
 format:
     uv run ruff format src/ tests/
     uv run ruff check --fix src/ tests/
+
+check: typecheck test
