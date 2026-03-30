@@ -15,11 +15,16 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 from minithesis.core import (
+    ChoiceNode,
     MinithesisState,
     Status,
     TestCase,
     run_phase,
 )
+
+# Sentinel key for storing the ChoiceType at each trie node.
+# Cannot collide with choice values (which are ints, bools, etc.).
+_KIND = object()
 
 
 class CachedTestFunction:
@@ -48,29 +53,41 @@ class CachedTestFunction:
         # do that here.
         self.tree: dict[Any, Status | dict[Any, Any]] = {}
 
-    def lookup(self, choices: Sequence[Any]) -> Status | None:
+    def lookup(self, choices: Sequence[Any]) -> tuple[Status, list[ChoiceNode]] | None:
         """Check if the outcome can be predicted from the cache.
-        Returns the Status if known, or None on cache miss."""
+        Returns (Status, nodes) if known, or None on cache miss.
+        The nodes list reconstructs the ChoiceNode sequence from
+        stored kind information."""
         node: Any = self.tree
+        nodes: list[ChoiceNode] = []
         try:
             for c in choices:
+                # Read the kind stored at this trie level.
+                kind = node.get(_KIND)
+                if kind is not None:
+                    nodes.append(ChoiceNode(kind, c, False))
                 node = node[c]
                 # mark_status was called at this point, so future
                 # choices are irrelevant.
                 if isinstance(node, Status):
                     assert node != Status.EARLY_STOP
-                    return node
+                    return (node, nodes)
             # All choices consumed but more would be needed — overrun.
-            return Status.EARLY_STOP
+            return (Status.EARLY_STOP, nodes)
         except KeyError:
             return None
 
     def record(self, test_case: TestCase) -> None:
-        """Record the outcome of a test case in the cache tree."""
+        """Record the outcome of a test case in the cache tree.
+
+        Stores the ChoiceType (kind) at each trie level so that
+        lookup can reconstruct ChoiceNode objects on cache hit."""
         assert test_case.status is not None
         node: Any = self.tree
         for i, choice_node in enumerate(test_case.nodes):
             c = choice_node.value
+            # Store the kind for this position on the current node.
+            node[_KIND] = choice_node.kind
             if i + 1 < len(test_case.nodes) or test_case.status == Status.EARLY_STOP:
                 try:
                     existing = node[c]
@@ -88,9 +105,9 @@ class CachedTestFunction:
         """Look up choices in the cache, calling the test function
         on cache miss. Requires test_function to have been passed
         to __init__."""
-        status = self.lookup(choices)
-        if status is not None:
-            return status
+        result = self.lookup(choices)
+        if result is not None:
+            return result[0]
         assert self._test_function is not None
         test_case = TestCase.for_choices(choices)
         self._test_function(test_case)
@@ -114,9 +131,10 @@ def cached_test_function(fn: Callable) -> Callable:
         # must always run the real test function.
         if cache is None or test_case._random is not None:
             return fn(self, test_case)
-        status = cache.lookup(list(test_case.prefix))
-        if status is not None:
-            test_case.status = status
+        result = cache.lookup(list(test_case.prefix))
+        if result is not None:
+            test_case.status = result[0]
+            test_case.nodes = result[1]
             return
         fn(self, test_case)
         assert test_case.status is not None

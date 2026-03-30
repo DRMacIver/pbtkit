@@ -333,3 +333,19 @@ def test_sorting_full_sort_survives_stale_indices():
                     raise AssertionError
     except AssertionError:
         pass
+
+
+def test_bind_deletion_valid_but_not_shorter():
+    """bind_deletion must correctly detect when a replacement produces
+    a VALID test case that isn't shorter (no excess choices to delete).
+    This requires the cache to populate test_case.nodes on hit."""
+
+    def tf(tc):
+        n = tc.draw_integer(0, 10)
+        vals = [tc.draw_integer(0, 100) for _ in range(n)]
+        if sum(vals) > 200:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 2000)
+    state.run()
+    assert state.result is not None
