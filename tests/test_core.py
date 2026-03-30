@@ -58,6 +58,7 @@ def test_finds_small_list_even_with_bad_lists(capsys, seed):
     assert captured.out.strip() == "any(bad_list): [1001]"
 
 
+@pytest.mark.requires("shrinking.advanced_integer_passes")
 def test_reduces_additive_pairs(capsys):
 
     with pytest.raises(AssertionError):

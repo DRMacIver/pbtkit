@@ -52,8 +52,19 @@ class _DisabledModule(types.ModuleType):
 
 
 def disable_modules(modules: frozenset[str]) -> None:
-    """Poison sys.modules entries for the given module names."""
+    """Poison sys.modules entries for the given module names.
+
+    For dotted names (e.g. "shrinking.advanced_integer_passes"),
+    also creates dummy entries for parent packages so that
+    ``import minithesis.shrinking.advanced_integer_passes``
+    finds the poisoned leaf rather than failing on the parent."""
     for name in modules:
+        parts = name.split(".")
+        for i in range(1, len(parts)):
+            parent = ".".join(parts[:i])
+            parent_full = f"minithesis.{parent}"
+            if parent_full not in sys.modules:
+                sys.modules[parent_full] = _DisabledModule(parent, parent_full)
         full = f"minithesis.{name}"
         sys.modules[full] = _DisabledModule(name, full)
 

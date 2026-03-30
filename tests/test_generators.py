@@ -256,6 +256,7 @@ def test_composite_with_args():
         assert 0 <= n <= 5
 
 
+@pytest.mark.requires("shrinking.advanced_integer_passes")
 def test_composite_shrinks(capsys):
     @composite
     def pairs(tc):

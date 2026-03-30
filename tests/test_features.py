@@ -40,3 +40,18 @@ def test_disable_modules():
     assert full in sys.modules
     assert isinstance(sys.modules[full], _DisabledModule)
     del sys.modules[full]
+
+
+def test_disable_dotted_modules():
+    disable_modules(frozenset(["_test_pkg._test_sub"]))
+    assert "minithesis._test_pkg" in sys.modules
+    assert isinstance(sys.modules["minithesis._test_pkg"], _DisabledModule)
+    assert "minithesis._test_pkg._test_sub" in sys.modules
+    assert isinstance(sys.modules["minithesis._test_pkg._test_sub"], _DisabledModule)
+    # Disabling a second child under the same parent should not
+    # overwrite the existing parent entry.
+    disable_modules(frozenset(["_test_pkg._test_other"]))
+    assert "minithesis._test_pkg._test_other" in sys.modules
+    del sys.modules["minithesis._test_pkg._test_other"]
+    del sys.modules["minithesis._test_pkg._test_sub"]
+    del sys.modules["minithesis._test_pkg"]

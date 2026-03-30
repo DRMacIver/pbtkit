@@ -91,5 +91,6 @@ __all__ = [
 import minithesis.bytes
 import minithesis.database
 import minithesis.floats
+import minithesis.shrinking.advanced_integer_passes
 import minithesis.targeting
 import minithesis.text

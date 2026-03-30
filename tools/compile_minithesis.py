@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src" / "minithesis"
 BUILD = ROOT / "build"
 
-EXTENSIONS = ["database", "bytes", "floats", "text", "collections", "targeting"]
+EXTENSIONS = ["database", "bytes", "floats", "text", "collections", "targeting", "shrinking.advanced_integer_passes"]
 
 HEADER = """\
 # Compiled minithesis — generated from the modular source.
@@ -368,11 +368,16 @@ def compile_minithesis(disabled: frozenset[str] = frozenset()) -> str:
     """
     extensions = [e for e in EXTENSIONS if e not in disabled]
 
+    def module_path(name: str) -> Path:
+        """Map a module name (possibly dotted) to its source file."""
+        parts = name.split(".")
+        return SRC / "/".join(parts[:-1]) / f"{parts[-1]}.py" if len(parts) > 1 else SRC / f"{name}.py"
+
     # Read and parse all modules
     sources: dict[str, str] = {}
     trees: dict[str, cst.Module] = {}
     for name in ["core", "__init__"] + extensions + ["generators"]:
-        src = (SRC / f"{name}.py").read_text()
+        src = module_path(name).read_text()
         sources[name] = src
         trees[name] = cst.parse_module(src)
 
@@ -380,7 +385,7 @@ def compile_minithesis(disabled: frozenset[str] = frozenset()) -> str:
     all_stub_names: set[str] = set()
     for ext in EXTENSIONS:
         if ext in disabled:
-            src = (SRC / f"{ext}.py").read_text()
+            src = module_path(ext).read_text()
             tree = cst.parse_module(src)
         else:
             tree = trees[ext]
@@ -439,7 +444,8 @@ def _generate_init_py(disabled: frozenset[str]) -> str:
     """Generate the __init__.py for the compiled test package."""
     enabled = [
         e
-        for e in ["database", "floats", "bytes", "text", "collections", "targeting", "generators"]
+        for e in ["database", "floats", "bytes", "text", "collections", "targeting",
+                   "shrinking.advanced_integer_passes", "generators"]
         if e not in disabled
     ]
     disabled_list = sorted(disabled)
@@ -470,9 +476,17 @@ def _generate_init_py(disabled: frozenset[str]) -> str:
     ])
 
     all_names = ["Database", "DirectoryDB", "Generator", "TestCase", "Unsatisfiable", "run_test"]
+    aliased_parents: set[str] = set()
     for name in enabled:
+        # For dotted names, also alias parent packages.
+        parts = name.split(".")
+        for i in range(1, len(parts)):
+            parent = ".".join(parts[:i])
+            if parent not in aliased_parents:
+                lines.append(f'sys.modules["minithesis.{parent}"] = _core')
+                aliased_parents.add(parent)
         lines.append(f'sys.modules["minithesis.{name}"] = _core')
-        lines.append(f'setattr(_pkg, "{name}", _core)')
+        lines.append(f'setattr(_pkg, "{parts[0]}", _core)')
 
     if disabled_list:
         lines.append("")
