@@ -203,8 +203,7 @@ def try_shortening_via_increment(state: MinithesisState) -> None:
             )
             state.test_function(tc_zeroed)
             # Also try with position i+1 set to 1/True, which handles
-            # one_of branch switches where the continuation kind changes
-            # (e.g. IntegerChoice→BooleanChoice that needs True).
+            # one_of branch switches where the continuation kind changes.
             if i + 1 < len(attempt):
                 one_fill = list(zeroed)
                 one_fill[i + 1] = one_fill[i + 1].with_value(1)
