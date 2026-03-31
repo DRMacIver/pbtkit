@@ -107,21 +107,24 @@ def lower_and_bump(state: MinithesisState) -> None:
                     if state.result[j].kind.validate(fv):
                         state.replace({i: new_i, j: fv})
             # For StringChoice/BytesChoice targets, try unit and max-length.
-            if j < len(state.result) and isinstance(
-                state.result[j].kind, (StringChoice, BytesChoice)
-            ):
+            # Re-check kind before each attempt since replace may change
+            # the result structure.
+            for _ in range(2):
+                assert j < len(state.result)
                 kind_t = state.result[j].kind
-                state.replace({i: new_i, j: kind_t.unit})
-                # Try max-length to absorb capacity from the source.
                 if isinstance(kind_t, BytesChoice):
+                    state.replace({i: new_i, j: kind_t.unit})
                     state.replace({i: new_i, j: b"\x00" * kind_t.max_size})
-                if isinstance(kind_t, StringChoice):
+                elif isinstance(kind_t, StringChoice):
+                    state.replace({i: new_i, j: kind_t.unit})
                     state.replace(
                         {
                             i: new_i,
                             j: chr(kind_t.min_codepoint) * kind_t.max_size,
                         }
                     )
+                else:
+                    break
             # Try bumping from current value by powers of 2.
             # Skip bumping for BytesChoice/StringChoice targets since
             # integer arithmetic doesn't apply.
