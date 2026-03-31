@@ -634,6 +634,41 @@ def test_increment_with_dependent_continuation():
     assert len(state.result) == 5
 
 
+@pytest.mark.requires("bytes")
+def test_redistribute_bytes_between_pairs():
+    """When two bytes values share a total length constraint, the shrinker
+    should redistribute to make the first empty and the second full.
+    Regression for shrink quality found by minismith."""
+
+    def tf(tc):
+        v0 = tc.any(binary(max_size=20))
+        v1 = tc.any(binary(max_size=20))
+        if len(v0) + len(v1) >= 20:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 1000)
+    state.run()
+    assert state.result is not None
+    bytes_values = [n.value for n in state.result if isinstance(n.kind, BytesChoice)]
+    # First bytes should be empty, second should carry all the length.
+    assert bytes_values[0] == b""
+
+
+@pytest.mark.requires("bytes")
+def test_redistribute_bytes_respects_max_size():
+    """redistribute_bytes must skip transfers that exceed max_size."""
+
+    def tf(tc):
+        v0 = tc.any(binary(min_size=5, max_size=10))
+        v1 = tc.any(binary(max_size=8))
+        if len(v0) + len(v1) >= 15:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 1000)
+    state.run()
+    assert state.result is not None
+
+
 def test_bind_deletion_valid_but_not_shorter():
     """bind_deletion must correctly detect when a replacement produces
     a VALID test case that isn't shorter (no excess choices to delete).
