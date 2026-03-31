@@ -669,6 +669,39 @@ def test_redistribute_bytes_respects_max_size():
     assert state.result is not None
 
 
+@pytest.mark.requires("text")
+def test_string_sorts_characters_when_possible():
+    """String shrinking should sort characters by codepoint.
+    Sorting '0e0' produces '00e' (smaller codepoints first)."""
+
+    def tf(tc):
+        v0 = tc.any(text(min_codepoint=32, max_codepoint=126, max_size=20))
+        if len(v0) >= 3 and "e" in v0:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 1000)
+    state.run()
+    assert state.result is not None
+    assert state.result[0].value == "00e"
+
+
+@pytest.mark.requires("bytes")
+def test_bytes_sorts_when_order_matters():
+    """Bytes shrinking should sort bytes when the test depends on order."""
+
+    def tf(tc):
+        v0 = tc.any(binary(min_size=3, max_size=3))
+        # Only interesting if the bytes are NOT already sorted but contain 0x01.
+        if b"\x01" in v0 and v0 != bytes(sorted(v0)):
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 1000)
+    state.run()
+    # Sorting would make v0 sorted, which violates the condition.
+    # So the swap should fail, covering the failure branch.
+    assert state.result is not None
+
+
 def test_bind_deletion_valid_but_not_shorter():
     """bind_deletion must correctly detect when a replacement produces
     a VALID test case that isn't shorter (no excess choices to delete).

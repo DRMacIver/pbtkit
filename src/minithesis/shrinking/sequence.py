@@ -60,3 +60,20 @@ def shrink_sequence(
                 element_value(v, j),
                 lambda e: tracking_replace(replace_element(current[0], j, e)),
             )
+    # Try sorting elements by swapping adjacent pairs (insertion sort).
+    for pos in range(1, len(current[0])):
+        j = pos
+        while j > 0:
+            v = current[0]
+            assert j < len(v)
+            if element_value(v, j - 1) <= element_value(v, j):
+                break
+            swapped = replace_element(
+                replace_element(v, j - 1, element_value(v, j)),
+                j,
+                element_value(v, j - 1),
+            )
+            if tracking_replace(swapped):
+                j -= 1
+            else:
+                break
