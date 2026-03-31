@@ -85,6 +85,12 @@ def lower_and_bump(state: MinithesisState) -> None:
             tc = TestCase.for_choices([n.value for n in attempt], prefix_nodes=attempt)
             state.test_function(tc)
             assert tc.status is not None
+            # Also try the decrement with everything after i zeroed.
+            zeroed = list(attempt)
+            for k in range(i + 1, len(zeroed)):
+                zeroed[k] = zeroed[k].with_value(zeroed[k].kind.simplest)
+            tc_z = TestCase.for_choices([n.value for n in zeroed], prefix_nodes=zeroed)
+            state.test_function(tc_z)
             if j < len(tc.nodes) and j < len(state.result):
                 kind_j = tc.nodes[j].kind
                 # Only try boundary values when the kind at j matches
