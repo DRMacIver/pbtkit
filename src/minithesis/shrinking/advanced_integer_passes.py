@@ -53,9 +53,7 @@ def lower_and_bump(state: MinithesisState) -> None:
                 continue
             # Decrement: try the previous value in index order.
             new_val = kind_i.from_index(current_idx - 1)
-            if new_val is None:
-                idx += 1
-                continue
+            assert new_val is not None
             # Find the bump target: the gap'th indexed node after i.
             indices = _indexed_indices(state)
             targets_after_i = [k for k in indices if k > i]
@@ -66,45 +64,38 @@ def lower_and_bump(state: MinithesisState) -> None:
             # Run the decrement to observe the kind at position j.
             attempt = list(state.result)
             attempt[i] = attempt[i].with_value(new_val)
-            tc = TestCase.for_choices(
-                [n.value for n in attempt], prefix_nodes=attempt
-            )
+            tc = TestCase.for_choices([n.value for n in attempt], prefix_nodes=attempt)
             state.test_function(tc)
             assert tc.status is not None
             # Also try the decrement with everything after i zeroed.
             zeroed = list(attempt)
             for k in range(i + 1, len(zeroed)):
                 zeroed[k] = zeroed[k].with_value(zeroed[k].kind.simplest)
-            tc_z = TestCase.for_choices(
-                [n.value for n in zeroed], prefix_nodes=zeroed
-            )
+            tc_z = TestCase.for_choices([n.value for n in zeroed], prefix_nodes=zeroed)
             state.test_function(tc_z)
             # Try bumping the target by index offsets.
             if j < len(state.result) and state.result[j].kind.supports_index:
                 kind_j = state.result[j].kind
                 target_idx = kind_j.to_index(state.result[j].value)
-                # Try small index increments (powers of 2).
-                for delta in [1, 2, 4, 8, 16, 32, 64, 128, 256]:
-                    bumped = kind_j.from_index(target_idx + delta)
+                # Try index increments: powers of 2 from current position.
+                bump = 1
+                while bump <= 256:
+                    bumped = kind_j.from_index(target_idx + bump)
                     if bumped is not None:
-                        state.replace({i: new_val, j: bumped})
-                # Try absolute indices: 0 (simplest), max, and powers
-                # of 2 to cover the index space sparsely.
-                for abs_idx in [0, kind_j.max_index]:
+                        if state.replace({i: new_val, j: bumped}):
+                            break
+                    bump *= 2
+                # Try simplest, max, and powers-of-2 absolute indices.
+                abs_probes = [0, kind_j.max_index]
+                p = 1
+                for _ in range(10):
+                    abs_probes.append(p)
+                    abs_probes.append(p - 1)
+                    p *= 2
+                for abs_idx in abs_probes:
                     v = kind_j.from_index(abs_idx)
                     if v is not None:
                         state.replace({i: new_val, j: v})
-                # Probe with powers of 2 (and p-1 to catch zigzag
-                # boundaries). Cap at 10 iterations.
-                p = 1
-                for _ in range(10):
-                    if p > kind_j.max_index:
-                        break
-                    for idx in [p, p - 1]:
-                        v = kind_j.from_index(idx)
-                        if v is not None:
-                            state.replace({i: new_val, j: v})
-                    p *= 2
             idx += 1
 
 
@@ -164,9 +155,9 @@ def try_shortening_via_increment(state: MinithesisState) -> None:
         current_idx = kind.to_index(node.value)
         # Generate candidates by incrementing the index.
         candidates = []
-        for target_idx in [
-            current_idx + d for d in [1, 2, 3, 4, 5, 10, 50, 100]
-        ] + [kind.max_index]:
+        for target_idx in [current_idx + d for d in [1, 2, 3, 4, 5, 10, 50, 100]] + [
+            kind.max_index
+        ]:
             v = kind.from_index(target_idx)
             if v is not None and v != node.value and v not in candidates:
                 candidates.append(v)

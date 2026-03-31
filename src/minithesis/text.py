@@ -65,8 +65,15 @@ class StringChoice(ChoiceType[str]):
         # the last character to the second-simplest codepoint.
         # Otherwise, a single character of the second-simplest codepoint.
         # The second-simplest codepoint is '1' (key 1) for ASCII ranges.
-        second_cp = _key_to_codepoint(1) if self.min_codepoint <= _key_to_codepoint(1) <= self.max_codepoint else self.min_codepoint
-        if second_cp == _key_to_codepoint(0) and self.min_codepoint == self.max_codepoint:
+        second_cp = (
+            _key_to_codepoint(1)
+            if self.min_codepoint <= _key_to_codepoint(1) <= self.max_codepoint
+            else self.min_codepoint
+        )
+        if (
+            second_cp == _key_to_codepoint(0)
+            and self.min_codepoint == self.max_codepoint
+        ):
             # Single-codepoint alphabet
             if self.min_size < self.max_size:
                 return chr(self.min_codepoint) * (self.min_size + 1)
@@ -94,9 +101,12 @@ class StringChoice(ChoiceType[str]):
     @property
     def max_index(self) -> int:
         alpha_size = self._alpha_size
-        return sum(
-            alpha_size**length for length in range(self.min_size, self.max_size + 1)
-        ) - 1
+        return (
+            sum(
+                alpha_size**length for length in range(self.min_size, self.max_size + 1)
+            )
+            - 1
+        )
 
     @property
     def _alpha_size(self) -> int:
@@ -161,16 +171,13 @@ class StringChoice(ChoiceType[str]):
         # Skip past surrogates.
         if c >= 0xD800:
             c += 0xDFFF - 0xD800 + 1
-        if c > self.max_codepoint:
-            return self.min_codepoint  # shouldn't happen for valid rank
+        assert c <= self.max_codepoint
         return c
 
     def to_index(self, value: str) -> int:
         """Shortlex index using mapped codepoint alphabet."""
         alpha_size = self._alpha_size
-        offset = sum(
-            alpha_size**length for length in range(self.min_size, len(value))
-        )
+        offset = sum(alpha_size**length for length in range(self.min_size, len(value)))
         position = 0
         for ch in value:
             position = position * alpha_size + self._codepoint_rank(ord(ch))
@@ -179,8 +186,7 @@ class StringChoice(ChoiceType[str]):
     def from_index(self, index: int) -> str | None:
         """Inverse of shortlex index."""
         alpha_size = self._alpha_size
-        if alpha_size == 0:
-            return "" if index == 0 and self.min_size == 0 else None
+        assert alpha_size > 0
         remaining = index
         for length in range(self.min_size, self.max_size + 1):
             bucket_size = alpha_size**length

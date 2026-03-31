@@ -101,6 +101,23 @@ def test_draw_string_invalid_range():
         tc.draw_string(min_codepoint=200, max_codepoint=100)
 
 
+def test_string_single_codepoint_unit():
+    """StringChoice with a single codepoint returns sensible unit."""
+    # Single codepoint '0' (the simplest in key order), variable length.
+    kind = StringChoice(48, 48, 0, 5)
+    assert kind.unit == "0"  # one char longer
+    assert kind.simplest == ""
+
+    # Single codepoint '0', fixed length → unit == simplest (degenerate).
+    kind2 = StringChoice(48, 48, 2, 2)
+    assert kind2.unit == kind2.simplest
+
+    # Single codepoint 'A' — second_cp is 'A' itself (not '0'), handled
+    # by the general path.
+    kind3 = StringChoice(65, 65, 0, 5)
+    assert kind3.unit == "A"
+
+
 def test_string_validate():
     """StringChoice.validate rejects non-strings and wrong sizes."""
     kind = StringChoice(32, 126, 1, 5)

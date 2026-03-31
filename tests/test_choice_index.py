@@ -4,9 +4,9 @@ import math
 import struct
 
 import pytest
+
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
-
 from minithesis.bytes import BytesChoice
 from minithesis.core import BooleanChoice, IntegerChoice
 from minithesis.text import StringChoice

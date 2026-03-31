@@ -81,9 +81,7 @@ def mutate_and_shrink(state: MinithesisState) -> None:
                 if unit_val is None:
                     continue
                 two_prefix = prefix + [
-                    unit_val
-                    if k == j
-                    else state.result[k].kind.simplest
+                    unit_val if k == j else state.result[k].kind.simplest
                     for k in range(i + 1, j + 1)
                 ]
                 for attempt in range(RANDOM_ATTEMPTS):
