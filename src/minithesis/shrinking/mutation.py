@@ -64,12 +64,14 @@ def mutate_and_shrink(state: MinithesisState) -> None:
         if not isinstance(node.value, int):
             i += 1
             continue
-        # Try both incrementing and decrementing.
+        # Try small offsets (±1 through ±5) to cover different
+        # modular residues and nearby branch switches.
         candidates = []
-        if node.kind.validate(node.value + 1):
-            candidates.append(node.value + 1)
-        if node.kind.validate(node.value - 1):
-            candidates.append(node.value - 1)
+        for delta in range(1, 6):
+            for sign in [1, -1]:
+                v = node.value + delta * sign
+                if node.kind.validate(v) and v not in candidates:
+                    candidates.append(v)
         for new_val in candidates:
             prefix = [n.value for n in state.result[:i]] + [new_val]
             # Probe with simplest continuation to discover downstream kinds.
