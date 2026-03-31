@@ -351,28 +351,63 @@ def _shrink_float(
     value: float,
     try_replace: Callable[[float], bool],
 ) -> None:
-    """Shrink a float choice using index-based binary search.
+    """Shrink a float choice toward simplest.
 
-    Tries simplest first, then binary searches the index toward 0.
-    The index encodes (exponent_rank, mantissa, sign) so binary
-    search naturally tries simpler exponents, smaller mantissas,
-    and positive signs."""
+    Tries simplest, special value transitions, sign flip, exponent
+    reduction, then mantissa binary search within exponent band."""
     # Try simplest first.
     try_replace(kind.simplest)
 
-    # If negative (or -0.0), try flipping sign.
+    # Step 1: Replace special values with simpler ones.
+    if math.isnan(value):
+        for v in [0.0, math.inf, -math.inf]:
+            try_replace(v)
+        return
+    if math.isinf(value):
+        if value < 0:
+            try_replace(math.inf)
+        # Try largest finite value.
+        import sys
+
+        try_replace(sys.float_info.max if value > 0 else -sys.float_info.max)
+
+    # Step 2: If negative (or -0.0), try flipping sign.
     if value < 0 or math.copysign(1.0, value) < 0:
         try_replace(-value)
 
-    # Binary search the index toward 0.
-    current_idx = kind.to_index(value)
-    if current_idx <= 0:
+    if not math.isfinite(value):
         return
-    bin_search_down(
-        0,
-        current_idx,
-        lambda idx: (v := kind.from_index(idx)) is not None and try_replace(v),
-    )
+
+    # Step 3: Try reducing the exponent (trying smaller powers of 2
+    # with the same sign).
+    bits = struct.unpack("!Q", struct.pack("!d", value))[0]
+    sign = bits >> 63
+    biased_exp = (bits >> 52) & 0x7FF
+    mantissa = bits & ((1 << 52) - 1)
+
+    # Try mantissa=0 at smaller exponents (binary search on biased_exp
+    # toward 1023 which is exp 0).
+    if biased_exp != 1023:
+        target = 1023
+        lo_exp, hi_exp = min(biased_exp, target), max(biased_exp, target)
+        bin_search_down(
+            lo_exp,
+            hi_exp,
+            lambda e: try_replace(
+                struct.unpack("!d", struct.pack("!Q", (sign << 63) | (e << 52)))[0]
+            ),
+        )
+
+    # Step 4: Binary search the mantissa toward 0 within current exponent.
+    # Re-read current value since prior steps may have changed it.
+    base_bits = (sign << 63) | (biased_exp << 52)
+
+    def try_mantissa(m: int) -> bool:
+        v = struct.unpack("!d", struct.pack("!Q", base_bits | m))[0]
+        return kind.validate(v) and try_replace(v)
+
+    try_mantissa(0)
+    bin_search_down(0, mantissa, try_mantissa)
 
 
 # ---------------------------------------------------------------------------
