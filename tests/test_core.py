@@ -841,6 +841,27 @@ def test_string_length_redistribution():
     assert v0_len == 10
 
 
+@pytest.mark.requires("bytes")
+def test_bytes_length_redistribution():
+    """When two bytes values share a total length constraint, the shrinker
+    should redistribute to make the first as short as possible.
+    Parallel test to test_string_length_redistribution — bytes and strings
+    share the same shrinking infrastructure and often have the same bugs."""
+
+    def tf(tc):
+        v0 = tc.any(binary(max_size=20))
+        v1 = tc.any(binary(max_size=20))
+        if len(v0) + len(v1) >= 30:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 100)
+    state.run()
+    assert state.result is not None
+    v0_len = len(state.result[0].value)
+    # Optimal: v0 as short as possible (10 bytes, since v1 max is 20).
+    assert v0_len == 10
+
+
 @pytest.mark.requires("collections")
 def test_one_of_switches_to_shorter_branch():
     """When one_of branch 0 (lists) produces a truthy value in 4 choices
