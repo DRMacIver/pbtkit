@@ -728,6 +728,25 @@ def test_lower_and_bump_with_float_target():
 
 
 @pytest.mark.requires("floats")
+@pytest.mark.requires("collections")
+def test_redistribute_stale_indices_with_one_of():
+    """redistribute_integers must handle stale indices when one_of
+    changes the result structure during shrinking.
+    Regression for AssertionError in redistribute found by minismith."""
+
+    def tf(tc):
+        v0 = tc.any(
+            one_of(booleans(), integers(0, 0), integers(2, 2).filter(lambda x: x > 0))
+        )
+        v1 = tc.any(integers(0, 0))
+        if v0:
+            tc.mark_status(Status.INTERESTING)
+
+    # Should not crash.
+    state = State(Random(0), tf, 1000)
+    state.run()
+
+
 def test_lower_and_bump_with_bounded_float_target():
     """lower_and_bump must skip invalid float bump values when the
     float's range doesn't include 1.0 or -1.0."""

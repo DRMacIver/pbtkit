@@ -161,12 +161,10 @@ def redistribute_integers(state: MinithesisState) -> None:
             # Recompute indices since previous iterations may have
             # changed the result structure (e.g. via value punning).
             indices = _integer_indices(state)
-            assert pair_idx - 1 + gap < len(indices)
+            if pair_idx - 1 + gap >= len(indices):
+                continue
             i = indices[pair_idx - 1]
             j = indices[pair_idx - 1 + gap]
-            assert j < len(state.result) and i < len(state.result)
-            assert isinstance(state.result[i].kind, IntegerChoice)
-            assert isinstance(state.result[j].kind, IntegerChoice)
             # Try to redistribute value from i toward j, reducing |i|.
             # Keep the sum constant: when i changes by delta, j changes
             # by -delta.
