@@ -16,6 +16,7 @@ from typing import Any
 
 from minithesis.core import (
     ChoiceType,
+    IntegerChoice,
     TestCase,
     bin_search_down,
     value_shrinker,
@@ -188,6 +189,104 @@ class FloatChoice(ChoiceType[float]):
         if math.isinf(value):
             return (1,) if value > 0 else (2,)
         return (0, _float_string_key(value))
+
+    @property
+    def max_index(self) -> int:
+        # Conservative upper bound. The actual number of representable
+        # floats is ~2^64 but we don't need a tight bound.
+        return 2**64
+
+    def _zigzag_float(self, n: int) -> float:
+        """Convert zigzag index n to a whole-number float.
+        0→0.0, 1→-0.0, 2→1.0, 3→-1.0, 4→2.0, 5→-2.0, ..."""
+        if n == 0:
+            return 0.0
+        if n == 1:
+            return -0.0
+        if n % 2 == 0:
+            return float(n // 2)
+        return -float((n - 1) // 2)
+
+    def _zigzag_index(self, value: float) -> int:
+        """Convert a whole-number float to its zigzag index."""
+        n = int(value)
+        if n == 0:
+            return 0 if math.copysign(1.0, value) > 0 else 1
+        if n > 0:
+            return 2 * n
+        return 2 * (-n) + 1
+
+    def _int_choice(self) -> IntegerChoice:
+        """An IntegerChoice covering the whole numbers in this float range."""
+        lo = math.ceil(self.min_value) if math.isfinite(self.min_value) else -(2**53)
+        hi = math.floor(self.max_value) if math.isfinite(self.max_value) else 2**53
+        return IntegerChoice(lo, hi)
+
+    def to_index(self, value: float) -> int:
+        """Dense index for floats in sort_key order.
+
+        Index 0 is always simplest. Whole-number floats get dense
+        low indices via IntegerChoice zigzag. Non-whole floats and
+        special values get large indices."""
+        s = self.simplest
+        if math.isnan(value):
+            return 2**64 - 1
+        if math.isinf(value):
+            return 2**64 - 3 if value > 0 else 2**64 - 2
+        # Simplest always gets index 0.
+        if value == s and math.copysign(1.0, value) == math.copysign(1.0, s):
+            return 0
+        if value == int(value):
+            ic = self._int_choice()
+            n = int(value)
+            base = ic.to_index(n)
+            has_zero = ic.validate(0)
+            if n == 0 and math.copysign(1.0, value) < 0:
+                base = ic.to_index(0) + 1
+            elif has_zero and n != 0:
+                base += 1  # room for -0.0
+            # If simplest is a non-whole number, it takes slot 0
+            # and everything else shifts up by 1.
+            if s != int(s):
+                base += 1
+            return base
+        # Non-whole-number float (but not simplest): large offset.
+        bits = struct.unpack("!Q", struct.pack("!d", value))[0]
+        return 2**53 + bits
+
+    def from_index(self, index: int) -> float | None:
+        """Dense inverse."""
+        s = self.simplest
+        if index == 2**64 - 1:
+            return float("nan") if self.allow_nan else None
+        if index == 2**64 - 2:
+            return -math.inf if self.allow_infinity else None
+        if index == 2**64 - 3:
+            return math.inf if self.allow_infinity else None
+        if index >= 2**53:
+            bits = index - 2**53
+            if bits >= 2**64:
+                return None
+            value = struct.unpack("!d", struct.pack("!Q", bits))[0]
+            return value if self.validate(value) else None
+        # Index 0 is always simplest.
+        if index == 0:
+            return s
+        ic = self._int_choice()
+        has_zero = ic.validate(0)
+        # If simplest is non-whole, it took slot 0, shift remaining.
+        adj = index - 1 if s != int(s) else index
+        if has_zero:
+            if adj == 0:
+                return 0.0
+            if adj == 1:
+                return -0.0
+            n = ic.from_index(adj - 1)
+        else:
+            n = ic.from_index(adj)
+        if n is not None:
+            return float(n)
+        return None
 
 
 # ---------------------------------------------------------------------------

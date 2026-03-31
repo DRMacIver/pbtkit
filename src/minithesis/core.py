@@ -164,6 +164,9 @@ class IntegerChoice(ChoiceType[int]):
             else:
                 lo = mid + 1
         d = lo
+        total_at_d = min(d, above) + min(d, below)
+        if total_at_d < remaining:
+            return None  # index exceeds total valid values
         # How many values at distances < d?
         before = min(d - 1, above) + min(d - 1, below)
         pos_in_d = remaining - before  # 1 or 2
