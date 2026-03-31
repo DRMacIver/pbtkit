@@ -11,6 +11,7 @@ and register the run phase that activates caching.
 
 from __future__ import annotations
 
+import struct
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -28,11 +29,16 @@ _KIND = object()
 
 
 def _cache_key(value: Any) -> Any:
-    """Return a dict key that distinguishes True, 1, and 1.0.
+    """Return a dict key that distinguishes True, 1, 1.0, -0.0, and NaN variants.
 
     Python considers True == 1 == 1.0 and uses the same hash,
     so a plain dict lookup would collide. We prefix with the
-    type name to prevent this."""
+    type name to prevent this.
+
+    Floats use their exact bit pattern because Python's equality
+    conflates 0.0 and -0.0 (and can't distinguish NaN bit patterns)."""
+    if isinstance(value, float):
+        return ("float", struct.pack("!d", value))
     return (type(value).__name__, value)
 
 

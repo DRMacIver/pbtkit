@@ -7,6 +7,8 @@
 # v. 2.0. If a copy of the MPL was not distributed with this file, You can
 # obtain one at https://mozilla.org/MPL/2.0/.
 
+import math
+import struct
 from random import Random
 
 import pytest
@@ -14,7 +16,7 @@ import pytest
 import minithesis.core as core
 from minithesis import Generator, Unsatisfiable, run_test
 from minithesis.bytes import BytesChoice
-from minithesis.caching import CachedTestFunction
+from minithesis.caching import CachedTestFunction, _cache_key
 from minithesis.core import (
     Frozen,
     IntegerChoice,
@@ -169,8 +171,6 @@ def test_cache_key_distinguishes_negative_zero():
     """_cache_key must distinguish 0.0 from -0.0 even though they are
     equal in Python. Otherwise the cache conflates them and the shrinker
     can't replace -0.0 with 0.0."""
-    from minithesis.caching import _cache_key
-
     assert _cache_key(0.0) != _cache_key(-0.0)
 
 
@@ -178,11 +178,6 @@ def test_cache_key_distinguishes_nan_variants():
     """_cache_key must distinguish different NaN bit patterns, which
     Python considers equal (nan == nan is False, but for dict purposes
     the same object is used)."""
-    import math
-    import struct
-
-    from minithesis.caching import _cache_key
-
     nan1 = float("nan")
     # Create a NaN with a different bit pattern.
     bits = struct.unpack("!Q", struct.pack("!d", nan1))[0] ^ 1
@@ -196,14 +191,6 @@ def test_cache_distinguishes_negative_zero_in_lookup():
     """The cache must store separate entries for 0.0 and -0.0 so that
     looking up a sequence containing 0.0 doesn't return the result
     for a sequence that used -0.0 (or vice versa)."""
-    from minithesis.floats import FloatChoice
-
-    fc = FloatChoice(
-        min_value=float("-inf"),
-        max_value=float("inf"),
-        allow_nan=False,
-        allow_infinity=False,
-    )
 
     def tf(tc):
         v = tc.any(floats(allow_nan=False, allow_infinity=False))
@@ -222,8 +209,6 @@ def test_cache_distinguishes_negative_zero_in_lookup():
     result_neg = cache.lookup([-0.0])
     assert result_pos is not None
     assert result_neg is not None
-    import math
-
     assert math.copysign(1.0, result_pos[1][0].value) == 1.0
     assert math.copysign(1.0, result_neg[1][0].value) == -1.0
 
@@ -953,7 +938,6 @@ def test_negative_zero_shrinks_to_positive_zero():
     sort_key(-0.0). The cache must distinguish them despite 0.0 == -0.0
     in Python.
     Regression for shrink quality found by minismith."""
-    import math
 
     @composite
     def pair(tc):
@@ -981,9 +965,7 @@ def test_negative_zero_shrinks_to_positive_zero():
     assert state.result is not None
     float_val = state.result[5].value
     assert isinstance(float_val, float)
-    assert math.copysign(1.0, float_val) == 1.0, (
-        f"Expected 0.0 but got {float_val!r}"
-    )
+    assert math.copysign(1.0, float_val) == 1.0, f"Expected 0.0 but got {float_val!r}"
 
 
 @pytest.mark.requires("collections")

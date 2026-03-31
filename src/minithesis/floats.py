@@ -311,8 +311,8 @@ def _shrink_float(
     if math.isfinite(kind.max_value):
         try_float(kind.max_value)
 
-    # Step 3: If negative, try flipping sign.
-    if current[0] < 0:
+    # Step 3: If negative (or -0.0), try flipping sign.
+    if current[0] < 0 or math.copysign(1.0, current[0]) < 0:
         try_float(-current[0])
 
     if not math.isfinite(current[0]):
