@@ -32,12 +32,12 @@ def _integer_indices(state: MinithesisState) -> list[int]:
 
 
 def _bumpable_indices(state: MinithesisState) -> list[int]:
-    """Return indices of IntegerChoice and BooleanChoice nodes."""
+    """Return indices of IntegerChoice, BooleanChoice, and FloatChoice nodes."""
     assert state.result is not None
     return [
         i
         for i, node in enumerate(state.result)
-        if isinstance(node.kind, (IntegerChoice, BooleanChoice))
+        if isinstance(node.kind, (IntegerChoice, BooleanChoice, FloatChoice))
     ]
 
 
@@ -56,9 +56,17 @@ def lower_and_bump(state: MinithesisState) -> None:
         while idx < len(_bumpable_indices(state)):
             bump_indices = _bumpable_indices(state)
             i = bump_indices[idx]
-            if state.result[i].value <= 0:
+            node_i = state.result[i]
+            if isinstance(node_i.kind, FloatChoice):
+                if node_i.value == node_i.kind.simplest:
+                    idx += 1
+                    continue
+                new_i = node_i.kind.simplest
+            elif node_i.value <= 0:
                 idx += 1
                 continue
+            else:
+                new_i = node_i.value - 1
             # Find the bump target: the gap'th bumpable index after i.
             bump_indices = _bumpable_indices(state)
             targets_after_i = [k for k in bump_indices if k > i]
@@ -66,7 +74,6 @@ def lower_and_bump(state: MinithesisState) -> None:
                 idx += 1
                 continue
             j = targets_after_i[gap - 1]
-            new_i = state.result[i].value - 1
             # Run the decrement to observe the kind at position j.
             attempt = list(state.result)
             attempt[i] = attempt[i].with_value(new_i)
