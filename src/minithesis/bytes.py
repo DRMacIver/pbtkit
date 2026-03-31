@@ -99,10 +99,16 @@ def redistribute_bytes(state: "MinithesisState") -> None:
     ]
     for gap in range(1, min(len(byte_indices), 4)):
         for pair_idx in range(len(byte_indices) - gap):
+            # Recompute indices since prior replacements may change structure.
+            byte_indices = [
+                i for i, n in enumerate(state.result) if isinstance(n.kind, BytesChoice)
+            ]
+            assert pair_idx + gap < len(byte_indices)
             i = byte_indices[pair_idx]
             j = byte_indices[pair_idx + gap]
             vi = state.result[i].value
             vj = state.result[j].value
+            assert isinstance(vi, bytes) and isinstance(vj, bytes)
             if len(vi) == 0:
                 continue
             # Try transferring all bytes from i to j.
