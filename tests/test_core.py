@@ -32,6 +32,7 @@ from minithesis.generators import (
     floats,
     integers,
     lists,
+    nothing,
     one_of,
     sampled_from,
     text,
@@ -880,6 +881,46 @@ def test_bytes_redistribution_moves_all():
     assert state.result is not None
     # v0 can't go below min_size=3, so optimal is v0=3 bytes.
     assert len(state.result[0].value) == 3
+
+
+@pytest.mark.requires("floats")
+@pytest.mark.requires("collections")
+def test_negative_zero_shrinks_to_positive_zero():
+    """The shrinker should prefer 0.0 over -0.0 since sort_key(0.0) <
+    sort_key(-0.0). The cache must distinguish them despite 0.0 == -0.0
+    in Python.
+    Regression for shrink quality found by minismith."""
+    import math
+
+    @composite
+    def pair(tc):
+        a = tc.any(booleans())
+        b = tc.any(booleans())
+        return (a, b)
+
+    def tf(tc):
+        tc.any(pair())
+        tc.any(pair())
+        v2 = tc.any(
+            one_of(
+                floats(allow_nan=False, allow_infinity=False),
+                floats(allow_nan=False, allow_infinity=False),
+                nothing(),
+            )
+        )
+        v3 = tc.any(booleans())
+        v4 = tc.any(booleans())
+        if not (((v4) or (v2 > 0.0)) and (v2 >= 0.0)):
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(120), tf, 100)
+    state.run()
+    assert state.result is not None
+    float_val = state.result[5].value
+    assert isinstance(float_val, float)
+    assert math.copysign(1.0, float_val) == 1.0, (
+        f"Expected 0.0 but got {float_val!r}"
+    )
 
 
 @pytest.mark.requires("collections")
