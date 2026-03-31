@@ -747,6 +747,33 @@ def test_redistribute_stale_indices_with_one_of():
     state.run()
 
 
+@pytest.mark.requires("collections")
+def test_lower_and_bump_stale_j_after_replace():
+    """lower_and_bump must handle j going out of bounds when a replace
+    shortens the result during the bytes/string bump loop.
+    Regression for AssertionError in lower_and_bump found by minismith."""
+
+    def tf(tc):
+        v0 = tc.any(booleans())
+        tc.any(booleans())
+        tc.any(booleans())
+        tc.any(lists(integers(0, 0), max_size=10).filter(lambda x: len(x) > 0))
+        tc.any(
+            integers(-54, -32).flat_map(
+                lambda n: lists(
+                    integers(0, 100),
+                    min_size=abs(n) % 5,
+                    max_size=abs(n) % 5 + 1,
+                )
+            )
+        )
+        if v0:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 1000)
+    state.run()
+
+
 def test_lower_and_bump_with_bounded_float_target():
     """lower_and_bump must skip invalid float bump values when the
     float's range doesn't include 1.0 or -1.0."""

@@ -110,7 +110,8 @@ def lower_and_bump(state: MinithesisState) -> None:
             # Re-check kind before each attempt since replace may change
             # the result structure.
             for _ in range(2):
-                assert j < len(state.result)
+                if j >= len(state.result):
+                    break
                 kind_t = state.result[j].kind
                 if isinstance(kind_t, BytesChoice):
                     state.replace({i: new_i, j: kind_t.unit})
