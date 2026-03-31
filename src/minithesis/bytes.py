@@ -44,6 +44,31 @@ class BytesChoice(ChoiceType[bytes]):
         """Shortlex ordering: shorter is simpler, then lexicographic."""
         return (len(value), value)
 
+    def to_index(self, value: bytes) -> int:
+        """Shortlex index: count all shorter byte strings from min_size,
+        then the position within strings of this length."""
+        # Count all strings of lengths min_size .. len(value)-1
+        offset = sum(256**length for length in range(self.min_size, len(value)))
+        # Position within strings of this length (big-endian number)
+        position = int.from_bytes(value, "big") if value else 0
+        return offset + position
+
+    def from_index(self, index: int) -> bytes | None:
+        """Inverse of shortlex index."""
+        # Find the length bucket
+        remaining = index
+        for length in range(self.min_size, self.max_size + 1):
+            bucket_size = 256**length
+            if remaining < bucket_size:
+                # Decode the big-endian number within this length
+                result = []
+                for _ in range(length):
+                    result.append(remaining % 256)
+                    remaining //= 256
+                return bytes(reversed(result))
+            remaining -= bucket_size
+        return None
+
 
 @value_shrinker(BytesChoice)
 def shrink_bytes(

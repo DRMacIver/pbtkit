@@ -86,6 +86,49 @@ class StringChoice(ChoiceType[str]):
         codepoint key (where '0' is simplest)."""
         return (len(value), tuple(_codepoint_key(ord(c)) for c in value))
 
+    def _alphabet(self) -> list[int]:
+        """Return valid codepoints sorted by _codepoint_key."""
+        codepoints = [
+            c
+            for c in range(self.min_codepoint, self.max_codepoint + 1)
+            if not (0xD800 <= c <= 0xDFFF)
+        ]
+        return sorted(codepoints, key=_codepoint_key)
+
+    def to_index(self, value: str) -> int:
+        """Shortlex index using mapped codepoint alphabet."""
+        alphabet = self._alphabet()
+        alpha_size = len(alphabet)
+        # Build reverse lookup: codepoint → rank in alphabet
+        rank = {c: i for i, c in enumerate(alphabet)}
+        # Count all strings of lengths min_size .. len(value)-1
+        offset = sum(
+            alpha_size**length for length in range(self.min_size, len(value))
+        )
+        # Position within strings of this length (mixed-radix number)
+        position = 0
+        for ch in value:
+            position = position * alpha_size + rank[ord(ch)]
+        return offset + position
+
+    def from_index(self, index: int) -> str | None:
+        """Inverse of shortlex index."""
+        alphabet = self._alphabet()
+        alpha_size = len(alphabet)
+        if alpha_size == 0:
+            return "" if index == 0 and self.min_size == 0 else None
+        remaining = index
+        for length in range(self.min_size, self.max_size + 1):
+            bucket_size = alpha_size**length
+            if remaining < bucket_size:
+                chars = []
+                for _ in range(length):
+                    chars.append(chr(alphabet[remaining % alpha_size]))
+                    remaining //= alpha_size
+                return "".join(reversed(chars))
+            remaining -= bucket_size
+        return None
+
 
 # ---------------------------------------------------------------------------
 # draw_string — monkey-patched onto TestCase

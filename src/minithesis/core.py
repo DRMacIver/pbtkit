@@ -55,6 +55,22 @@ class ChoiceType(Generic[U]):
         shrinking. By default just returns the value itself."""
         return value
 
+    def to_index(self, value: U) -> int:
+        """Convert a valid value to a non-negative integer index.
+
+        Index 0 corresponds to simplest, index 1 to unit. Larger
+        indices represent less simple values. The mapping must
+        satisfy: from_index(to_index(v)) == v for all valid v."""
+        raise NotImplementedError
+
+    def from_index(self, index: int) -> U | None:
+        """Convert a non-negative integer index back to a value.
+
+        Returns None if the index doesn't correspond to a valid value.
+        Must satisfy: from_index(0) == simplest, from_index(1) == unit,
+        and to_index(from_index(i)) <= i when from_index(i) is not None."""
+        raise NotImplementedError
+
 
 @dataclass(frozen=True)
 class IntegerChoice(ChoiceType[int]):
@@ -87,6 +103,35 @@ class IntegerChoice(ChoiceType[int]):
     def sort_key(self, value: int) -> Any:
         return (abs(value), value < 0)
 
+    def to_index(self, value: int) -> int:
+        """Zigzag encoding centered on simplest, matching sort_key order.
+
+        sort_key is (abs(value - simplest), value < simplest), so positive
+        offsets come before negative at the same distance:
+        simplest→0, simplest+1→1, simplest-1→2, simplest+2→3, ..."""
+        s = self.simplest
+        d = value - s
+        if d == 0:
+            return 0
+        if d > 0:
+            return 2 * d - 1
+        return 2 * (-d)
+
+    def from_index(self, index: int) -> int | None:
+        """Inverse of zigzag encoding, returning None if out of range."""
+        s = self.simplest
+        if index == 0:
+            value = s
+        elif index % 2 == 1:
+            # Odd indices → positive offset
+            value = s + (index + 1) // 2
+        else:
+            # Even indices → negative offset
+            value = s - index // 2
+        if self.validate(value):
+            return value
+        return None
+
 
 @dataclass(frozen=True)
 class BooleanChoice(ChoiceType[bool]):
@@ -102,6 +147,16 @@ class BooleanChoice(ChoiceType[bool]):
 
     def validate(self, value: bool) -> bool:
         return isinstance(value, int) and value in (0, 1)
+
+    def to_index(self, value: bool) -> int:
+        return int(value)
+
+    def from_index(self, index: int) -> bool | None:
+        if index == 0:
+            return False
+        if index == 1:
+            return True
+        return None
 
 
 @dataclass(frozen=True)
