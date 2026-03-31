@@ -21,6 +21,7 @@ from minithesis.core import (
     shrink_pass,
 )
 from minithesis.floats import FloatChoice
+from minithesis.text import StringChoice
 
 
 def _integer_indices(state: MinithesisState) -> list[int]:
@@ -39,7 +40,8 @@ def _bumpable_indices(state: MinithesisState) -> list[int]:
         i
         for i, node in enumerate(state.result)
         if isinstance(
-            node.kind, (IntegerChoice, BooleanChoice, FloatChoice, BytesChoice)
+            node.kind,
+            (IntegerChoice, BooleanChoice, FloatChoice, BytesChoice, StringChoice),
         )
     ]
 
@@ -60,7 +62,7 @@ def lower_and_bump(state: MinithesisState) -> None:
             bump_indices = _bumpable_indices(state)
             i = bump_indices[idx]
             node_i = state.result[i]
-            if isinstance(node_i.kind, (FloatChoice, BytesChoice)):
+            if isinstance(node_i.kind, (FloatChoice, BytesChoice, StringChoice)):
                 if node_i.value == node_i.kind.simplest:
                     idx += 1
                     continue
