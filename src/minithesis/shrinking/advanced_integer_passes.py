@@ -176,10 +176,13 @@ def try_shortening_via_increment(state: MinithesisState) -> None:
                 if v != node.value and node.kind.validate(v) and v not in candidates:
                     candidates.append(v)
         elif isinstance(node.kind, FloatChoice):
-            # Try unit, negative unit, and range boundaries.
+            # Try small whole numbers and range boundaries.
             candidates = []
-            for v in [node.kind.unit, -node.kind.unit, node.kind.min_value]:
-                if v != node.value and node.kind.validate(v):
+            for v in [float(n) for n in range(-8, 9)] + [
+                node.kind.min_value,
+                node.kind.max_value,
+            ]:
+                if v != node.value and node.kind.validate(v) and v not in candidates:
                     candidates.append(v)
         elif isinstance(node.kind, BooleanChoice):
             if node.value is False:
