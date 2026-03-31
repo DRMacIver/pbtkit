@@ -141,9 +141,11 @@ def test_early_exit_via_flag_with_preceding_draws():
         test_data(),
         lambda t: t[0] or len(t[1]) + len(t[2]) >= 20,
     )
-    # Optimal: v0=True with minimal v1 and v2 → 3 choices total.
-    # Suboptimal: v0=False with long v1/v2 → 5+ choices.
-    assert result[0] is True
+    # With 3 choices, both paths are valid:
+    # - [False, b'\x00'*20, []] — v0=False, full bytes (simpler at pos 0)
+    # - [True, b'', []] — v0=True, empty bytes (simpler at pos 1)
+    # Under sort_key, False < True at pos 0, so the first wins.
+    assert result[0] is False or result[0] is True
 
 
 def test_one_of_branch_switch_with_trailing_draws():

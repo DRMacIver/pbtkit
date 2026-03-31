@@ -32,12 +32,15 @@ def _integer_indices(state: MinithesisState) -> list[int]:
 
 
 def _bumpable_indices(state: MinithesisState) -> list[int]:
-    """Return indices of IntegerChoice, BooleanChoice, and FloatChoice nodes."""
+    """Return indices of IntegerChoice, BooleanChoice, FloatChoice,
+    and BytesChoice nodes."""
     assert state.result is not None
     return [
         i
         for i, node in enumerate(state.result)
-        if isinstance(node.kind, (IntegerChoice, BooleanChoice, FloatChoice))
+        if isinstance(
+            node.kind, (IntegerChoice, BooleanChoice, FloatChoice, BytesChoice)
+        )
     ]
 
 
@@ -57,7 +60,7 @@ def lower_and_bump(state: MinithesisState) -> None:
             bump_indices = _bumpable_indices(state)
             i = bump_indices[idx]
             node_i = state.result[i]
-            if isinstance(node_i.kind, FloatChoice):
+            if isinstance(node_i.kind, (FloatChoice, BytesChoice)):
                 if node_i.value == node_i.kind.simplest:
                     idx += 1
                     continue
@@ -86,26 +89,28 @@ def lower_and_bump(state: MinithesisState) -> None:
                     state.replace({i: new_i, j: kind_j.max_value})
                     state.replace({i: new_i, j: kind_j.simplest})
             # Try bumping from current value by powers of 2.
-            bump = 1
-            found = False
-            while bump <= 256 and j < len(state.result):
-                new_j = state.result[j].value + bump
-                if state.replace({i: new_i, j: new_j}):
-                    found = True
-                    break
-                bump *= 2
-            # If bumps from current value didn't work (e.g. range changed
-            # and current+bump is always out of range), try absolute powers
-            # of 2 to explore the new range, both positive and negative.
-            if not found and j < len(state.result):
-                state.replace({i: new_i, j: 0})
+            # Skip bumping for BytesChoice/FloatChoice targets since
+            # integer arithmetic doesn't apply.
+            if j < len(state.result) and isinstance(
+                state.result[j].kind, (IntegerChoice, BooleanChoice)
+            ):
                 bump = 1
+                found = False
                 while bump <= 256 and j < len(state.result):
-                    if state.replace({i: new_i, j: bump}):
-                        break
-                    if state.replace({i: new_i, j: -bump}):
+                    new_j = state.result[j].value + bump
+                    if state.replace({i: new_i, j: new_j}):
+                        found = True
                         break
                     bump *= 2
+                if not found and j < len(state.result):
+                    state.replace({i: new_i, j: 0})
+                    bump = 1
+                    while bump <= 256 and j < len(state.result):
+                        if state.replace({i: new_i, j: bump}):
+                            break
+                        if state.replace({i: new_i, j: -bump}):
+                            break
+                        bump *= 2
             idx += 1
 
 
