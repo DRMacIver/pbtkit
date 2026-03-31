@@ -95,6 +95,7 @@ import minithesis.floats
 import minithesis.shrinking.advanced_integer_passes
 import minithesis.shrinking.bind_deletion
 import minithesis.shrinking.duplication_passes
+import minithesis.shrinking.mutation
 import minithesis.shrinking.sorting
 import minithesis.targeting
 import minithesis.text

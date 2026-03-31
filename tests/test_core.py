@@ -819,6 +819,36 @@ def test_sort_insertion_stale_indices():
     state.run()
 
 
+@pytest.mark.requires("collections")
+def test_one_of_switches_to_shorter_branch():
+    """When one_of branch 0 (lists) produces a truthy value in 4 choices
+    but branch 1 (booleans via nested one_of) can do it in 3, the
+    shrinker should find the shorter branch.
+
+    The difficulty: switching the outer one_of index from 0 to 1 requires
+    setting the inner index AND the value to non-zero simultaneously —
+    a 3-position compound change.
+
+    Regression for shrink quality found by minismith."""
+
+    def tf(tc):
+        v0 = tc.any(
+            one_of(
+                lists(integers(0, 0), max_size=10),
+                one_of(integers(0, 0), booleans()),
+            )
+        )
+        if v0:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(1), tf, 100)
+    state.run()
+    assert state.result is not None
+    # Optimal: branch 1 → inner branch 1 (booleans) → True = 3 choices.
+    # Suboptimal: branch 0 → list [0] = 4 choices.
+    assert len(state.result) == 3
+
+
 def test_bind_deletion_valid_but_not_shorter():
     """bind_deletion must correctly detect when a replacement produces
     a VALID test case that isn't shorter (no excess choices to delete).

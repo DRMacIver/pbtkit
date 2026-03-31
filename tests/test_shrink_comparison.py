@@ -33,6 +33,7 @@ from minithesis.core import (  # noqa: F401
     MinithesisState,
     Status,
     StopTest,
+    TestCase,
     Unsatisfiable,
     run_test,
     sort_key,
@@ -57,7 +58,7 @@ from minithesis.generators import (  # noqa: F401
 )
 from minithesis.text import StringChoice
 
-from .test_minismith import TestFailed, program
+from .test_minismith import Failure, program
 
 # ---------------------------------------------------------------------------
 # ConjectureTestCase adapter
@@ -203,7 +204,7 @@ def _extract_test_body(program_code: str):
     """Extract the test body function from a minismith program string.
 
     Returns a callable that takes a TestCase-like object and runs the
-    test body, raising TestFailed on assertion failure."""
+    test body, raising Failure on assertion failure."""
     # The program may define composite helper functions before the
     # try block. Exec the whole program into a namespace, but replace
     # the run_test invocation with just defining the body function.
@@ -257,7 +258,7 @@ def _run_hypothesis(test_body, seed: int) -> list[ChoiceNode] | None:
         tc = ConjectureTestCase(data)
         try:
             test_body(tc)
-        except TestFailed:
+        except Failure:
             captured_nodes.append(list(tc.nodes))
             data.mark_interesting(("minismith",))
         except StopTest:
@@ -283,7 +284,7 @@ def _run_hypothesis(test_body, seed: int) -> list[ChoiceNode] | None:
     tc = ConjectureTestCase(replay_data)
     try:
         test_body(tc)
-    except (TestFailed, Exception):
+    except (Failure, Exception):
         pass
     return tc.nodes
 
@@ -297,7 +298,7 @@ def _run_minithesis(test_body, seed: int) -> list[ChoiceNode] | None:
     def test_fn(tc):
         try:
             test_body(tc)
-        except TestFailed:
+        except Failure:
             tc.mark_status(Status.INTERESTING)
 
     state = MinithesisState(Random(seed), test_fn, 100)
@@ -318,43 +319,69 @@ pytestmark = [
 ]
 
 
-@given(program())
+@given(
+    minithesis_program=program(),
+    seed1=st.integers(),
+    seed2=st.integers(),
+)
 @settings(
-    max_examples=200,
+    max_examples=20000,
     deadline=None,
     suppress_health_check=[HealthCheck.too_slow],
 )
 def test_minithesis_shrinks_at_least_as_well_as_hypothesis(
     minithesis_program: str,
+    seed1: int,
+    seed2: int,
 ) -> None:
     """Minithesis should produce a result at least as good as the worst
     of 10 Hypothesis runs, under the minithesis shrinking order."""
     note(minithesis_program)
 
-    try:
-        test_body = _extract_test_body(minithesis_program)
-    except Exception:
-        return  # Skip programs we can't extract a body from.
+    test_body = _extract_test_body(minithesis_program)
 
-    # Run under minithesis first — skip programs where it finds nothing.
-    minithesis_result = _run_minithesis(test_body, seed=0)
+    hypothesis_result = _run_hypothesis(test_body, seed2)
+    assume(hypothesis_result is not None)
+
+    minithesis_result = _run_minithesis(test_body, seed=seed1)
     assume(minithesis_result is not None)
 
-    # Run under Hypothesis 10 times with different seeds.
-    hypothesis_results = []
-    for seed in range(10):
-        result = _run_hypothesis(test_body, seed)
-        if result is not None:
-            hypothesis_results.append(result)
+    if sort_key(minithesis_result) > sort_key(hypothesis_result):
+        # Replay both results through the test body, capturing the
+        # top-level values returned by tc.any() calls.
+        def _replay(nodes):
+            tc = TestCase.for_choices([n.value for n in nodes], prefix_nodes=nodes)
+            draws: list[tuple[str, object]] = []
+            original_any = tc.any
 
-    assume(len(hypothesis_results) > 0)
+            def capturing_any(gen):
+                result = original_any(gen)
+                if tc.depth == 0:
+                    draws.append((gen.name, result))
+                return result
 
-    # The worst Hypothesis result under minithesis sort_key.
-    worst_hypothesis = max(hypothesis_results, key=sort_key)
+            tc.any = capturing_any  # type: ignore[assignment]
+            try:
+                test_body(tc)
+            except (Failure, StopTest, Exception):
+                pass
+            return draws
 
-    assert sort_key(minithesis_result) <= sort_key(worst_hypothesis), (
-        f"Minithesis result {[n.value for n in minithesis_result]} "
-        f"(sort_key={sort_key(minithesis_result)}) is worse than "
-        f"worst Hypothesis result {[n.value for n in worst_hypothesis]} "
-        f"(sort_key={sort_key(worst_hypothesis)})"
-    )
+        mt_draws = _replay(minithesis_result)
+        hy_draws = _replay(hypothesis_result)
+
+        mt_vals = [v for _, v in mt_draws]
+        hy_vals = [v for _, v in hy_draws]
+        note(
+            f"\nMinithesis choices: {[n.value for n in minithesis_result]}"
+            f"\nMinithesis values:  {mt_vals!r}"
+            f"\nHypothesis choices: {[n.value for n in hypothesis_result]}"
+            f"\nHypothesis values:  {hy_vals!r}"
+        )
+
+        assert False, (
+            f"Minithesis result {[n.value for n in minithesis_result]} "
+            f"(sort_key={sort_key(minithesis_result)}) is worse than "
+            f"Hypothesis result {[n.value for n in hypothesis_result]} "
+            f"(sort_key={sort_key(hypothesis_result)})"
+        )

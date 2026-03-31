@@ -2,7 +2,7 @@
 
 Uses Hypothesis to generate random but valid minithesis test programs
 as Python source code, then executes them to verify they either succeed
-or fail with TestFailed (never crash internally).
+or fail with Failure (never crash internally).
 
 Ported from hegelsmith (which does the same for hegel-rust).
 
@@ -41,7 +41,7 @@ from minithesis.generators import (
 )
 
 
-class TestFailed(Exception):
+class Failure(Exception):
     pass
 
 
@@ -471,7 +471,7 @@ def gen_rich_assertion(draw: st.DrawFn, env: Env) -> str:
         cond = draw(gen_compound_predicate(env))
     else:
         cond = draw(gen_computed_predicate(env))
-    return f"if not ({cond}): raise TestFailed({cond!r})"
+    return f"if not ({cond}): raise Failure({cond!r})"
 
 
 # ---------------------------------------------------------------------------
@@ -1031,7 +1031,7 @@ try:
     @run_test(max_examples={max_examples}, database={{}}, quiet=True, random=Random({seed}))
     def _(tc):
 {body}
-except (Unsatisfiable, TestFailed):
+except (Unsatisfiable, Failure):
     pass
     """
     return result
@@ -1065,7 +1065,7 @@ pytestmark = [
     suppress_health_check=[HealthCheck.too_slow],
 )
 def test_minismith_no_internal_errors(minithesis_program: str) -> None:
-    """Generated programs either succeed or fail with TestFailed,
+    """Generated programs either succeed or fail with Failure,
     never with internal crashes."""
     note(minithesis_program)
     exec(minithesis_program, globals())
@@ -1078,8 +1078,8 @@ def test_regression_1():
         def _(tc):
             v0 = tc.any(integers(-1, -1))
             if not (v0 > 0):
-                raise TestFailed("v0 > 0")
-    except TestFailed:
+                raise Failure("v0 > 0")
+    except Failure:
         pass
 
 
@@ -1091,6 +1091,6 @@ def test_regression_2():
             v0 = tc.any(lists(booleans(), max_size=10))
             v1 = tc.any(lists(integers(0, 0), max_size=10))
             if not (len(v0) == len(v1)):
-                raise TestFailed("len(v0) == len(v1)")
-    except (Unsatisfiable, TestFailed):
+                raise Failure("len(v0) == len(v1)")
+    except (Unsatisfiable, Failure):
         pass
