@@ -20,7 +20,7 @@ from minithesis.core import (
 )
 
 # Number of random continuations to try per mutation.
-RANDOM_ATTEMPTS = 5
+RANDOM_ATTEMPTS = 3
 
 
 @shrink_pass
@@ -70,7 +70,7 @@ def mutate_and_shrink(state: MinithesisState) -> None:
                 state.test_function(tc)
             # Also try setting each of the next few positions to
             # unit (from_index(1)), with random continuation.
-            for j_offset in range(1, min(4, len(state.result) - i)):
+            for j_offset in range(1, min(3, len(state.result) - i)):
                 j = i + j_offset
                 if j >= len(state.result):
                     break

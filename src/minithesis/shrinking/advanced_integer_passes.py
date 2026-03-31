@@ -39,7 +39,7 @@ def lower_and_bump(state: MinithesisState) -> None:
     Value punning in _make_choice handles the case where decrementing
     changes the type at position j (e.g., one_of branch switch)."""
     assert state.result is not None
-    for gap in range(1, min(len(_indexed_indices(state)), 8)):
+    for gap in range(1, min(len(_indexed_indices(state)), 4)):
         idx = 0
         while idx < len(_indexed_indices(state)):
             indices = _indexed_indices(state)
@@ -93,23 +93,27 @@ def lower_and_bump(state: MinithesisState) -> None:
                 target_idx = kind_j.to_index(state.result[j].value)
                 # Try index increments: powers of 2 from current position.
                 bump = 1
-                while bump <= 256:
+                while bump <= 16:
                     bumped = kind_j.from_index(target_idx + bump)
                     if bumped is not None:
                         if _try_bump_j(bumped):
                             break
                     bump *= 2
-                # Try simplest, max, and powers-of-2 absolute indices.
-                abs_probes = [0, kind_j.max_index]
-                p = 1
-                for _ in range(10):
-                    abs_probes.append(p)
-                    abs_probes.append(p - 1)
-                    p *= 2
-                for abs_idx in abs_probes:
+                # Try simplest and exponential probe of the index range.
+                for abs_idx in range(min(8, kind_j.max_index + 1)):
                     v = kind_j.from_index(abs_idx)
                     if v is not None:
                         _try_bump_j(v)
+                # Also probe powers of 2 (and p-1) up to a cap.
+                p = 8
+                for _ in range(8):
+                    if p > kind_j.max_index:
+                        break
+                    for idx in [p, p - 1]:
+                        v = kind_j.from_index(idx)
+                        if v is not None:
+                            _try_bump_j(v)
+                    p *= 2
             idx += 1
 
 
@@ -169,7 +173,7 @@ def try_shortening_via_increment(state: MinithesisState) -> None:
         current_idx = kind.to_index(node.value)
         # Generate candidates by incrementing the index.
         candidates = []
-        for target_idx in [current_idx + d for d in [1, 2, 3, 4, 5, 10, 50, 100]] + [
+        for target_idx in [current_idx + d for d in [1, 2, 4, 8, 16]] + [
             kind.max_index
         ]:
             v = kind.from_index(target_idx)
@@ -197,7 +201,7 @@ def try_shortening_via_increment(state: MinithesisState) -> None:
             )
             state.test_function(tc_orig)
             # Try setting each nearby position to unit (from_index(1)).
-            for j in range(i + 1, i + 9):
+            for j in range(i + 1, i + 5):
                 if j >= len(state.result):
                     break
                 kind_j = state.result[j].kind
