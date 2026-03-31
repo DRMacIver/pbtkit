@@ -759,6 +759,17 @@ def binary_search_integer_towards_zero(
         # Linear scan small negative values for non-monotonic functions.
         for v in range(1, min(-value, 8)):
             try_replace(-v)
+        # Also try positive values with smaller absolute value,
+        # which are simpler under sort_key (e.g. 2 < -3).
+        if kind.max_value > 0:
+            upper = min(-value - 1, kind.max_value)
+            if upper >= 1:
+                try_replace(upper)
+                bin_search_down(
+                    max(kind.simplest, 0),
+                    upper,
+                    try_replace,
+                )
 
 
 def bin_search_down(lo: int, hi: int, f: Callable[[int], bool]) -> int:
