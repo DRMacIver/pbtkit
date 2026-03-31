@@ -276,8 +276,9 @@ def test_float_choice_unit():
 
 @pytest.mark.requires("bytes")
 def test_bytes_choice_unit():
-    assert BytesChoice(0, 10).unit == b"\x00"
-    assert BytesChoice(3, 10).unit == b"\x00\x00\x00\x00"
+    # Second-simplest in sort_key order: next byte value, not next length.
+    assert BytesChoice(0, 10).unit == b"\x01"
+    assert BytesChoice(3, 10).unit == b"\x00\x00\x01"
 
 
 def test_value_punning_on_type_change():

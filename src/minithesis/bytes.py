@@ -34,8 +34,11 @@ class BytesChoice(ChoiceType[bytes]):
 
     @property
     def unit(self) -> bytes:
-        # One byte longer than simplest.
-        return self.simplest + b"\x00"
+        # Second-simplest in sort_key order: if min_size > 0, increment
+        # the last byte. Otherwise, b'\x01' (first non-zero single byte).
+        if self.min_size > 0:
+            return b"\x00" * (self.min_size - 1) + b"\x01"
+        return b"\x01" if self.max_size > 0 else self.simplest
 
     def validate(self, value: bytes) -> bool:
         return isinstance(value, bytes) and self.min_size <= len(value) <= self.max_size

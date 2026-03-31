@@ -61,14 +61,19 @@ class StringChoice(ChoiceType[str]):
 
     @property
     def unit(self) -> str:
-        # One character longer than simplest (shortlex: longer = less simple).
-        s = self.simplest
-        best = min(
-            range(self.min_codepoint, min(self.max_codepoint + 1, 128)),
-            key=_codepoint_key,
-            default=self.min_codepoint,
-        )
-        return s + chr(best)
+        # Second-simplest in sort_key order: if min_size > 0, change
+        # the last character to the second-simplest codepoint.
+        # Otherwise, a single character of the second-simplest codepoint.
+        # The second-simplest codepoint is '1' (key 1) for ASCII ranges.
+        second_cp = _key_to_codepoint(1) if self.min_codepoint <= _key_to_codepoint(1) <= self.max_codepoint else self.min_codepoint
+        if second_cp == _key_to_codepoint(0) and self.min_codepoint == self.max_codepoint:
+            # Single-codepoint alphabet
+            if self.min_size < self.max_size:
+                return chr(self.min_codepoint) * (self.min_size + 1)
+            return self.simplest
+        if self.min_size > 0:
+            return self.simplest[:-1] + chr(second_cp)
+        return chr(second_cp) if self.max_size > 0 else self.simplest
 
     def validate(self, value: str) -> bool:
         if not isinstance(value, str):
