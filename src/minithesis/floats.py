@@ -191,8 +191,15 @@ class FloatChoice(ChoiceType[float]):
 
     @property
     def unit(self) -> float:
-        result = self.from_index(1)
-        return result if result is not None else self.simplest
+        # The second-simplest value: find the next valid float after
+        # simplest in the raw index order.
+        s = self.simplest
+        base = _float_to_index(s)
+        for offset in range(1, 4):
+            v = _index_to_float(base + offset)
+            if not math.isnan(v) and self.validate(v):
+                return v
+        return s
 
     def validate(self, value: float) -> bool:
         if not isinstance(value, float):

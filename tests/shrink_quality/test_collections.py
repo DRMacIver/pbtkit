@@ -53,6 +53,7 @@ def list_and_int(tc):
 _requires_duplication = pytest.mark.requires("shrinking.duplication_passes")
 
 
+@pytest.mark.requires("shrinking.sorting")
 @pytest.mark.parametrize(
     "n",
     [

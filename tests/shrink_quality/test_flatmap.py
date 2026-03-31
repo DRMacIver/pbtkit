@@ -69,6 +69,7 @@ def test_flatmap_rectangles():
 # From nocover/test_flatmap.py
 
 
+@pytest.mark.requires("shrinking.sorting")
 @pytest.mark.parametrize("n", [1, 3, 5, 9])
 def test_can_shrink_through_a_binding(n):
     result = minimal(

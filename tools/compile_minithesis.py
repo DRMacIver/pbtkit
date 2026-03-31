@@ -261,7 +261,31 @@ def _skip_docstring(lines: list[str], start: int) -> int:
 
 
 class _StripNeededFor(cst.CSTTransformer):
-    """Remove @needed_for("...") decorators from functions/methods."""
+    """Handle @needed_for("...") decorators.
+
+    When disabled_features is empty, just strip the decorators.
+    When disabled_features is set, remove the entire function/method
+    if its needed_for feature is disabled, otherwise strip the decorator.
+    """
+
+    def __init__(self, disabled_features: frozenset[str] = frozenset()) -> None:
+        super().__init__()
+        self.disabled_features = disabled_features
+
+    def _needed_for_feature(self, node: cst.FunctionDef) -> str | None:
+        """Return the feature name from @needed_for("...") if present."""
+        for d in node.decorators:
+            if (
+                isinstance(d.decorator, cst.Call)
+                and isinstance(d.decorator.func, cst.Name)
+                and d.decorator.func.value == "needed_for"
+                and d.decorator.args
+                and isinstance(d.decorator.args[0].value, cst.SimpleString)
+            ):
+                val = d.decorator.args[0].value.evaluated_value
+                if isinstance(val, str):
+                    return val
+        return None
 
     def _filter_decorators(
         self,
@@ -284,14 +308,22 @@ class _StripNeededFor(cst.CSTTransformer):
         self,
         original_node: cst.FunctionDef,
         updated_node: cst.FunctionDef,
-    ) -> cst.FunctionDef:
+    ) -> cst.FunctionDef | cst.RemovalSentinel:
+        feature = self._needed_for_feature(original_node)
+        if feature and feature in self.disabled_features:
+            return cst.RemovalSentinel.REMOVE
         return self._filter_decorators(updated_node)
 
 
-def strip_needed_for(source: str) -> str:
-    """Strip all @needed_for("...") decorators from source code."""
+def strip_needed_for(source: str, disabled_features: frozenset[str] = frozenset()) -> str:
+    """Strip @needed_for decorators from source code.
+
+    If disabled_features is set, methods decorated with @needed_for for
+    a disabled feature are removed entirely. Otherwise just the decorator
+    is stripped.
+    """
     tree = cst.parse_module(source)
-    modified = tree.visit(_StripNeededFor())
+    modified = tree.visit(_StripNeededFor(disabled_features))
     return modified.code
 
 
@@ -473,16 +505,26 @@ def compile_minithesis(disabled: frozenset[str] = frozenset()) -> str:
     disabled = expand_disabled(disabled)
     extensions = [e for e in EXTENSIONS if e not in disabled]
 
+    # A feature is disabled if ALL modules requiring it are disabled.
+    enabled_features: set[str] = set()
+    for mod, feature in FEATURE_DEPS.items():
+        if mod not in disabled:
+            enabled_features.add(feature)
+    disabled_features = frozenset(
+        set(FEATURE_DEPS.values()) - enabled_features
+    )
+
     def module_path(name: str) -> Path:
         """Map a module name (possibly dotted) to its source file."""
         parts = name.split(".")
         return SRC / "/".join(parts[:-1]) / f"{parts[-1]}.py" if len(parts) > 1 else SRC / f"{name}.py"
 
     # Read and parse all modules, stripping @needed_for decorators
+    # (removing entire methods for disabled features)
     sources: dict[str, str] = {}
     trees: dict[str, cst.Module] = {}
     for name in ["core", "__init__"] + UTILITY_MODULES + extensions + ["generators"]:
-        src = strip_needed_for(module_path(name).read_text())
+        src = strip_needed_for(module_path(name).read_text(), disabled_features)
         sources[name] = src
         trees[name] = cst.parse_module(src)
 
@@ -682,19 +724,43 @@ def main() -> None:
         default="",
         help="Comma-separated list of extensions to exclude (e.g. floats,text)",
     )
+    p.add_argument(
+        "--features",
+        type=str,
+        default="",
+        help="Comma-separated list of extensions to include (all others disabled)",
+    )
     args = p.parse_args()
 
-    disabled = frozenset(m for m in args.disable.split(",") if m)
-    unknown = disabled - set(EXTENSIONS)
-    if unknown:
-        for name in sorted(unknown):
-            matches = difflib.get_close_matches(name, EXTENSIONS, n=1, cutoff=0.5)
-            msg = f"Unknown extension: {name!r}"
-            if matches:
-                msg += f" (did you mean {matches[0]!r}?)"
-            print(msg, file=sys.stderr)
-        print(f"Valid extensions: {', '.join(EXTENSIONS)}", file=sys.stderr)
+    if args.features and args.disable:
+        print("Cannot use both --features and --disable", file=sys.stderr)
         sys.exit(1)
+
+    if args.features:
+        enabled = frozenset(m for m in args.features.split(",") if m)
+        unknown = enabled - set(EXTENSIONS)
+        if unknown:
+            for name in sorted(unknown):
+                matches = difflib.get_close_matches(name, EXTENSIONS, n=1, cutoff=0.5)
+                msg = f"Unknown extension: {name!r}"
+                if matches:
+                    msg += f" (did you mean {matches[0]!r}?)"
+                print(msg, file=sys.stderr)
+            print(f"Valid extensions: {', '.join(EXTENSIONS)}", file=sys.stderr)
+            sys.exit(1)
+        disabled = frozenset(set(EXTENSIONS) - enabled)
+    else:
+        disabled = frozenset(m for m in args.disable.split(",") if m)
+        unknown = disabled - set(EXTENSIONS)
+        if unknown:
+            for name in sorted(unknown):
+                matches = difflib.get_close_matches(name, EXTENSIONS, n=1, cutoff=0.5)
+                msg = f"Unknown extension: {name!r}"
+                if matches:
+                    msg += f" (did you mean {matches[0]!r}?)"
+                print(msg, file=sys.stderr)
+            print(f"Valid extensions: {', '.join(EXTENSIONS)}", file=sys.stderr)
+            sys.exit(1)
     result = compile_minithesis(disabled=disabled)
 
     # Write standalone compiled file

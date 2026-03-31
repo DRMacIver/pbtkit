@@ -76,6 +76,7 @@ def test_minimize_namedtuple():
     assert tab[1] == tab[0] + 1
 
 
+@pytest.mark.requires("shrinking.index_passes")
 def test_earlier_exit_produces_shorter_sequence():
     """When v0=True triggers an early exit with fewer choices than
     v0=False followed by more draws, the shrinker should prefer the

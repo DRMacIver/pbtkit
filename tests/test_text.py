@@ -127,12 +127,14 @@ def test_string_validate():
     assert not kind.validate("abcdef")  # too long
 
 
+@pytest.mark.requires("shrinking.index_passes")
 def test_string_from_index_out_of_range():
     """from_index past max_index returns None."""
     sc = StringChoice(32, 126, 0, 2)
     assert sc.from_index(sc.max_index + 1) is None
 
 
+@pytest.mark.requires("shrinking.index_passes")
 def test_string_codepoint_rank_with_surrogates():
     """_codepoint_rank handles codepoint ranges that span surrogates."""
     # Range spanning the surrogate block (0xD800-0xDFFF).

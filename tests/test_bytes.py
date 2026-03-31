@@ -108,7 +108,7 @@ def test_shrinks_bytes_to_simplest(capsys):
     assert captured.out.strip() == "any(binary(min_size=0, max_size=10)): b''"
 
 
-@pytest.mark.requires("targeting")
+@pytest.mark.requires("shrinking.index_passes")
 def test_bytes_from_index_out_of_range():
     """from_index past max_index returns None."""
     bc = BytesChoice(0, 2)

@@ -432,6 +432,7 @@ def test_draw_unbounded_float_rejects_nan():
         assert not math.isnan(f)
 
 
+@pytest.mark.requires("shrinking.index_passes")
 def test_float_index_subnormals():
     """Subnormals get high indices (most complex)."""
     fc = FloatChoice(float("-inf"), float("inf"), False, False)
@@ -444,6 +445,7 @@ def test_float_index_subnormals():
     assert back == 5e-324
 
 
+@pytest.mark.requires("shrinking.index_passes")
 def test_float_index_bounded_simplest():
     """Bounded ranges find the correct simplest via power-of-2 search."""
     # Range where simplest is found via the power-of-2 search, not boundaries.
@@ -452,6 +454,7 @@ def test_float_index_bounded_simplest():
     assert fc.to_index(1.0) == 0
 
 
+@pytest.mark.requires("shrinking.index_passes")
 def test_float_from_index_inf():
     """from_index returns inf/nan for high indices."""
     fc = FloatChoice(float("-inf"), float("inf"), True, True)
@@ -461,6 +464,7 @@ def test_float_from_index_inf():
     assert v is not None and math.isnan(v)
 
 
+@pytest.mark.requires("shrinking.index_passes")
 def test_float_from_index_past_max():
     """from_index returns None for huge indices."""
     fc = FloatChoice(0.0, 1.0, False, False)
@@ -470,6 +474,7 @@ def test_float_from_index_past_max():
     assert fc2.from_index(_MAX_FINITE_INDEX) is None
 
 
+@pytest.mark.requires("shrinking.index_passes")
 def test_float_from_index_out_of_bounded_range():
     """from_index returns None for indices that map to floats outside
     the bounded range (e.g. negative floats for a positive-only range)."""

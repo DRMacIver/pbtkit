@@ -6,11 +6,15 @@ test:
 
 test-core:
     for ext in {{extensions}}; do \
+        echo "--- Disabling: $ext ---" && \
         MINITHESIS_DISABLED=$ext uv run pytest tests/ -m 'not hypothesis' --verbose || exit 1; \
     done
 
 compile:
     uv run python tools/compile_minithesis.py
+
+test-features:
+    uv run python tools/test_features.py
 
 test-compiled: compile
     uv run pytest tests/ -m 'not hypothesis' --override-ini='pythonpath=build/pkg' --verbose
