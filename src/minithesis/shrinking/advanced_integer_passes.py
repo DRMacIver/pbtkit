@@ -83,9 +83,14 @@ def lower_and_bump(state: MinithesisState) -> None:
             tc = TestCase.for_choices([n.value for n in attempt], prefix_nodes=attempt)
             state.test_function(tc)
             assert tc.status is not None
-            if j < len(tc.nodes):
+            if j < len(tc.nodes) and j < len(state.result):
                 kind_j = tc.nodes[j].kind
-                if isinstance(kind_j, IntegerChoice):
+                # Only try boundary values when the kind at j matches
+                # between the trial and the current result (avoids
+                # putting e.g. int values into BytesChoice nodes).
+                if isinstance(kind_j, IntegerChoice) and isinstance(
+                    state.result[j].kind, IntegerChoice
+                ):
                     state.replace({i: new_i, j: kind_j.max_value})
                     state.replace({i: new_i, j: kind_j.simplest})
             # Try bumping from current value by powers of 2.
