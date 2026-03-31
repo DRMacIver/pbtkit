@@ -221,13 +221,14 @@ def try_shortening_via_increment(state: MinithesisState) -> None:
                 [n.value for n in zeroed], prefix_nodes=zeroed
             )
             state.test_function(tc_zeroed)
-            # Also try with position i+1 set to 1/True, which handles
-            # one_of branch switches where the continuation kind changes.
+            # Also try with position i+1 set to 1 or -1, which handles
+            # one_of branch switches and negative threshold conditions.
             if i + 1 < len(attempt):
-                one_fill = list(zeroed)
-                one_fill[i + 1] = one_fill[i + 1].with_value(1)
-                tc_one = TestCase.for_choices(
-                    [n.value for n in one_fill], prefix_nodes=one_fill
-                )
-                state.test_function(tc_one)
+                for fill_val in [1, -1]:
+                    filled = list(zeroed)
+                    filled[i + 1] = filled[i + 1].with_value(fill_val)
+                    tc_filled = TestCase.for_choices(
+                        [n.value for n in filled], prefix_nodes=filled
+                    )
+                    state.test_function(tc_filled)
         i += 1
