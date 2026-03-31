@@ -54,6 +54,8 @@ All three must pass before committing.
 * `NAN_DRAW_PROBABILITY` is defined in `__init__.py` and can be monkeypatched via `import minithesis; monkeypatch.setattr(minithesis, ...)`.
 * The database isolation fixture in `conftest.py` ensures tests don't share state via `.minithesis-cache`. Each test gets a fresh tmp directory.
 * Coverage must be deterministically 100%. If a path depends on randomness, boost the probability via monkeypatch rather than increasing `max_examples`.
+* Coverage should be assumed to be working correctly. If the tool says that a line isn't being covered, it almost certainly really isn't, or the tests that cover it are not running as part of your coverage set. If you still do not believe this, add a canary assertion that would fire if that line was covered. You can also use this to try to come up with a test that covers that line - run the minismith crash tests, and see if it can hit that assertion. If it can, it will give you a good starting point for a regression test.
+* If you replace guards that you believe to be genuinely uncoverable with assertions, make sure to run the minismith tests to find out if those assertions trigger.
 
 ## Commit discipline
 
