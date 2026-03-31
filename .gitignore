@@ -13,3 +13,4 @@ hegel-rust/
 .claude/worktrees/
 .claude/settings.local.json
 build/
+scratch

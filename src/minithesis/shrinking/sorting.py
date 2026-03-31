@@ -67,7 +67,8 @@ def _try_sort_group(
                 for i in indices
                 if i < len(state.result) and type(state.result[i].kind) == choice_type
             ]
-            assert j < len(indices)
+            if j >= len(indices):
+                break
             idx_j = indices[j]
             idx_prev = indices[j - 1]
             if state.result[idx_prev].sort_key <= state.result[idx_j].sort_key:

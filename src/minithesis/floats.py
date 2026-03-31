@@ -20,6 +20,7 @@ from minithesis.core import (
     bin_search_down,
     value_shrinker,
 )
+from minithesis.features import needed_for
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -216,10 +217,12 @@ class FloatChoice(ChoiceType[float]):
             return (1, 0) if value > 0 else (1, 1)
         return (0, _float_to_index(value))
 
+    @needed_for("indexing")
     @property
     def max_index(self) -> int:
         return _MAX_FINITE_INDEX + 3  # +inf, -inf, nan
 
+    @needed_for("indexing")
     def to_index(self, value: float) -> int:
         """Index in sort_key order (O(1)). Offset from simplest's raw index."""
         if math.isnan(value):
@@ -232,6 +235,7 @@ class FloatChoice(ChoiceType[float]):
         base = _float_to_index(self.simplest)
         return _float_to_index(value) - base
 
+    @needed_for("indexing")
     def from_index(self, index: int) -> float | None:
         """Inverse of to_index. Returns None for invalid indices.
 

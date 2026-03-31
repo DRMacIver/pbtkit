@@ -221,3 +221,4 @@ Go back to Step 1. Run both test suites again. Repeat until clean.
 - **No piping to tail or head.** Pipe to a file and use the Read tool.
 - **Simplify before fixing.** A 3-line regression test is worth more than a 30-line one. The simpler the test, the clearer the bug, the better the fix.
 - **Crashes before quality.** Either suite can surface crashes. If you see a crash (internal AssertionError, IndexError, etc. from minithesis source), fix it before tackling shrink quality failures. Crashes indicate a fundamental problem in the shrinker code.
+- **Unit test specific components.** When a shrink bug reveals a problem in a specific component (cache, serialization, value punning, etc.), write targeted unit tests for that component in addition to the end-to-end regression test. The unit tests are more focused and easier to reason about.

@@ -39,6 +39,7 @@ from minithesis.generators import (
     sampled_from,
     text,
 )
+from minithesis.shrinking.index_passes import lower_and_bump
 
 
 @pytest.mark.parametrize("seed", range(10))
@@ -1075,3 +1076,33 @@ def test_bind_deletion_valid_but_not_shorter():
     state = State(Random(0), tf, 2000)
     state.run()
     assert state.result is not None
+
+
+@pytest.mark.requires("indexing")
+def test_lower_and_bump_j_past_end_after_shortening():
+    """lower_and_bump must handle j becoming invalid when a decrement+zero
+    attempt shortens the result.
+
+    The test draws a count n then n values. For gap=1, idx=0: i=0 (count),
+    j=1. Decrementing the count and zeroing everything after produces a
+    shorter result (fewer draws). With n going from 3→2 and rest zeroed,
+    n becomes 0 via value punning and the result shortens to 1 node,
+    making j=1 invalid."""
+
+    def tf(tc):
+        n = tc.draw_integer(0, 5)
+        for _ in range(n):
+            tc.draw_integer(0, 10)
+        tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 500)
+    # Seed: n=3, 3 extra draws → 4 nodes. gap=1 shrinks n progressively,
+    # and at gap=2 the j target falls past the shortened result.
+    tc = TC.for_choices([3, 5, 5, 5])
+    state.test_function(tc)
+    assert state.result is not None
+    assert len(state.result) == 4
+    lower_and_bump(state)
+    assert state.result is not None
+    # Shrinks to n=1 with one extra value at simplest.
+    assert len(state.result) == 2

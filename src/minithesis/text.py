@@ -16,6 +16,7 @@ from minithesis.core import (
     TestCase,
     value_shrinker,
 )
+from minithesis.features import needed_for
 from minithesis.shrinking.sequence import shrink_sequence
 
 
@@ -98,6 +99,7 @@ class StringChoice(ChoiceType[str]):
         codepoint key (where '0' is simplest)."""
         return (len(value), tuple(_codepoint_key(ord(c)) for c in value))
 
+    @needed_for("indexing")
     @property
     def max_index(self) -> int:
         alpha_size = self._alpha_size
@@ -108,6 +110,7 @@ class StringChoice(ChoiceType[str]):
             - 1
         )
 
+    @needed_for("indexing")
     @property
     def _alpha_size(self) -> int:
         """Count of valid codepoints in range, excluding surrogates."""
@@ -119,6 +122,7 @@ class StringChoice(ChoiceType[str]):
             total -= sur_hi - sur_lo + 1
         return total
 
+    @needed_for("indexing")
     def _codepoint_rank(self, codepoint: int) -> int:
         """Rank of a codepoint within valid codepoints sorted by key.
 
@@ -153,6 +157,7 @@ class StringChoice(ChoiceType[str]):
                 count += max(0, n)
         return count
 
+    @needed_for("indexing")
     def _codepoint_at_rank(self, rank: int) -> int:
         """Codepoint at the given rank among valid codepoints sorted by key.
 
@@ -174,6 +179,7 @@ class StringChoice(ChoiceType[str]):
         assert c <= self.max_codepoint
         return c
 
+    @needed_for("indexing")
     def to_index(self, value: str) -> int:
         """Shortlex index using mapped codepoint alphabet."""
         alpha_size = self._alpha_size
@@ -183,6 +189,7 @@ class StringChoice(ChoiceType[str]):
             position = position * alpha_size + self._codepoint_rank(ord(ch))
         return offset + position
 
+    @needed_for("indexing")
     def from_index(self, index: int) -> str | None:
         """Inverse of shortlex index."""
         alpha_size = self._alpha_size

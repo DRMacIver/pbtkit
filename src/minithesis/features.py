@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import sys
 import types
+from typing import Any
 
 DISABLED_MODULES: frozenset[str] = frozenset(
     m for m in os.environ.get("MINITHESIS_DISABLED", "").split(",") if m
@@ -56,6 +57,19 @@ def disable_modules(modules: frozenset[str]) -> None:
     for name in modules:
         full = f"minithesis.{name}"
         sys.modules[full] = _DisabledModule(name, full)
+
+
+def needed_for(feature: str) -> Any:
+    """Mark a function or method as needed for a specific feature.
+
+    This is a no-op at runtime — it returns the decorated function
+    unchanged. The single-file compiler uses this annotation to
+    strip decorated items when the feature is disabled."""
+
+    def decorator(fn: Any) -> Any:
+        return fn
+
+    return decorator
 
 
 disable_modules(DISABLED_MODULES)

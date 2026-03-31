@@ -95,16 +95,17 @@ import minithesis.floats
 import minithesis.shrinking.advanced_integer_passes
 import minithesis.shrinking.bind_deletion
 import minithesis.shrinking.duplication_passes
-import minithesis.shrinking.mutation
 import minithesis.shrinking.sorting
 import minithesis.targeting
 import minithesis.text
 
-# Advanced passes that depend on specific type modules.
+# Advanced passes that depend on specific type modules or features.
 # Hardcoded dependency list: each entry is (module, required_feature).
 _FEATURE_DEPENDENT_MODULES = {
     "minithesis.shrinking.advanced_bytes_passes": "bytes",
     "minithesis.shrinking.advanced_string_passes": "text",
+    "minithesis.shrinking.index_passes": "indexing",
+    "minithesis.shrinking.mutation": "indexing",
 }
 
 from minithesis.features import DISABLED_MODULES as _disabled

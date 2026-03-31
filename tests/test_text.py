@@ -133,6 +133,19 @@ def test_string_from_index_out_of_range():
     assert sc.from_index(sc.max_index + 1) is None
 
 
+def test_string_codepoint_rank_with_surrogates():
+    """_codepoint_rank handles codepoint ranges that span surrogates."""
+    # Range spanning the surrogate block (0xD800-0xDFFF).
+    sc = StringChoice(0xD700, 0xE000, 0, 1)
+    # A codepoint above the surrogate block should have correct rank.
+    rank = sc._codepoint_rank(0xE000)
+    assert rank >= 0
+    # Roundtrip
+    idx = sc.to_index(chr(0xE000))
+    back = sc.from_index(idx)
+    assert back == chr(0xE000)
+
+
 def test_text_unicode_shrinks(capsys):
     """Strings with high codepoints shrink toward the lowest in range."""
     with pytest.raises(AssertionError):

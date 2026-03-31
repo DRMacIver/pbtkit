@@ -16,6 +16,7 @@ from minithesis.core import (
     TestCase,
     value_shrinker,
 )
+from minithesis.features import needed_for
 from minithesis.shrinking.sequence import shrink_sequence
 
 # ---------------------------------------------------------------------------
@@ -47,10 +48,12 @@ class BytesChoice(ChoiceType[bytes]):
         """Shortlex ordering: shorter is simpler, then lexicographic."""
         return (len(value), value)
 
+    @needed_for("indexing")
     @property
     def max_index(self) -> int:
         return self.to_index(b"\xff" * self.max_size)
 
+    @needed_for("indexing")
     def to_index(self, value: bytes) -> int:
         """Shortlex index: count all shorter byte strings from min_size,
         then the position within strings of this length."""
@@ -60,6 +63,7 @@ class BytesChoice(ChoiceType[bytes]):
         position = int.from_bytes(value, "big") if value else 0
         return offset + position
 
+    @needed_for("indexing")
     def from_index(self, index: int) -> bytes | None:
         """Inverse of shortlex index."""
         # Find the length bucket

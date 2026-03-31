@@ -22,6 +22,8 @@ from typing import (
     TypeVar,
 )
 
+from minithesis.features import needed_for
+
 T = TypeVar("T", covariant=True)
 S = TypeVar("S", covariant=True)
 U = TypeVar("U")
@@ -55,17 +57,20 @@ class ChoiceType(Generic[U]):
         shrinking. By default just returns the value itself."""
         return value
 
+    @needed_for("indexing")
     @property
     def supports_index(self) -> bool:
         """Whether this choice type implements to_index/from_index."""
         return type(self).to_index is not ChoiceType.to_index
 
+    @needed_for("indexing")
     @property
     def max_index(self) -> int:
         """The largest valid index for from_index. Returns 0 for
         types that don't support indexing."""
         raise NotImplementedError
 
+    @needed_for("indexing")
     def to_index(self, value: U) -> int:
         """Convert a valid value to a non-negative integer index.
 
@@ -74,6 +79,7 @@ class ChoiceType(Generic[U]):
         from_index(to_index(v)) == v for all valid v."""
         raise NotImplementedError
 
+    @needed_for("indexing")
     def from_index(self, index: int) -> U | None:
         """Convert a non-negative integer index back to a value.
 
@@ -114,10 +120,12 @@ class IntegerChoice(ChoiceType[int]):
     def sort_key(self, value: int) -> Any:
         return (abs(value), value < 0)
 
+    @needed_for("indexing")
     @property
     def max_index(self) -> int:
         return self.max_value - self.min_value
 
+    @needed_for("indexing")
     def to_index(self, value: int) -> int:
         """Dense index matching sort_key order (O(1)).
 
@@ -140,6 +148,7 @@ class IntegerChoice(ChoiceType[int]):
             count += 1
         return count + 1
 
+    @needed_for("indexing")
     def from_index(self, index: int) -> int | None:
         """Return the index-th valid value in sort_key order (O(1))."""
         s = self.simplest
@@ -191,13 +200,16 @@ class BooleanChoice(ChoiceType[bool]):
     def validate(self, value: bool) -> bool:
         return isinstance(value, int) and value in (0, 1)
 
+    @needed_for("indexing")
     @property
     def max_index(self) -> int:
         return 1
 
+    @needed_for("indexing")
     def to_index(self, value: bool) -> int:
         return int(value)
 
+    @needed_for("indexing")
     def from_index(self, index: int) -> bool | None:
         if index == 0:
             return False
