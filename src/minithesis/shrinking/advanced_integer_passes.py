@@ -202,7 +202,7 @@ def try_shortening_via_increment(state: MinithesisState) -> None:
                 if v != node.value and node.kind.validate(v) and v not in candidates:
                     candidates.append(v)
         elif isinstance(node.kind, BooleanChoice):
-            if node.value is False:
+            if not node.value:
                 candidates = [True]
             else:
                 i += 1
