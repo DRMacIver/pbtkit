@@ -104,32 +104,45 @@ class IntegerChoice(ChoiceType[int]):
         return (abs(value), value < 0)
 
     def to_index(self, value: int) -> int:
-        """Zigzag encoding centered on simplest, matching sort_key order.
+        """Dense index matching sort_key order.
 
-        sort_key is (abs(value - simplest), value < simplest), so positive
-        offsets come before negative at the same distance:
-        simplest→0, simplest+1→1, simplest-1→2, simplest+2→3, ..."""
+        Counts valid values with strictly smaller sort_key. Since
+        sort_key is (abs(d), d < 0) where d = value - simplest,
+        values are ordered: s, s+1, s-1, s+2, s-2, ..."""
         s = self.simplest
         d = value - s
         if d == 0:
             return 0
+        # Count valid values at distances 1..abs(d)-1
+        count = 0
+        for dist in range(1, abs(d)):
+            if self.validate(s + dist):
+                count += 1
+            if self.validate(s - dist):
+                count += 1
+        # At distance abs(d): positive comes before negative
         if d > 0:
-            return 2 * d - 1
-        return 2 * (-d)
+            return count + 1
+        # d < 0: also count the positive side at this distance
+        if self.validate(s + abs(d)):
+            count += 1
+        return count + 1
 
     def from_index(self, index: int) -> int | None:
-        """Inverse of zigzag encoding, returning None if out of range."""
+        """Return the index-th valid value in sort_key order."""
         s = self.simplest
         if index == 0:
-            value = s
-        elif index % 2 == 1:
-            # Odd indices → positive offset
-            value = s + (index + 1) // 2
-        else:
-            # Even indices → negative offset
-            value = s - index // 2
-        if self.validate(value):
-            return value
+            return s if self.validate(s) else None
+        count = 0
+        for dist in range(1, self.max_value - self.min_value + 1):
+            if self.validate(s + dist):
+                count += 1
+                if count == index:
+                    return s + dist
+            if self.validate(s - dist):
+                count += 1
+                if count == index:
+                    return s - dist
         return None
 
 
