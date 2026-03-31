@@ -733,9 +733,12 @@ def binary_search_integer_towards_zero(
             value,
             try_replace,
         )
-        # Linear scan small values that binary search may skip
-        # when the function is non-monotonic.
-        for v in range(max(kind.simplest, 0), min(value, 8)):
+        # Linear scan values that binary search may skip
+        # when the function is non-monotonic. Scan more when
+        # the range is small (e.g. sampled_from with few options).
+        range_size = kind.max_value - kind.min_value + 1
+        scan_limit = min(value, 8 if range_size > 32 else range_size)
+        for v in range(max(kind.simplest, 0), scan_limit):
             try_replace(v)
         # Also try negative values with smaller absolute value,
         # which are simpler under sort_key (e.g. -1 < 2).
