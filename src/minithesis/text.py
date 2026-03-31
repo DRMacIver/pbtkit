@@ -91,35 +91,94 @@ class StringChoice(ChoiceType[str]):
         codepoint key (where '0' is simplest)."""
         return (len(value), tuple(_codepoint_key(ord(c)) for c in value))
 
-    def _alphabet(self) -> list[int]:
-        """Return valid codepoints sorted by _codepoint_key."""
-        codepoints = [
-            c
-            for c in range(self.min_codepoint, self.max_codepoint + 1)
-            if not (0xD800 <= c <= 0xDFFF)
-        ]
-        return sorted(codepoints, key=_codepoint_key)
+    @property
+    def max_index(self) -> int:
+        alpha_size = self._alpha_size
+        return sum(
+            alpha_size**length for length in range(self.min_size, self.max_size + 1)
+        ) - 1
+
+    @property
+    def _alpha_size(self) -> int:
+        """Count of valid codepoints in range, excluding surrogates."""
+        total = self.max_codepoint - self.min_codepoint + 1
+        # Subtract surrogates that fall within range.
+        sur_lo = max(self.min_codepoint, 0xD800)
+        sur_hi = min(self.max_codepoint, 0xDFFF)
+        if sur_lo <= sur_hi:
+            total -= sur_hi - sur_lo + 1
+        return total
+
+    def _codepoint_rank(self, codepoint: int) -> int:
+        """Rank of a codepoint within valid codepoints sorted by key.
+
+        O(1): counts how many valid codepoints have a strictly smaller
+        _codepoint_key."""
+        key = _codepoint_key(codepoint)
+        # Count codepoints c in [min_codepoint, max_codepoint] (excluding
+        # surrogates) with _codepoint_key(c) < key.
+        count = 0
+        # Low codepoints (< 128): _codepoint_key reorders them.
+        lo = max(self.min_codepoint, 0)
+        hi = min(self.max_codepoint, 127)
+        if lo <= hi:
+            # Keys for [lo, hi] are {_codepoint_key(c) for c in [lo, hi]}.
+            # Count those < key.
+            for c in range(lo, hi + 1):
+                if _codepoint_key(c) < key:
+                    count += 1
+        # High codepoints (>= 128): _codepoint_key(c) == c, natural order.
+        hi_lo = max(self.min_codepoint, 128)
+        hi_hi = self.max_codepoint
+        if hi_lo <= hi_hi:
+            # These have key == c. Count those with c < key.
+            if key > hi_lo:
+                end = min(key - 1, hi_hi)
+                n = end - hi_lo + 1
+                # Subtract surrogates in [hi_lo, end].
+                sur_lo = max(hi_lo, 0xD800)
+                sur_hi = min(end, 0xDFFF)
+                if sur_lo <= sur_hi:
+                    n -= sur_hi - sur_lo + 1
+                count += max(0, n)
+        return count
+
+    def _codepoint_at_rank(self, rank: int) -> int:
+        """Codepoint at the given rank among valid codepoints sorted by key.
+
+        O(n) where n = min(128, range width) for the low-codepoint portion,
+        O(1) for high codepoints."""
+        # Build sorted keys for the low portion (at most 128 entries).
+        lo = max(self.min_codepoint, 0)
+        hi = min(self.max_codepoint, 127)
+        low_sorted = sorted(range(lo, hi + 1), key=_codepoint_key) if lo <= hi else []
+        if rank < len(low_sorted):
+            return low_sorted[rank]
+        rank -= len(low_sorted)
+        # High codepoints (>= 128) are in natural order, skip surrogates.
+        hi_lo = max(self.min_codepoint, 128)
+        c = hi_lo + rank
+        # Skip past surrogates.
+        if c >= 0xD800:
+            c += 0xDFFF - 0xD800 + 1
+        if c > self.max_codepoint:
+            return self.min_codepoint  # shouldn't happen for valid rank
+        return c
 
     def to_index(self, value: str) -> int:
         """Shortlex index using mapped codepoint alphabet."""
-        alphabet = self._alphabet()
-        alpha_size = len(alphabet)
-        # Build reverse lookup: codepoint → rank in alphabet
-        rank = {c: i for i, c in enumerate(alphabet)}
-        # Count all strings of lengths min_size .. len(value)-1
+        alpha_size = self._alpha_size
         offset = sum(
             alpha_size**length for length in range(self.min_size, len(value))
         )
-        # Position within strings of this length (mixed-radix number)
         position = 0
         for ch in value:
-            position = position * alpha_size + rank[ord(ch)]
+            position = position * alpha_size + self._codepoint_rank(ord(ch))
         return offset + position
 
     def from_index(self, index: int) -> str | None:
         """Inverse of shortlex index."""
-        alphabet = self._alphabet()
-        alpha_size = len(alphabet)
+        alpha_size = self._alpha_size
         if alpha_size == 0:
             return "" if index == 0 and self.min_size == 0 else None
         remaining = index
@@ -128,7 +187,7 @@ class StringChoice(ChoiceType[str]):
             if remaining < bucket_size:
                 chars = []
                 for _ in range(length):
-                    chars.append(chr(alphabet[remaining % alpha_size]))
+                    chars.append(chr(self._codepoint_at_rank(remaining % alpha_size)))
                     remaining //= alpha_size
                 return "".join(reversed(chars))
             remaining -= bucket_size

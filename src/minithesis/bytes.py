@@ -47,6 +47,10 @@ class BytesChoice(ChoiceType[bytes]):
         """Shortlex ordering: shorter is simpler, then lexicographic."""
         return (len(value), value)
 
+    @property
+    def max_index(self) -> int:
+        return self.to_index(b"\xff" * self.max_size)
+
     def to_index(self, value: bytes) -> int:
         """Shortlex index: count all shorter byte strings from min_size,
         then the position within strings of this length."""

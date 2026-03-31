@@ -55,20 +55,31 @@ class ChoiceType(Generic[U]):
         shrinking. By default just returns the value itself."""
         return value
 
+    @property
+    def supports_index(self) -> bool:
+        """Whether this choice type implements to_index/from_index."""
+        return type(self).to_index is not ChoiceType.to_index
+
+    @property
+    def max_index(self) -> int:
+        """The largest valid index for from_index. Returns 0 for
+        types that don't support indexing."""
+        raise NotImplementedError
+
     def to_index(self, value: U) -> int:
         """Convert a valid value to a non-negative integer index.
 
-        Index 0 corresponds to simplest, index 1 to unit. Larger
-        indices represent less simple values. The mapping must
-        satisfy: from_index(to_index(v)) == v for all valid v."""
+        Index 0 corresponds to simplest. Larger indices represent
+        less simple values. The mapping must satisfy:
+        from_index(to_index(v)) == v for all valid v."""
         raise NotImplementedError
 
     def from_index(self, index: int) -> U | None:
         """Convert a non-negative integer index back to a value.
 
         Returns None if the index doesn't correspond to a valid value.
-        Must satisfy: from_index(0) == simplest, from_index(1) == unit,
-        and to_index(from_index(i)) <= i when from_index(i) is not None."""
+        Must satisfy: from_index(0) == simplest, and
+        to_index(from_index(i)) <= i when from_index(i) is not None."""
         raise NotImplementedError
 
 
@@ -103,8 +114,12 @@ class IntegerChoice(ChoiceType[int]):
     def sort_key(self, value: int) -> Any:
         return (abs(value), value < 0)
 
+    @property
+    def max_index(self) -> int:
+        return self.max_value - self.min_value
+
     def to_index(self, value: int) -> int:
-        """Dense index matching sort_key order.
+        """Dense index matching sort_key order (O(1)).
 
         Counts valid values with strictly smaller sort_key. Since
         sort_key is (abs(d), d < 0) where d = value - simplest,
@@ -113,36 +128,49 @@ class IntegerChoice(ChoiceType[int]):
         d = value - s
         if d == 0:
             return 0
-        # Count valid values at distances 1..abs(d)-1
-        count = 0
-        for dist in range(1, abs(d)):
-            if self.validate(s + dist):
-                count += 1
-            if self.validate(s - dist):
-                count += 1
-        # At distance abs(d): positive comes before negative
+        above = self.max_value - s  # how many steps above s are valid
+        below = s - self.min_value  # how many steps below s are valid
+        ad = abs(d)
+        # Count valid values at distances 1..ad-1 (both sides)
+        count = min(ad - 1, above) + min(ad - 1, below)
         if d > 0:
             return count + 1
-        # d < 0: also count the positive side at this distance
-        if self.validate(s + abs(d)):
+        # d < 0: also count positive side at this distance
+        if ad <= above:
             count += 1
         return count + 1
 
     def from_index(self, index: int) -> int | None:
-        """Return the index-th valid value in sort_key order."""
+        """Return the index-th valid value in sort_key order (O(1))."""
         s = self.simplest
         if index == 0:
             return s if self.validate(s) else None
-        count = 0
-        for dist in range(1, self.max_value - self.min_value + 1):
-            if self.validate(s + dist):
-                count += 1
-                if count == index:
-                    return s + dist
-            if self.validate(s - dist):
-                count += 1
-                if count == index:
-                    return s - dist
+        above = self.max_value - s
+        below = s - self.min_value
+        # Binary search-style: at each distance d, there are up to 2
+        # values (s+d and s-d). Find which distance and side.
+        remaining = index
+        # At distance d (1-indexed):
+        #   positive side exists if d <= above
+        #   negative side exists if d <= below
+        # Use closed-form: at distances 1..d, total valid values =
+        #   min(d, above) + min(d, below)
+        lo, hi = 1, above + below
+        while lo < hi:
+            mid = (lo + hi) // 2
+            total = min(mid, above) + min(mid, below)
+            if total >= remaining:
+                hi = mid
+            else:
+                lo = mid + 1
+        d = lo
+        # How many values at distances < d?
+        before = min(d - 1, above) + min(d - 1, below)
+        pos_in_d = remaining - before  # 1 or 2
+        if pos_in_d == 1 and d <= above:
+            return s + d
+        if d <= below:
+            return s - d
         return None
 
 
@@ -160,6 +188,10 @@ class BooleanChoice(ChoiceType[bool]):
 
     def validate(self, value: bool) -> bool:
         return isinstance(value, int) and value in (0, 1)
+
+    @property
+    def max_index(self) -> int:
+        return 1
 
     def to_index(self, value: bool) -> int:
         return int(value)
