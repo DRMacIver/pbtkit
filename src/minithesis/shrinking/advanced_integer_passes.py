@@ -187,8 +187,13 @@ def try_shortening_via_increment(state: MinithesisState) -> None:
     i = 0
     while i < len(state.result):
         node = state.result[i]
+        candidates: list[Any] = []
         if isinstance(node.kind, BytesChoice):
-            candidates: list[Any] = [b"\x00" * node.kind.max_size]
+            candidates = [b"\x00" * node.kind.max_size]
+        elif isinstance(node.kind, StringChoice):
+            # Try max-length string of simplest character.
+            simplest_char = chr(node.kind.min_codepoint)
+            candidates = [simplest_char * node.kind.max_size]
         elif isinstance(node.kind, IntegerChoice):
             # Try +1, max_value, and min_value. +1 catches gradual
             # thresholds, max_value catches sampled_from, min_value
@@ -210,16 +215,11 @@ def try_shortening_via_increment(state: MinithesisState) -> None:
             for v in float_vals + [node.kind.min_value, node.kind.max_value]:
                 if v != node.value and node.kind.validate(v) and v not in candidates:
                     candidates.append(v)
-        elif isinstance(node.kind, BooleanChoice):
-            if not node.value:
-                candidates = [True]
-            else:
-                i += 1
-                continue
-        else:
+        elif isinstance(node.kind, BooleanChoice) and not node.value:
+            candidates = [True]
+        if not candidates:
             i += 1
             continue
-
         for incremented in candidates:
             # Run the test with the incremented value. If the test takes a
             # shorter interesting path, state.test_function updates state.result.
