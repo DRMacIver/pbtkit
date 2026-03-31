@@ -327,6 +327,41 @@ def strip_needed_for(source: str, disabled_features: frozenset[str] = frozenset(
     return modified.code
 
 
+def _strip_empty_hook(source: str, hook_list: str, decorator_name: str) -> str:
+    """Remove for-loops over an empty hook list, the list declaration,
+    and the registration decorator function."""
+    lines = source.splitlines(keepends=True)
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+        # Remove list declaration: HOOK_LIST: list[...] = []
+        if stripped.startswith(f"{hook_list}:") or stripped.startswith(f"{hook_list} ="):
+            i += 1
+            continue
+        # Remove for-loop: for X in HOOK_LIST:
+        if f"in {hook_list}:" in stripped and stripped.startswith("for "):
+            indent = len(line) - len(line.lstrip())
+            i += 1
+            while i < len(lines):
+                if not lines[i].strip():
+                    i += 1
+                    continue
+                line_indent = len(lines[i]) - len(lines[i].lstrip())
+                if line_indent <= indent:
+                    break
+                i += 1
+            continue
+        # Remove the registration decorator function.
+        if stripped == f"def {decorator_name}(":
+            i = _block_end(lines, i)
+            continue
+        out.append(line)
+        i += 1
+    return "".join(out)
+
+
 def _is_import(line: str) -> bool:
     return line.startswith("import ") or line.startswith("from ")
 
@@ -571,6 +606,20 @@ def compile_minithesis(disabled: frozenset[str] = frozenset()) -> str:
     # Process generators (remove imports)
     gen_body = process_generators(sources["generators"])
 
+    # Determine which hook lists are used by the enabled extensions.
+    # Map decorator names to the hook list they register into.
+    _HOOK_LISTS = {
+        "setup_hook": "SETUP_HOOKS",
+        "teardown_hook": "TEARDOWN_HOOKS",
+        "test_function_hook": "TEST_FUNCTION_HOOKS",
+        "run_phase": "RUN_PHASES",
+    }
+    used_hooks: set[str] = set()
+    all_source = core_body + "\n".join(ext_bodies) + gen_body
+    for decorator, hook_list in _HOOK_LISTS.items():
+        if f"@{decorator}" in all_source:
+            used_hooks.add(hook_list)
+
     # Assemble everything
     parts = [HEADER, module_docstring, "\n", import_text, "\n\n", core_body]
     for body in ext_bodies:
@@ -579,7 +628,15 @@ def compile_minithesis(disabled: frozenset[str] = frozenset()) -> str:
     parts.append("\n")
     parts.append(gen_body)
 
-    return "".join(parts)
+    result = "".join(parts)
+
+    # Strip for-loops over empty hook lists, their list declarations,
+    # and the registration decorator functions.
+    for decorator, hook_list in _HOOK_LISTS.items():
+        if hook_list not in used_hooks:
+            result = _strip_empty_hook(result, hook_list, decorator)
+
+    return result
 
 
 # ---------------------------------------------------------------------------
