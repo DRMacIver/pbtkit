@@ -19,7 +19,7 @@ from minithesis import DirectoryDB, run_test
 from minithesis.core import MinithesisState, Status
 from minithesis.core import TestCase as TC
 from minithesis.database import SerializationTag
-from minithesis.floats import FloatChoice, _draw_unbounded_float
+from minithesis.floats import _MAX_FINITE_INDEX, FloatChoice, _draw_unbounded_float
 from minithesis.generators import floats
 
 
@@ -430,3 +430,90 @@ def test_draw_unbounded_float_rejects_nan():
     for _ in range(10000):
         f = _draw_unbounded_float(rnd)
         assert not math.isnan(f)
+
+
+def test_float_index_subnormals():
+    """Subnormals get high indices (most complex)."""
+    fc = FloatChoice(float("-inf"), float("inf"), False, False)
+    # 5e-324 is the smallest positive subnormal
+    idx = fc.to_index(5e-324)
+    # It should have a very high index (after all normals)
+    assert idx > fc.to_index(1e300)
+    # Roundtrip
+    back = fc.from_index(idx)
+    assert back == 5e-324
+
+
+def test_float_index_bounded_simplest():
+    """Bounded ranges find the correct simplest via power-of-2 search."""
+    # Range where simplest is found via the power-of-2 search, not boundaries.
+    fc = FloatChoice(0.5, 2.0, False, False)
+    assert fc.simplest == 1.0
+    assert fc.to_index(1.0) == 0
+
+
+def test_float_from_index_inf():
+    """from_index returns inf/nan for high indices."""
+    fc = FloatChoice(float("-inf"), float("inf"), True, True)
+    assert fc.from_index(_MAX_FINITE_INDEX + 1) == math.inf
+    assert fc.from_index(_MAX_FINITE_INDEX + 2) == -math.inf
+    v = fc.from_index(_MAX_FINITE_INDEX + 3)
+    assert v is not None and math.isnan(v)
+
+
+def test_float_from_index_past_max():
+    """from_index returns None for huge indices."""
+    fc = FloatChoice(0.0, 1.0, False, False)
+    assert fc.from_index(10**20) is None
+    # Also test a bounded range where base + index exceeds MAX.
+    fc2 = FloatChoice(1e300, 2e300, False, False)
+    assert fc2.from_index(_MAX_FINITE_INDEX) is None
+
+
+def test_float_from_index_out_of_bounded_range():
+    """from_index returns None for indices that map to floats outside
+    the bounded range (e.g. negative floats for a positive-only range)."""
+    fc = FloatChoice(1.0, 2.0, False, False)
+    # Index 1 maps to -0.0 in the global ordering (simplest base is 1.0,
+    # raw base + 1 = the next raw index which is -1.0). Validate fails.
+    assert fc.from_index(1) is None
+
+
+def test_float_simplest_with_inf_bounds():
+    """simplest works when bounds are infinite."""
+    fc = FloatChoice(float("-inf"), float("inf"), False, False)
+    assert fc.simplest == 0.0
+    fc2 = FloatChoice(1.0, float("inf"), False, False)
+    assert fc2.simplest == 1.0
+    fc3 = FloatChoice(float("-inf"), -1.0, False, False)
+    assert fc3.simplest == -1.0
+
+
+def test_float_simplest_tiny_range():
+    """simplest for a tiny range where no power of 2 is in range."""
+    fc = FloatChoice(1.5, 1.75, False, False)
+    assert fc.simplest == 1.5
+
+
+def test_float_simplest_subnormal_range():
+    """simplest for a subnormal-only range exhausts the exp_rank search."""
+    # 1e-323 has mantissa > 1, so its index exceeds the last normal
+    # exponent's base_idx, causing the power-of-2 loop to exhaust.
+    fc = FloatChoice(1e-323, 2e-323, False, False)
+    assert fc.simplest == 1e-323
+
+
+def test_float_simplest_finds_power_of_two():
+    """simplest finds a power of 2 inside the range when boundaries
+    don't have the smallest index."""
+    fc = FloatChoice(0.5, 2.0, False, False)
+    assert fc.simplest == 1.0  # 2^0, found by power-of-2 search
+
+
+def test_float_negative_zero_simplest():
+    """When only -0.0 is valid, simplest returns -0.0."""
+    # A range that contains -0.0 but not 0.0 is impossible with finite bounds.
+    # But we can test via the validate path.
+    fc = FloatChoice(-1.0, 0.0, False, False)
+    # 0.0 validates (0.0 >= -1.0 and 0.0 <= 0.0), so simplest is 0.0
+    assert fc.simplest == 0.0

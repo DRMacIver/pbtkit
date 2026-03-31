@@ -172,9 +172,8 @@ class IntegerChoice(ChoiceType[int]):
         pos_in_d = remaining - before  # 1 or 2
         if pos_in_d == 1 and d <= above:
             return s + d
-        if d <= below:
-            return s - d
-        return None
+        assert d <= below
+        return s - d
 
 
 @dataclass(frozen=True)

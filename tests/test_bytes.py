@@ -10,6 +10,7 @@
 import pytest
 
 from minithesis import run_test
+from minithesis.bytes import BytesChoice
 
 pytestmark = pytest.mark.requires("bytes")
 from minithesis.database import DirectoryDB
@@ -108,6 +109,12 @@ def test_shrinks_bytes_to_simplest(capsys):
 
 
 @pytest.mark.requires("targeting")
+def test_bytes_from_index_out_of_range():
+    """from_index past max_index returns None."""
+    bc = BytesChoice(0, 2)
+    assert bc.from_index(bc.max_index + 1) is None
+
+
 def test_targeting_with_bytes():
     """Targeting skips non-integer nodes without crashing."""
     max_score = 0

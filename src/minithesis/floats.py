@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 import struct
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -30,7 +31,6 @@ NAN_DRAW_PROBABILITY = 0.01
 # ---------------------------------------------------------------------------
 # Float helpers
 # ---------------------------------------------------------------------------
-
 
 
 def _draw_unbounded_float(random: Any) -> float:
@@ -109,8 +109,7 @@ def _index_to_float(index: int) -> float:
         index -= subnormal_start
         sign = index & 1
         mantissa = (index >> 1) + 1
-        if mantissa >= (1 << 52):
-            return float("nan")  # out of range
+        assert mantissa < (1 << 52)
         bits = (sign << 63) | mantissa
         return struct.unpack("!d", struct.pack("!Q", bits))[0]
 
@@ -128,8 +127,7 @@ def _index_to_float(index: int) -> float:
     else:
         biased_exp = 1023 - exp_rank // 2
 
-    if biased_exp < 1 or biased_exp > 2046:
-        return float("nan")  # out of range
+    assert 1 <= biased_exp <= 2046
 
     bits = (sign << 63) | (biased_exp << 52) | mantissa
     return struct.unpack("!d", struct.pack("!Q", bits))[0]
@@ -160,8 +158,6 @@ class FloatChoice(ChoiceType[float]):
         # in range, compute the boundary float.
         if self.validate(0.0):
             return 0.0
-        if self.validate(-0.0):
-            return -0.0
 
         best: float | None = None
         best_idx = _MAX_FINITE_INDEX + 1
@@ -366,8 +362,6 @@ def _shrink_float(
     if math.isinf(value):
         if value < 0:
             try_replace(math.inf)
-        import sys
-
         try_replace(sys.float_info.max if value > 0 else -sys.float_info.max)
 
     # Step 2: If negative (or -0.0), try flipping sign.
@@ -388,9 +382,7 @@ def _shrink_float(
             1023,
             biased_exp,
             lambda e: try_replace(
-                struct.unpack(
-                    "!d", struct.pack("!Q", (sign << 63) | (e << 52))
-                )[0]
+                struct.unpack("!d", struct.pack("!Q", (sign << 63) | (e << 52)))[0]
             ),
         )
     elif biased_exp < 1023 and biased_exp > 0:
@@ -399,9 +391,7 @@ def _shrink_float(
             biased_exp,
             1023,
             lambda e: try_replace(
-                struct.unpack(
-                    "!d", struct.pack("!Q", (sign << 63) | (e << 52))
-                )[0]
+                struct.unpack("!d", struct.pack("!Q", (sign << 63) | (e << 52)))[0]
             ),
         )
 
@@ -411,9 +401,7 @@ def _shrink_float(
     bin_search_down(
         0,
         mantissa,
-        lambda m: try_replace(
-            struct.unpack("!d", struct.pack("!Q", base_bits | m))[0]
-        ),
+        lambda m: try_replace(struct.unpack("!d", struct.pack("!Q", base_bits | m))[0]),
     )
 
 

@@ -127,6 +127,12 @@ def test_string_validate():
     assert not kind.validate("abcdef")  # too long
 
 
+def test_string_from_index_out_of_range():
+    """from_index past max_index returns None."""
+    sc = StringChoice(32, 126, 0, 2)
+    assert sc.from_index(sc.max_index + 1) is None
+
+
 def test_text_unicode_shrinks(capsys):
     """Strings with high codepoints shrink toward the lowest in range."""
     with pytest.raises(AssertionError):

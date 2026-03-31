@@ -83,10 +83,18 @@ def string_choice_and_value(draw):
 
 @st.composite
 def float_choice_and_value(draw):
-    lo = draw(st.floats(allow_nan=False, allow_infinity=False, min_value=-1e6, max_value=1e6))
-    hi = draw(st.floats(allow_nan=False, allow_infinity=False, min_value=lo, max_value=lo + 1e6))
+    lo = draw(
+        st.floats(allow_nan=False, allow_infinity=False, min_value=-1e6, max_value=1e6)
+    )
+    hi = draw(
+        st.floats(
+            allow_nan=False, allow_infinity=False, min_value=lo, max_value=lo + 1e6
+        )
+    )
     kind = FloatChoice(lo, hi, allow_nan=False, allow_infinity=False)
-    value = draw(st.floats(min_value=lo, max_value=hi, allow_nan=False, allow_infinity=False))
+    value = draw(
+        st.floats(min_value=lo, max_value=hi, allow_nan=False, allow_infinity=False)
+    )
     assume(kind.validate(value))
     return kind, value
 

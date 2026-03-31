@@ -827,6 +827,37 @@ def test_lower_and_bump_stale_j_after_replace():
     state.run()
 
 
+def test_mutation_with_single_value_adjacent():
+    """mutate_and_shrink handles adjacent single-value choices where
+    from_index(1) returns None."""
+
+    def tf(tc):
+        v0 = tc.any(booleans())
+        tc.any(integers(5, 5))  # single-value, from_index(1) = None
+        if v0:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 100)
+    state.run()
+    assert state.result is not None
+
+
+@pytest.mark.requires("floats")
+def test_lower_and_bump_with_float_source_gaps():
+    """lower_and_bump must handle from_index returning None when the
+    float source has index gaps (bounded range with interleaved signs)."""
+
+    def tf(tc):
+        v0 = tc.any(floats(min_value=1.0, max_value=2.0, allow_nan=False))
+        v1 = tc.any(booleans())
+        if v0 > 1.5 and v1:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 100)
+    state.run()
+    assert state.result is not None
+
+
 def test_lower_and_bump_with_bounded_float_target():
     """lower_and_bump must skip invalid float bump values when the
     float's range doesn't include 1.0 or -1.0."""

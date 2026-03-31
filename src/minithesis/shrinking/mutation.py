@@ -37,9 +37,7 @@ def mutate_and_shrink(state: MinithesisState) -> None:
     while i < len(state.result):
         node = state.result[i]
         kind = node.kind
-        if not kind.supports_index:
-            i += 1
-            continue
+        assert kind.supports_index
         current_idx = kind.to_index(node.value)
         # Try small index offsets (±1 through ±5).
         candidates = []
@@ -72,11 +70,9 @@ def mutate_and_shrink(state: MinithesisState) -> None:
             # unit (from_index(1)), with random continuation.
             for j_offset in range(1, min(3, len(state.result) - i)):
                 j = i + j_offset
-                if j >= len(state.result):
-                    break
+                assert j < len(state.result)
                 kind_j = state.result[j].kind
-                if not kind_j.supports_index:
-                    continue
+                assert kind_j.supports_index
                 unit_val = kind_j.from_index(1)
                 if unit_val is None:
                     continue

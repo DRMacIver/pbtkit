@@ -54,6 +54,7 @@ def lower_and_bump(state: MinithesisState) -> None:
             # Decrement: try the previous value in index order.
             new_val = kind_i.from_index(current_idx - 1)
             if new_val is None:
+                # Index gap (e.g. bounded float range). Skip.
                 idx += 1
                 continue
             # Find the bump target: the gap'th indexed node after i.
@@ -167,9 +168,7 @@ def try_shortening_via_increment(state: MinithesisState) -> None:
     while i < len(state.result):
         node = state.result[i]
         kind = node.kind
-        if not kind.supports_index:
-            i += 1
-            continue
+        assert kind.supports_index
         current_idx = kind.to_index(node.value)
         # Generate candidates by incrementing the index.
         candidates = []
@@ -205,8 +204,7 @@ def try_shortening_via_increment(state: MinithesisState) -> None:
                 if j >= len(state.result):
                     break
                 kind_j = state.result[j].kind
-                if not kind_j.supports_index:
-                    continue
+                assert kind_j.supports_index
                 unit_val = kind_j.from_index(1)
                 if unit_val is not None and j < len(zeroed):
                     filled = list(zeroed)
