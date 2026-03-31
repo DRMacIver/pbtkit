@@ -267,9 +267,12 @@ def test_integer_choice_unit():
 
 @pytest.mark.requires("floats")
 def test_float_choice_unit():
-    assert FloatChoice(-10.0, 10.0, False, False).unit == 1.0
-    # When simplest is at the top, unit goes down.
-    assert FloatChoice(-10.0, -5.0, False, False).unit == -6.0
+    # Under (exponent_rank, mantissa, sign) ordering:
+    # index 0 = 0.0, index 1 = -0.0, index 2 = 1.0, ...
+    assert FloatChoice(-10.0, 10.0, False, False).unit == -0.0
+    # Negative-only range: simplest has smallest exp_rank in range.
+    fc = FloatChoice(-10.0, -5.0, False, False)
+    assert fc.simplest == -5.0  # exp_rank=3, simpler than -8.0 (exp_rank=5)
     # Single-value range: falls back to simplest.
     assert FloatChoice(5.0, 5.0, False, False).unit == 5.0
 

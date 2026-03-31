@@ -53,7 +53,9 @@ def lower_and_bump(state: MinithesisState) -> None:
                 continue
             # Decrement: try the previous value in index order.
             new_val = kind_i.from_index(current_idx - 1)
-            assert new_val is not None
+            if new_val is None:
+                idx += 1
+                continue
             # Find the bump target: the gap'th indexed node after i.
             indices = _indexed_indices(state)
             targets_after_i = [k for k in indices if k > i]

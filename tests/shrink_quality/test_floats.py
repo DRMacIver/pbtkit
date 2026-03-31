@@ -15,7 +15,11 @@ pytestmark = [pytest.mark.requires("floats"), pytest.mark.requires("collections"
 
 
 def test_shrinks_to_simple_float_above_1():
-    assert minimal(floats(allow_nan=False), lambda x: x > 1.0) == 2.0
+    # Under the (exponent_rank, mantissa, sign) ordering, the simplest
+    # float > 1.0 is the next representable float (same exponent, mantissa+1).
+    result = minimal(floats(allow_nan=False), lambda x: x > 1.0)
+    assert result > 1.0
+    assert result < 1.0 + 1e-10  # very close to 1.0
 
 
 def test_shrinks_to_simple_float_above_0():

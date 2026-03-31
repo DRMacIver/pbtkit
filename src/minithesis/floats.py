@@ -9,14 +9,12 @@ from __future__ import annotations
 
 import math
 import struct
-import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 from minithesis.core import (
     ChoiceType,
-    IntegerChoice,
     TestCase,
     bin_search_down,
     value_shrinker,
@@ -33,21 +31,6 @@ NAN_DRAW_PROBABILITY = 0.01
 # Float helpers
 # ---------------------------------------------------------------------------
 
-
-def shrink_by_tens(n: int, condition: Callable[[int], bool]) -> int:
-    """Shrinks an integer `n` subject to condition `condition` in a
-    manner that will be particularly useful if the condition is sensitive
-    to its decimal representation."""
-    while n >= 10 and condition(n // 10):
-        n //= 10
-    k = 1
-    while k < n:
-        k *= 10
-    while k >= 10:
-        k //= 10
-        while n >= k and condition(n - k):
-            n -= k
-    return n
 
 
 def _draw_unbounded_float(random: Any) -> float:
@@ -80,61 +63,80 @@ def _lex_to_float(bits: int) -> float:
     return struct.unpack("!d", struct.pack("!Q", bits))[0]
 
 
-def _shortlex(s: str) -> tuple[int, str]:
-    """Shortlex key: shorter strings are simpler, then lexicographic."""
-    return (len(s), s)
+def _float_to_index(value: float) -> int:
+    """Convert a finite float to a dense index based on IEEE 754 parts.
 
-
-def _parse_float_string(value: float) -> tuple[str, str, str, str]:
-    """Parse a finite float's string representation into components.
-
-    Returns (exp_part, frac_part, int_part, sign) where:
-    - exp_part is the exponent string (e.g. "+20", "-10", or "")
-    - frac_part is the fractional digits (e.g. "5", "0", or "")
-    - int_part is the integer digits (e.g. "1", "100")
-    - sign is "" for positive, "-" for negative
+    Index 0 = +0.0, index 1 = -0.0. Then normal floats ordered by
+    (exponent_rank, mantissa, sign) where exponent_rank zigzags from
+    biased exponent 1023 (true exp 0). Subnormals come last (most complex).
     """
-    s = str(value)
-    sign = ""
-    if s.startswith("-"):
-        sign = "-"
-        s = s[1:]
-    if "e" in s:
-        mantissa, exp_part = s.split("e")
+    bits = struct.unpack("!Q", struct.pack("!d", value))[0]
+    sign = bits >> 63
+    biased_exp = (bits >> 52) & 0x7FF
+    mantissa = bits & ((1 << 52) - 1)
+
+    # Zero is simplest.
+    if biased_exp == 0 and mantissa == 0:
+        return sign  # 0 for +0.0, 1 for -0.0
+
+    # Subnormals (biased_exp=0, mantissa>0) come last.
+    if biased_exp == 0:
+        # After all normal floats. There are 2046 normal exponents.
+        return 2 + 2046 * (2**53) + (mantissa - 1) * 2 + sign
+
+    # Normal floats: zigzag exponent rank from 1023.
+    if biased_exp == 1023:
+        exp_rank = 0
+    elif biased_exp > 1023:
+        exp_rank = 2 * (biased_exp - 1023) - 1
     else:
-        mantissa = s
-        exp_part = ""
-    if "." in mantissa:
-        int_part, frac_part = mantissa.split(".")
-    else:
-        int_part = mantissa
-        frac_part = ""
-    return exp_part, frac_part, int_part, sign
+        exp_rank = 2 * (1023 - biased_exp)
+
+    return 2 + exp_rank * (2**53) + mantissa * 2 + sign
 
 
-def _float_string_key(value: float) -> tuple:
-    """Sort key for finite floats based on their string representation.
+def _index_to_float(index: int) -> float:
+    """Inverse of _float_to_index."""
+    if index < 2:
+        # Zero: index 0 = +0.0, index 1 = -0.0.
+        bits = index << 63
+        return struct.unpack("!d", struct.pack("!Q", bits))[0]
 
-    Compares the (exponent, fractional, integer) triple in shortlex
-    order, with positive preferred over negative. For the exponent,
-    positive exponents are simpler than negative ones."""
-    exp_part, frac_part, int_part, sign = _parse_float_string(value)
-    # For the exponent, split sign from magnitude.
-    if exp_part.startswith("-"):
-        exp_sign = 1  # negative exponents are less simple
-        exp_abs = exp_part[1:]
-    elif exp_part.startswith("+"):
-        exp_sign = 0
-        exp_abs = exp_part[1:]
+    index -= 2
+    subnormal_start = 2046 * (2**53)
+    if index >= subnormal_start:
+        # Subnormal.
+        index -= subnormal_start
+        sign = index & 1
+        mantissa = (index >> 1) + 1
+        if mantissa >= (1 << 52):
+            return float("nan")  # out of range
+        bits = (sign << 63) | mantissa
+        return struct.unpack("!d", struct.pack("!Q", bits))[0]
+
+    # Normal float.
+    sign = index & 1
+    index >>= 1
+    mantissa = index & ((1 << 52) - 1)
+    exp_rank = index >> 52
+
+    # Inverse zigzag.
+    if exp_rank == 0:
+        biased_exp = 1023
+    elif exp_rank % 2 == 1:
+        biased_exp = 1023 + (exp_rank + 1) // 2
     else:
-        exp_sign = 0
-        exp_abs = exp_part
-    exp_key = (_shortlex(exp_abs), exp_sign)
-    frac_key = _shortlex(frac_part)
-    int_key = _shortlex(int_part)
-    # Prefer positive over negative (0 for positive, 1 for negative)
-    sign_key = 0 if sign == "" else 1
-    return (exp_key, frac_key, int_key, sign_key)
+        biased_exp = 1023 - exp_rank // 2
+
+    if biased_exp < 1 or biased_exp > 2046:
+        return float("nan")  # out of range
+
+    bits = (sign << 63) | (biased_exp << 52) | mantissa
+    return struct.unpack("!d", struct.pack("!Q", bits))[0]
+
+
+# 2 zeros + 2046 normal exponents × 2^53 slots + (2^52-1) subnormals × 2 signs
+_MAX_FINITE_INDEX = 2 + 2046 * (2**53) + ((1 << 52) - 1) * 2 - 1
 
 
 # ---------------------------------------------------------------------------
@@ -151,22 +153,49 @@ class FloatChoice(ChoiceType[float]):
 
     @property
     def simplest(self) -> float:
-        # Prefer 0.0 if in range, otherwise the bound closest to 0.
-        if self.min_value <= 0.0 <= self.max_value:
+        # The simplest float is the valid one with the smallest raw index.
+        # Try candidates in raw-index order: 0, -0, then for each
+        # exponent rank try mantissa=0 positive and negative.
+        # If mantissa=0 isn't in range but this exponent IS partially
+        # in range, compute the boundary float.
+        if self.validate(0.0):
             return 0.0
-        elif abs(self.min_value) <= abs(self.max_value):
-            return self.min_value
-        else:
-            return self.max_value
+        if self.validate(-0.0):
+            return -0.0
+
+        best: float | None = None
+        best_idx = _MAX_FINITE_INDEX + 1
+
+        # Check boundaries — they're always valid and one of them
+        # may have a very small index.
+        for boundary in [self.min_value, self.max_value]:
+            if math.isfinite(boundary):
+                idx = _float_to_index(boundary)
+                if idx < best_idx:
+                    best = boundary
+                    best_idx = idx
+
+        # Check powers of 2 (mantissa=0) at each exponent rank.
+        # These have the smallest index at each rank. Only need to
+        # check ranks up to the current best.
+        for exp_rank in range(2047):
+            base_idx = 2 + exp_rank * (2**53)
+            if base_idx >= best_idx:
+                break  # All remaining ranks have larger indices.
+            for sign in [0, 1]:
+                v = _index_to_float(base_idx + sign)
+                if not math.isnan(v) and self.validate(v):
+                    if base_idx + sign < best_idx:
+                        best = v
+                        best_idx = base_idx + sign
+
+        assert best is not None
+        return best
 
     @property
     def unit(self) -> float:
-        s = self.simplest
-        if self.validate(s + 1.0):
-            return s + 1.0
-        if self.validate(s - 1.0):
-            return s - 1.0
-        return s
+        result = self.from_index(1)
+        return result if result is not None else self.simplest
 
     def validate(self, value: float) -> bool:
         if not isinstance(value, float):
@@ -178,114 +207,63 @@ class FloatChoice(ChoiceType[float]):
         return self.min_value <= value <= self.max_value
 
     def sort_key(self, value: float) -> Any:
-        """Order floats by human-readable simplicity.
+        """Order floats by (exponent_rank, mantissa, sign).
 
-        Finite < inf < -inf < NaN. Among finite floats, we compare
-        by their string representation split into (exponent, fractional,
-        integer) parts in shortlex order. Positive is preferred to
-        negative."""
+        Finite < +inf < -inf < NaN. Among finite floats:
+        - Exponents zigzag from 0: exp 0 < exp 1 < exp -1 < exp 2 < ...
+        - Subnormals are most complex.
+        - Within same exponent, smaller mantissa is simpler.
+        - Within same exponent and mantissa, positive is simpler."""
         if math.isnan(value):
-            return (3,)
+            return (1, 2)
         if math.isinf(value):
-            return (1,) if value > 0 else (2,)
-        return (0, _float_string_key(value))
+            return (1, 0) if value > 0 else (1, 1)
+        return (0, _float_to_index(value))
 
     @property
     def max_index(self) -> int:
-        # Conservative upper bound. The actual number of representable
-        # floats is ~2^64 but we don't need a tight bound.
-        return 2**64
-
-    def _zigzag_float(self, n: int) -> float:
-        """Convert zigzag index n to a whole-number float.
-        0→0.0, 1→-0.0, 2→1.0, 3→-1.0, 4→2.0, 5→-2.0, ..."""
-        if n == 0:
-            return 0.0
-        if n == 1:
-            return -0.0
-        if n % 2 == 0:
-            return float(n // 2)
-        return -float((n - 1) // 2)
-
-    def _zigzag_index(self, value: float) -> int:
-        """Convert a whole-number float to its zigzag index."""
-        n = int(value)
-        if n == 0:
-            return 0 if math.copysign(1.0, value) > 0 else 1
-        if n > 0:
-            return 2 * n
-        return 2 * (-n) + 1
-
-    def _int_choice(self) -> IntegerChoice:
-        """An IntegerChoice covering the whole numbers in this float range."""
-        lo = math.ceil(self.min_value) if math.isfinite(self.min_value) else -(2**53)
-        hi = math.floor(self.max_value) if math.isfinite(self.max_value) else 2**53
-        return IntegerChoice(lo, hi)
+        return _MAX_FINITE_INDEX + 3  # +inf, -inf, nan
 
     def to_index(self, value: float) -> int:
-        """Dense index for floats in sort_key order.
-
-        Index 0 is always simplest. Whole-number floats get dense
-        low indices via IntegerChoice zigzag. Non-whole floats and
-        special values get large indices."""
-        s = self.simplest
+        """Index in sort_key order (O(1)). Offset from simplest's raw index."""
         if math.isnan(value):
-            return 2**64 - 1
+            bits = struct.unpack("!Q", struct.pack("!d", value))[0]
+            nan_offset = bits & ((1 << 52) - 1)
+            sign = bits >> 63
+            return _MAX_FINITE_INDEX + 3 + nan_offset * 2 + sign
         if math.isinf(value):
-            return 2**64 - 3 if value > 0 else 2**64 - 2
-        # Simplest always gets index 0.
-        if value == s and math.copysign(1.0, value) == math.copysign(1.0, s):
-            return 0
-        if value == int(value):
-            ic = self._int_choice()
-            n = int(value)
-            base = ic.to_index(n)
-            has_zero = ic.validate(0)
-            if n == 0 and math.copysign(1.0, value) < 0:
-                base = ic.to_index(0) + 1
-            elif has_zero and n != 0:
-                base += 1  # room for -0.0
-            # If simplest is a non-whole number, it takes slot 0
-            # and everything else shifts up by 1.
-            if s != int(s):
-                base += 1
-            return base
-        # Non-whole-number float (but not simplest): large offset.
-        bits = struct.unpack("!Q", struct.pack("!d", value))[0]
-        return 2**53 + bits
+            return _MAX_FINITE_INDEX + 1 if value > 0 else _MAX_FINITE_INDEX + 2
+        base = _float_to_index(self.simplest)
+        return _float_to_index(value) - base
 
     def from_index(self, index: int) -> float | None:
-        """Dense inverse."""
-        s = self.simplest
-        if index == 2**64 - 1:
-            return float("nan") if self.allow_nan else None
-        if index == 2**64 - 2:
-            return -math.inf if self.allow_infinity else None
-        if index == 2**64 - 3:
-            return math.inf if self.allow_infinity else None
-        if index >= 2**53:
-            bits = index - 2**53
-            if bits >= 2**64:
-                return None
-            value = struct.unpack("!d", struct.pack("!Q", bits))[0]
-            return value if self.validate(value) else None
-        # Index 0 is always simplest.
-        if index == 0:
-            return s
-        ic = self._int_choice()
-        has_zero = ic.validate(0)
-        # If simplest is non-whole, it took slot 0, shift remaining.
-        adj = index - 1 if s != int(s) else index
-        if has_zero:
-            if adj == 0:
-                return 0.0
-            if adj == 1:
-                return -0.0
-            n = ic.from_index(adj - 1)
-        else:
-            n = ic.from_index(adj)
-        if n is not None:
-            return float(n)
+        """Inverse of to_index. Returns None for invalid indices.
+
+        For bounded ranges, from_index(0) returns simplest, and
+        higher indices are offset from the simplest's raw index."""
+        if index > _MAX_FINITE_INDEX:
+            offset = index - _MAX_FINITE_INDEX
+            if offset == 1:
+                return math.inf if self.allow_infinity else None
+            if offset == 2:
+                return -math.inf if self.allow_infinity else None
+            if offset >= 3 and self.allow_nan:
+                nan_rel = offset - 3
+                sign = nan_rel & 1
+                mantissa = (nan_rel >> 1) | (1 << 51)  # ensure non-zero mantissa
+                bits = (sign << 63) | (0x7FF << 52) | mantissa
+                value = struct.unpack("!d", struct.pack("!Q", bits))[0]
+                return value if math.isnan(value) else None
+            return None
+        # For unbounded ranges, raw index == dense index.
+        # For bounded ranges, offset from the simplest's raw index.
+        base = _float_to_index(self.simplest)
+        raw = base + index
+        if raw > _MAX_FINITE_INDEX:
+            return None
+        value = _index_to_float(raw)
+        if self.validate(value):
+            return value
         return None
 
 
@@ -373,108 +351,28 @@ def _shrink_float(
     value: float,
     try_replace: Callable[[float], bool],
 ) -> None:
-    """Shrink a float choice toward human-readable simplicity.
+    """Shrink a float choice using index-based binary search.
 
-    1. Replace special values (NaN -> inf -> finite)
-    2. Try range edges
-    3. If negative, try flipping sign
-    4. Shrink string representation parts (exponent, fractional,
-       integer) as integers
-    """
-    # We track the current value locally. When try_replace succeeds
-    # with a new value v, we update our local tracking to v.
-    current = [value]
+    Tries simplest first, then binary searches the index toward 0.
+    The index encodes (exponent_rank, mantissa, sign) so binary
+    search naturally tries simpler exponents, smaller mantissas,
+    and positive signs."""
+    # Try simplest first.
+    try_replace(kind.simplest)
 
-    def try_float(f: float) -> bool:
-        if kind.validate(f):
-            if try_replace(f):
-                current[0] = f
-                return True
-        return False
+    # If negative (or -0.0), try flipping sign.
+    if value < 0 or math.copysign(1.0, value) < 0:
+        try_replace(-value)
 
-    # Step 1: Replace special values with simpler ones.
-    if math.isnan(current[0]):
-        for v in [math.inf, -math.inf, 0.0]:
-            if try_float(v):
-                return
+    # Binary search the index toward 0.
+    current_idx = kind.to_index(value)
+    if current_idx <= 0:
         return
-    if math.isinf(current[0]):
-        if current[0] < 0:
-            try_float(math.inf)
-        assert math.isinf(current[0])
-        try_float(sys.float_info.max if current[0] > 0 else -sys.float_info.max)
-
-    # Step 2: Try range edges.
-    if math.isfinite(kind.min_value):
-        try_float(kind.min_value)
-    if math.isfinite(kind.max_value):
-        try_float(kind.max_value)
-
-    # Step 3: If negative (or -0.0), try flipping sign.
-    if current[0] < 0 or math.copysign(1.0, current[0]) < 0:
-        try_float(-current[0])
-
-    if not math.isfinite(current[0]):
-        return
-
-    # Step 4: Shrink string parts as integers. For negative
-    # values (in forced-negative ranges), negate before parsing
-    # and negate back when trying replacements.
-    negate = current[0] < 0
-    if negate:
-        current[0] = -current[0]
-
-    def try_positive(f: float) -> bool:
-        return try_float(-f if negate else f)
-
-    exp_part, frac_part, int_part, _ = _parse_float_string(current[0])
-    if exp_part:
-        exp_abs = exp_part.lstrip("+-")
-        exp_sign = exp_part[0] if exp_part[0] in "+-" else ""
-        if exp_sign == "-":
-            try_positive(float(f"{int_part}.{frac_part}e{exp_abs}"))
-        assert exp_abs  # Python's str() always has digits after 'e'
-        bin_search_down(
-            0,
-            int(exp_abs),
-            lambda e: try_positive(
-                float(f"{int_part}.{frac_part}e{exp_sign}{e}")
-                if e > 0
-                else float(f"{int_part}.{frac_part}")
-            ),
-        )
-        current[0] = abs(current[0])
-        exp_part, frac_part, int_part, _ = _parse_float_string(current[0])
-
-    if frac_part and frac_part != "0":
-        # Try rounding up to remove the fraction entirely.
-        # e.g. 1.1 -> 2.0, which may be simpler by sort key.
-        try_positive(float(int(int_part) + 1))
-        current[0] = abs(current[0])
-        exp_part, frac_part, int_part, _ = _parse_float_string(current[0])
-
-    if frac_part and frac_part != "0":
-        reversed_frac = int(frac_part[::-1])
-        reversed_frac = shrink_by_tens(
-            reversed_frac,
-            lambda rf: try_positive(float(f"{int_part}.{str(rf)[::-1]}")),
-        )
-        bin_search_down(
-            0,
-            reversed_frac,
-            lambda rf: try_positive(float(f"{int_part}.{str(rf)[::-1]}")),
-        )
-        current[0] = abs(current[0])
-        exp_part, frac_part, int_part, _ = _parse_float_string(current[0])
-
-    if int_part and int(int_part) > 0:
-        bin_search_down(
-            0,
-            int(int_part),
-            lambda i_val: try_positive(
-                float(f"{i_val}.{frac_part}") if frac_part else float(i_val)
-            ),
-        )
+    bin_search_down(
+        0,
+        current_idx,
+        lambda idx: (v := kind.from_index(idx)) is not None and try_replace(v),
+    )
 
 
 # ---------------------------------------------------------------------------
