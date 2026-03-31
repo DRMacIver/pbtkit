@@ -702,6 +702,36 @@ def test_bytes_sorts_when_order_matters():
     assert state.result is not None
 
 
+@pytest.mark.requires("bytes")
+@pytest.mark.requires("collections")
+@pytest.mark.requires("text")
+def test_sort_insertion_stale_indices():
+    """Sorting insertion sort must handle stale indices when a swap
+    changes the result structure (e.g. shortening via value punning).
+    Regression for IndexError in sorting.py found by minismith."""
+
+    def tf(tc):
+        v0 = tc.any(lists(integers(0, 20), max_size=10, unique=True))
+        v1 = tc.any(
+            dictionaries(
+                text(min_codepoint=32, max_codepoint=126, max_size=5),
+                booleans(),
+                max_size=5,
+            )
+        )
+        v2 = tc.any(lists(booleans(), max_size=10))
+        v3 = tc.any(binary(max_size=20))
+        v4 = tc.any(booleans())
+        if len(v0) != 0:
+            tc.mark_status(Status.INTERESTING)
+        if len(v2) != len(v3):
+            tc.mark_status(Status.INTERESTING)
+
+    # Should not crash.
+    state = State(Random(0), tf, 1000)
+    state.run()
+
+
 def test_bind_deletion_valid_but_not_shorter():
     """bind_deletion must correctly detect when a replacement produces
     a VALID test case that isn't shorter (no excess choices to delete).
