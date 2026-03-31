@@ -99,3 +99,17 @@ import minithesis.shrinking.mutation
 import minithesis.shrinking.sorting
 import minithesis.targeting
 import minithesis.text
+
+# Advanced passes that depend on specific type modules.
+# Hardcoded dependency list: each entry is (module, required_feature).
+_FEATURE_DEPENDENT_MODULES = {
+    "minithesis.shrinking.advanced_bytes_passes": "bytes",
+    "minithesis.shrinking.advanced_string_passes": "text",
+}
+
+from minithesis.features import DISABLED_MODULES as _disabled
+
+for _mod in sorted(
+    m for m, f in _FEATURE_DEPENDENT_MODULES.items() if f not in _disabled
+):
+    __import__(_mod)

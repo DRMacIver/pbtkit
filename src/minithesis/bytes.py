@@ -9,17 +9,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from minithesis.core import (
     ChoiceType,
     TestCase,
-    shrink_pass,
     value_shrinker,
 )
-
-if TYPE_CHECKING:
-    from minithesis.core import MinithesisState
 from minithesis.shrinking.sequence import shrink_sequence
 
 # ---------------------------------------------------------------------------
@@ -85,36 +81,6 @@ def _draw_bytes(self: TestCase, min_size: int, max_size: int) -> bytes:
 
 # Attach draw_bytes to TestCase.
 TestCase.draw_bytes = _draw_bytes
-
-
-@shrink_pass
-def redistribute_bytes(state: "MinithesisState") -> None:
-    """Try shortening one bytes value and lengthening another.
-
-    For pairs of BytesChoice nodes, transfer length from the first
-    to the second while keeping the total constant."""
-    assert state.result is not None
-    byte_indices = [
-        i for i, n in enumerate(state.result) if isinstance(n.kind, BytesChoice)
-    ]
-    for gap in range(1, min(len(byte_indices), 4)):
-        for pair_idx in range(len(byte_indices) - gap):
-            # Recompute indices since prior replacements may change structure.
-            byte_indices = [
-                i for i, n in enumerate(state.result) if isinstance(n.kind, BytesChoice)
-            ]
-            assert pair_idx + gap < len(byte_indices)
-            i = byte_indices[pair_idx]
-            j = byte_indices[pair_idx + gap]
-            vi = state.result[i].value
-            vj = state.result[j].value
-            assert isinstance(vi, bytes) and isinstance(vj, bytes)
-            if len(vi) == 0:
-                continue
-            # Try transferring all bytes from i to j.
-            new_j = vj + b"\x00" * len(vi)
-            if state.result[j].kind.validate(new_j):
-                state.replace({i: state.result[i].kind.simplest, j: new_j})
 
 
 # ---------------------------------------------------------------------------

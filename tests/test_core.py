@@ -862,6 +862,26 @@ def test_bytes_length_redistribution():
     assert v0_len == 10
 
 
+@pytest.mark.requires("bytes")
+def test_bytes_redistribution_moves_all():
+    """When the second bytes value can absorb everything from the first,
+    redistribution should move as much as possible. The min_size on v0
+    prevents the value shrinker from emptying it directly, forcing
+    redistribution to do the work."""
+
+    def tf(tc):
+        v0 = tc.any(binary(min_size=3, max_size=10))
+        v1 = tc.any(binary(max_size=20))
+        if len(v0) + len(v1) >= 10:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 100)
+    state.run()
+    assert state.result is not None
+    # v0 can't go below min_size=3, so optimal is v0=3 bytes.
+    assert len(state.result[0].value) == 3
+
+
 @pytest.mark.requires("collections")
 def test_one_of_switches_to_shorter_branch():
     """When one_of branch 0 (lists) produces a truthy value in 4 choices

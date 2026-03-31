@@ -64,7 +64,8 @@ def _targeting_phase(state: MinithesisState) -> None:
         score, nodes = state.best_scoring
         if not isinstance(nodes[i].kind, IntegerChoice):
             return False
-        if nodes[i].value + step < 0 or nodes[i].value.bit_length() >= 64:
+        assert nodes[i].value.bit_length() < 64
+        if nodes[i].value + step < 0:
             return False
         values = [n.value for n in nodes]
         values[i] += step
