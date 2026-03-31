@@ -198,12 +198,16 @@ def try_shortening_via_increment(state: MinithesisState) -> None:
                 if v != node.value and node.kind.validate(v) and v not in candidates:
                     candidates.append(v)
         elif isinstance(node.kind, FloatChoice):
-            # Try small whole numbers and range boundaries.
+            # Try small numbers, powers of 2, and range boundaries.
+            float_vals: list[float] = []
+            for n in range(-8, 9):
+                float_vals.append(float(n))
+            p = 16.0
+            while p <= 256.0:
+                float_vals.extend([p, -p])
+                p *= 2.0
             candidates = []
-            for v in [float(n) for n in range(-16, 17)] + [
-                node.kind.min_value,
-                node.kind.max_value,
-            ]:
+            for v in float_vals + [node.kind.min_value, node.kind.max_value]:
                 if v != node.value and node.kind.validate(v) and v not in candidates:
                     candidates.append(v)
         elif isinstance(node.kind, BooleanChoice):
