@@ -95,8 +95,13 @@ def lower_and_bump(state: MinithesisState) -> None:
                 ):
                     state.replace({i: new_i, j: kind_j.max_value})
                     state.replace({i: new_i, j: kind_j.simplest})
+            # For FloatChoice targets, try small whole numbers.
+            if j < len(state.result) and isinstance(state.result[j].kind, FloatChoice):
+                for fv in [1.0, -1.0, 2.0, -2.0]:
+                    if state.result[j].kind.validate(fv):
+                        state.replace({i: new_i, j: fv})
             # Try bumping from current value by powers of 2.
-            # Skip bumping for BytesChoice/FloatChoice targets since
+            # Skip bumping for BytesChoice/StringChoice targets since
             # integer arithmetic doesn't apply.
             if j < len(state.result) and isinstance(
                 state.result[j].kind, (IntegerChoice, BooleanChoice)

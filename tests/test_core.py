@@ -705,6 +705,47 @@ def test_bytes_sorts_when_order_matters():
 @pytest.mark.requires("bytes")
 @pytest.mark.requires("collections")
 @pytest.mark.requires("text")
+@pytest.mark.requires("floats")
+@pytest.mark.requires("text")
+def test_lower_and_bump_with_float_target():
+    """lower_and_bump should try float values (1.0, -1.0, etc.) when
+    the target is FloatChoice. Making a string shorter while making a
+    float non-zero can produce a simpler overall result."""
+
+    def tf(tc):
+        v0 = tc.any(text(min_codepoint=32, max_codepoint=126, max_size=20))
+        v1 = tc.any(floats(allow_nan=False, allow_infinity=False))
+        if len(v0) >= 4:
+            tc.mark_status(Status.INTERESTING)
+        if v1 != 0.0:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 1000)
+    state.run()
+    assert state.result is not None
+    # Prefer empty string with non-zero float (simpler at position 0)
+    assert state.result[0].value == ""
+
+
+@pytest.mark.requires("floats")
+def test_lower_and_bump_with_bounded_float_target():
+    """lower_and_bump must skip invalid float bump values when the
+    float's range doesn't include 1.0 or -1.0."""
+
+    def tf(tc):
+        v0 = tc.any(integers(0, 5))
+        v1 = tc.any(floats(min_value=0.0, max_value=0.5, allow_nan=False))
+        if v0 >= 3 and v1 > 0.0:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 1000)
+    state.run()
+    assert state.result is not None
+
+
+@pytest.mark.requires("bytes")
+@pytest.mark.requires("collections")
+@pytest.mark.requires("text")
 def test_sort_insertion_stale_indices():
     """Sorting insertion sort must handle stale indices when a swap
     changes the result structure (e.g. shortening via value punning).
