@@ -61,7 +61,6 @@ def mutate_and_shrink(state: MinithesisState) -> None:
     assert state.result is not None
     if len(state.result) > 32:
         return
-    rng = Random(0)
     i = 0
     while i < len(state.result):
         node = state.result[i]
@@ -93,13 +92,33 @@ def mutate_and_shrink(state: MinithesisState) -> None:
                         _extreme_value_for(n, maximize)
                         for n in probe.nodes[len(prefix) :]
                     ]
-                    tc_ext = TestCase.for_choices(extreme)
+                    tc_ext = TestCase(
+                        prefix=tuple(extreme),
+                        random=Random(i),
+                        max_size=BUFFER_SIZE,
+                    )
                     state.test_function(tc_ext)
+            # Also try setting each of the next few positions to
+            # 0 or 1, with random continuation. This handles 2-position
+            # compound changes (e.g. branch index + boolean value).
+            for j in range(1, min(4, len(state.result) - i)):
+                for fill in [0, 1]:
+                    two_prefix = prefix + [
+                        fill if k == i + j else state.result[k].kind.simplest
+                        for k in range(i + 1, min(i + j + 1, len(state.result)))
+                    ]
+                    for attempt in range(RANDOM_ATTEMPTS):
+                        tc2 = TestCase(
+                            prefix=tuple(two_prefix),
+                            random=Random(i * 1000 + j * 100 + fill * 10 + attempt),
+                            max_size=BUFFER_SIZE,
+                        )
+                        state.test_function(tc2)
             # Try random continuations for general exploration.
-            for _ in range(RANDOM_ATTEMPTS):
+            for attempt in range(RANDOM_ATTEMPTS):
                 tc = TestCase(
                     prefix=tuple(prefix),
-                    random=rng,
+                    random=Random(i * 1000 + attempt),
                     max_size=BUFFER_SIZE,
                 )
                 state.test_function(tc)
