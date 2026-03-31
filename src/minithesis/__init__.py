@@ -90,6 +90,7 @@ __all__ = [
 # registers its serializer, shrink pass, and draw method on TestCase.
 import minithesis.bytes
 import minithesis.caching
+import minithesis.collections
 import minithesis.database
 import minithesis.floats
 import minithesis.shrinking.advanced_integer_passes

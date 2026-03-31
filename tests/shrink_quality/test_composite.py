@@ -110,6 +110,7 @@ def test_earlier_exit_produces_shorter_sequence():
     assert vals[0]  # v0 is truthy (triggers early exit)
 
 
+@pytest.mark.requires("floats")
 def test_one_of_shrinks_branch_selector():
     """one_of should shrink toward branch 0 even when a higher branch
     also produces an interesting result. Found by shrink comparison test."""
@@ -122,6 +123,8 @@ def test_one_of_shrinks_branch_selector():
     assert result is True
 
 
+@pytest.mark.requires("bytes")
+@pytest.mark.requires("collections")
 def test_early_exit_via_flag_with_preceding_draws():
     """When v0=True triggers an early exit but v1 and v2 are drawn
     BEFORE the v0 check, the shrinker must coordinate: shorten v1/v2
@@ -148,6 +151,7 @@ def test_early_exit_via_flag_with_preceding_draws():
     assert result[0] is False or result[0] is True
 
 
+@pytest.mark.requires("floats")
 def test_one_of_branch_switch_with_trailing_draws():
     """When one_of(booleans(), floats()) at branch=1 produces a truthy
     float, switching to branch=0 (boolean True) is simpler but requires
@@ -171,6 +175,8 @@ def test_one_of_branch_switch_with_trailing_draws():
     assert result is True
 
 
+@pytest.mark.requires("floats")
+@pytest.mark.requires("collections")
 def test_shorter_path_via_later_assertion():
     """When emptying a list removes one failure but a later assertion
     still fails with fewer total choices, the shrinker should prefer
@@ -198,6 +204,7 @@ def test_shorter_path_via_later_assertion():
     assert len(result[1]) == 0
 
 
+@pytest.mark.requires("floats")
 def test_one_of_branch_switch_to_float():
     """When one_of(floats(), booleans()) starts at branch=1 (booleans),
     switching to branch=0 (floats) is simpler but requires replacing
@@ -224,6 +231,7 @@ def test_one_of_shorter_branch_needs_non_simplest_value():
     assert result is True
 
 
+@pytest.mark.requires("floats")
 def test_switch_failure_mode_for_simpler_sort_key():
     """When abs(v1) >= 1.0 triggers one assertion but a later assertion
     also fails for all inputs, the shrinker should prefer the failure
@@ -245,6 +253,7 @@ def test_switch_failure_mode_for_simpler_sort_key():
     assert result[0] == 0.0  # Simpler float, later assertion fires.
 
 
+@pytest.mark.requires("collections")
 def test_shorter_path_when_guard_precedes_expensive_draw():
     """A guard check (v0 > 0) comes after a cheap draw but before an
     expensive draw (a list). When v0=1 triggers the guard, the expensive

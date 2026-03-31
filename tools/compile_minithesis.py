@@ -21,11 +21,6 @@ ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src" / "minithesis"
 BUILD = ROOT / "build"
 
-EXTENSIONS = ["caching", "database", "bytes", "floats", "text", "collections", "targeting", "shrinking.advanced_integer_passes", "shrinking.bind_deletion", "shrinking.duplication_passes", "shrinking.sorting"]
-
-# Utility modules that are always compiled (not independently disableable).
-UTILITY_MODULES = ["shrinking.sequence"]
-
 HEADER = """\
 # Compiled minithesis — generated from the modular source.
 # Do not edit by hand.
@@ -113,6 +108,76 @@ def _dotted(node: cst.BaseExpression) -> str:
     return ""
 
 
+def _discover_extensions() -> tuple[list[str], dict[str, str]]:
+    """Discover extension modules and feature dependencies from __init__.py.
+
+    Returns (extensions, feature_deps) where feature_deps maps
+    module name to the feature it requires.
+    """
+    init_src = (SRC / "__init__.py").read_text()
+    tree = cst.parse_module(init_src)
+    extensions: list[str] = []
+    feature_deps: dict[str, str] = {}
+    for stmt in tree.body:
+        if not isinstance(stmt, cst.SimpleStatementLine):
+            continue
+        for s in stmt.body:
+            # Direct imports: `import minithesis.X`
+            if isinstance(s, cst.Import) and not isinstance(s.names, cst.ImportStar):
+                for alias in s.names:
+                    name = _dotted(alias.name)
+                    if name.startswith("minithesis.") and name != "minithesis.features":
+                        extensions.append(name.removeprefix("minithesis."))
+            # _FEATURE_DEPENDENT_MODULES dict
+            if (
+                isinstance(s, cst.Assign)
+                and any(
+                    isinstance(t.target, cst.Name) and t.target.value == "_FEATURE_DEPENDENT_MODULES"
+                    for t in s.targets
+                )
+                and isinstance(s.value, cst.Dict)
+            ):
+                for el in s.value.elements:
+                    if (
+                        isinstance(el, cst.DictElement)
+                        and isinstance(el.key, cst.SimpleString)
+                        and isinstance(el.value, cst.SimpleString)
+                    ):
+                        key = el.key.evaluated_value
+                        dep = el.value.evaluated_value
+                        if isinstance(key, str) and key.startswith("minithesis.") and isinstance(dep, str):
+                            mod = key.removeprefix("minithesis.")
+                            extensions.append(mod)
+                            feature_deps[mod] = dep
+    return extensions, feature_deps
+
+
+def _discover_utility_modules(extensions: list[str]) -> list[str]:
+    """Discover utility modules: shrinking submodules that are imported by
+    extensions but not registered as extensions themselves."""
+    shrink_dir = SRC / "shrinking"
+    all_shrink = {
+        f"shrinking.{p.stem}"
+        for p in shrink_dir.glob("*.py")
+        if p.stem != "__init__"
+    }
+    return sorted(all_shrink - set(extensions))
+
+
+EXTENSIONS, FEATURE_DEPS = _discover_extensions()
+UTILITY_MODULES = _discover_utility_modules(EXTENSIONS)
+
+
+def expand_disabled(disabled: frozenset[str]) -> frozenset[str]:
+    """Expand a set of disabled modules by also disabling any modules
+    that depend on disabled features."""
+    result = set(disabled)
+    for mod, feature in FEATURE_DEPS.items():
+        if feature in result:
+            result.add(mod)
+    return frozenset(result)
+
+
 # ---------------------------------------------------------------------------
 # Text-based helpers
 # ---------------------------------------------------------------------------
@@ -193,6 +258,41 @@ def _skip_docstring(lines: list[str], start: int) -> int:
                 if q in lines[i]:
                     return i + 1
     return start + 1
+
+
+class _StripNeededFor(cst.CSTTransformer):
+    """Remove @needed_for("...") decorators from functions/methods."""
+
+    def _filter_decorators(
+        self,
+        node: cst.FunctionDef,
+    ) -> cst.FunctionDef:
+        new_decs = [
+            d
+            for d in node.decorators
+            if not (
+                isinstance(d.decorator, cst.Call)
+                and isinstance(d.decorator.func, cst.Name)
+                and d.decorator.func.value == "needed_for"
+            )
+        ]
+        if len(new_decs) != len(node.decorators):
+            return node.with_changes(decorators=new_decs)
+        return node
+
+    def leave_FunctionDef(
+        self,
+        original_node: cst.FunctionDef,
+        updated_node: cst.FunctionDef,
+    ) -> cst.FunctionDef:
+        return self._filter_decorators(updated_node)
+
+
+def strip_needed_for(source: str) -> str:
+    """Strip all @needed_for("...") decorators from source code."""
+    tree = cst.parse_module(source)
+    modified = tree.visit(_StripNeededFor())
+    return modified.code
 
 
 def _is_import(line: str) -> bool:
@@ -367,8 +467,10 @@ def compile_minithesis(disabled: frozenset[str] = frozenset()) -> str:
     """Compile the minithesis package into a single source string.
 
     Extensions listed in ``disabled`` are excluded from the compiled
-    output — their TestCase stubs are removed entirely.
+    output — their TestCase stubs are removed entirely. Extensions that
+    depend on disabled features are also automatically excluded.
     """
+    disabled = expand_disabled(disabled)
     extensions = [e for e in EXTENSIONS if e not in disabled]
 
     def module_path(name: str) -> Path:
@@ -376,11 +478,11 @@ def compile_minithesis(disabled: frozenset[str] = frozenset()) -> str:
         parts = name.split(".")
         return SRC / "/".join(parts[:-1]) / f"{parts[-1]}.py" if len(parts) > 1 else SRC / f"{name}.py"
 
-    # Read and parse all modules
+    # Read and parse all modules, stripping @needed_for decorators
     sources: dict[str, str] = {}
     trees: dict[str, cst.Module] = {}
     for name in ["core", "__init__"] + UTILITY_MODULES + extensions + ["generators"]:
-        src = module_path(name).read_text()
+        src = strip_needed_for(module_path(name).read_text())
         sources[name] = src
         trees[name] = cst.parse_module(src)
 
@@ -447,9 +549,7 @@ def _generate_init_py(disabled: frozenset[str]) -> str:
     """Generate the __init__.py for the compiled test package."""
     enabled = [
         e
-        for e in ["caching", "database", "floats", "bytes", "text", "collections", "targeting",
-                   "shrinking.advanced_integer_passes", "shrinking.bind_deletion",
-                   "shrinking.duplication_passes", "shrinking.sorting", "generators"]
+        for e in EXTENSIONS + ["generators"]
         if e not in disabled
     ]
     disabled_list = sorted(disabled)
@@ -546,6 +646,12 @@ def write_test_package(
 ) -> None:
     """Write a test package that uses the compiled source as its core."""
     pkg_dir.mkdir(parents=True, exist_ok=True)
+    # Clear bytecode cache to avoid stale .pyc files from prior compilations.
+    pycache = pkg_dir / "__pycache__"
+    if pycache.exists():
+        import shutil
+
+        shutil.rmtree(pycache)
     (pkg_dir / "core.py").write_text(compiled_source)
     (pkg_dir / "__init__.py").write_text(_generate_init_py(disabled))
 

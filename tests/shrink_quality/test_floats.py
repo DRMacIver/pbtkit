@@ -14,6 +14,7 @@ from .conftest import minimal
 pytestmark = [pytest.mark.requires("floats"), pytest.mark.requires("collections")]
 
 
+@pytest.mark.requires("shrinking.mutation")
 def test_shrinks_to_simple_float_above_1():
     # Under the (exponent_rank, mantissa, sign) ordering, the simplest
     # float > 1.0 is the next representable float (same exponent, mantissa+1).

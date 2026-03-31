@@ -168,6 +168,7 @@ def test_function_cache():
     assert state.calls == 2
 
 
+@pytest.mark.requires("caching")
 def test_cache_key_distinguishes_negative_zero():
     """_cache_key must distinguish 0.0 from -0.0 even though they are
     equal in Python. Otherwise the cache conflates them and the shrinker
@@ -175,6 +176,7 @@ def test_cache_key_distinguishes_negative_zero():
     assert _cache_key(0.0) != _cache_key(-0.0)
 
 
+@pytest.mark.requires("caching")
 def test_cache_key_distinguishes_nan_variants():
     """_cache_key must distinguish different NaN bit patterns, which
     Python considers equal (nan == nan is False, but for dict purposes
@@ -187,6 +189,7 @@ def test_cache_key_distinguishes_nan_variants():
     assert _cache_key(nan1) != _cache_key(nan2)
 
 
+@pytest.mark.requires("caching")
 @pytest.mark.requires("floats")
 def test_cache_distinguishes_negative_zero_in_lookup():
     """The cache must store separate entries for 0.0 and -0.0 so that
@@ -355,6 +358,7 @@ def test_truncated_database_entry(data):
         pass
 
 
+@pytest.mark.requires("shrinking.index_passes")
 def test_lower_and_bump_with_type_change():
     """Lower-and-bump pass handles the case where decrementing an
     integer choice changes the type of the next choice (e.g. one_of
@@ -495,6 +499,7 @@ def test_unique_list_shrinks_using_negative_values():
 @pytest.mark.requires("bytes")
 @pytest.mark.requires("collections")
 @pytest.mark.requires("text")
+@pytest.mark.requires("shrinking.index_passes")
 def test_bytes_increment_shortens_sequence():
     """Growing a bytes value by one byte can eliminate subsequent choices,
     producing a shorter (and thus simpler) overall sequence.
@@ -521,6 +526,7 @@ def test_bytes_increment_shortens_sequence():
 
 
 @pytest.mark.requires("collections")
+@pytest.mark.requires("shrinking.index_passes")
 def test_lower_and_bump_explores_new_range():
     """When decrementing an integer changes the range of a non-adjacent
     later integer, lower_and_bump should explore the new range via
@@ -543,6 +549,7 @@ def test_lower_and_bump_explores_new_range():
 
 
 @pytest.mark.requires("collections")
+@pytest.mark.requires("shrinking.index_passes")
 def test_lower_and_bump_tries_negative_values():
     """lower_and_bump should try negative absolute powers of 2 when
     exploring a new range, not just positive ones.
@@ -576,6 +583,7 @@ def test_lower_and_bump_tries_negative_values():
 
 
 @pytest.mark.requires("collections")
+@pytest.mark.requires("shrinking.index_passes")
 def test_increment_to_max_shortens_via_sampled_from():
     """try_shortening_via_increment should try max_value, not just +1.
     For sampled_from([1, 1, 0]), index 2 maps to 0 which triggers an
@@ -616,6 +624,7 @@ def test_redistribute_stale_indices_after_type_change():
     state.run()
 
 
+@pytest.mark.requires("shrinking.index_passes")
 def test_lower_and_bump_targets_booleans():
     """lower_and_bump should try bumping boolean targets, not just
     integer ones. Decrementing an integer while bumping a boolean
@@ -640,6 +649,7 @@ def test_lower_and_bump_targets_booleans():
 
 
 @pytest.mark.requires("floats")
+@pytest.mark.requires("shrinking.index_passes")
 def test_float_increment_shortens_via_negative():
     """Making a float negative can trigger an earlier check and shorten
     the overall choice sequence. try_shortening_via_increment should
@@ -663,6 +673,7 @@ def test_float_increment_shortens_via_negative():
 
 
 @pytest.mark.requires("collections")
+@pytest.mark.requires("shrinking.index_passes")
 def test_increment_with_dependent_continuation():
     """try_shortening_via_increment must pass prefix_nodes so that
     value punning maps simplest→simplest when the continuation
@@ -689,6 +700,7 @@ def test_increment_with_dependent_continuation():
 
 
 @pytest.mark.requires("bytes")
+@pytest.mark.requires("shrinking.advanced_bytes_passes")
 def test_redistribute_bytes_between_pairs():
     """When two bytes values share a total length constraint, the shrinker
     should redistribute to make the first empty and the second full.
@@ -760,7 +772,7 @@ def test_bytes_sorts_when_order_matters():
 @pytest.mark.requires("collections")
 @pytest.mark.requires("text")
 @pytest.mark.requires("floats")
-@pytest.mark.requires("text")
+@pytest.mark.requires("shrinking.index_passes")
 def test_lower_and_bump_with_float_target():
     """lower_and_bump should try float values (1.0, -1.0, etc.) when
     the target is FloatChoice. Making a string shorter while making a
@@ -802,6 +814,7 @@ def test_redistribute_stale_indices_with_one_of():
 
 
 @pytest.mark.requires("collections")
+@pytest.mark.requires("shrinking.index_passes")
 def test_lower_and_bump_stale_j_after_replace():
     """lower_and_bump must handle j going out of bounds when a replace
     shortens the result during the bytes/string bump loop.
@@ -828,6 +841,7 @@ def test_lower_and_bump_stale_j_after_replace():
     state.run()
 
 
+@pytest.mark.requires("shrinking.mutation")
 def test_mutation_with_single_value_adjacent():
     """mutate_and_shrink handles adjacent single-value choices where
     from_index(1) returns None."""
@@ -844,6 +858,7 @@ def test_mutation_with_single_value_adjacent():
 
 
 @pytest.mark.requires("floats")
+@pytest.mark.requires("shrinking.index_passes")
 def test_lower_and_bump_with_float_source_gaps():
     """lower_and_bump must handle from_index returning None when the
     float source has index gaps (bounded range with interleaved signs)."""
@@ -859,6 +874,8 @@ def test_lower_and_bump_with_float_source_gaps():
     assert state.result is not None
 
 
+@pytest.mark.requires("floats")
+@pytest.mark.requires("shrinking.index_passes")
 def test_lower_and_bump_with_bounded_float_target():
     """lower_and_bump must skip invalid float bump values when the
     float's range doesn't include 1.0 or -1.0."""
@@ -906,6 +923,7 @@ def test_sort_insertion_stale_indices():
 
 
 @pytest.mark.requires("text")
+@pytest.mark.requires("shrinking.advanced_string_passes")
 def test_string_length_redistribution():
     """When two strings share a total length constraint (len(v0)+len(v1) >= N),
     the shrinker should redistribute length to make the first string as short
@@ -927,6 +945,7 @@ def test_string_length_redistribution():
 
 
 @pytest.mark.requires("bytes")
+@pytest.mark.requires("shrinking.advanced_bytes_passes")
 def test_bytes_length_redistribution():
     """When two bytes values share a total length constraint, the shrinker
     should redistribute to make the first as short as possible.
@@ -1006,6 +1025,7 @@ def test_negative_zero_shrinks_to_positive_zero():
 
 @pytest.mark.requires("bytes")
 @pytest.mark.requires("collections")
+@pytest.mark.requires("shrinking.index_passes")
 def test_lower_and_bump_stale_kind_after_replace():
     """lower_and_bump must validate values against the CURRENT kind at
     position j, not the kind from before the replace. A replace can
@@ -1033,6 +1053,7 @@ def test_lower_and_bump_stale_kind_after_replace():
 
 
 @pytest.mark.requires("collections")
+@pytest.mark.requires("shrinking.mutation")
 def test_one_of_switches_to_shorter_branch():
     """When one_of branch 0 (lists) produces a truthy value in 4 choices
     but branch 1 (booleans via nested one_of) can do it in 3, the
@@ -1078,7 +1099,7 @@ def test_bind_deletion_valid_but_not_shorter():
     assert state.result is not None
 
 
-@pytest.mark.requires("indexing")
+@pytest.mark.requires("shrinking.index_passes")
 def test_lower_and_bump_j_past_end_after_shortening():
     """lower_and_bump must handle j becoming invalid when a decrement+zero
     attempt shortens the result.

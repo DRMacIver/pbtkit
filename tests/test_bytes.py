@@ -115,6 +115,7 @@ def test_bytes_from_index_out_of_range():
     assert bc.from_index(bc.max_index + 1) is None
 
 
+@pytest.mark.requires("targeting")
 def test_targeting_with_bytes():
     """Targeting skips non-integer nodes without crashing."""
     max_score = 0

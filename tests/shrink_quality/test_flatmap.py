@@ -78,6 +78,7 @@ def test_can_shrink_through_a_binding(n):
     assert result == [True] * n
 
 
+@pytest.mark.requires("shrinking.bind_deletion")
 @pytest.mark.parametrize("n", [1, 3, 5, 9])
 def test_can_delete_in_middle_of_a_binding(n):
     result = minimal(
