@@ -188,7 +188,7 @@ def try_shortening_via_increment(state: MinithesisState) -> None:
         elif isinstance(node.kind, FloatChoice):
             # Try small whole numbers and range boundaries.
             candidates = []
-            for v in [float(n) for n in range(-8, 9)] + [
+            for v in [float(n) for n in range(-16, 17)] + [
                 node.kind.min_value,
                 node.kind.max_value,
             ]:
