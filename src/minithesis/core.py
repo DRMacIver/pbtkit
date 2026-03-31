@@ -765,11 +765,13 @@ def binary_search_integer_towards_zero(
             upper = min(-value - 1, kind.max_value)
             if upper >= 1:
                 try_replace(upper)
-                bin_search_down(
-                    max(kind.simplest, 0),
-                    upper,
-                    try_replace,
-                )
+                lo_pos = max(kind.simplest, 0)
+                bin_search_down(lo_pos, upper, try_replace)
+                # Linear scan positive values for non-monotonic functions.
+                range_size = kind.max_value - kind.min_value + 1
+                scan_count = min(range_size, 32) if range_size <= 128 else 8
+                for v in range(lo_pos, min(upper + 1, lo_pos + scan_count)):
+                    try_replace(v)
 
 
 def bin_search_down(lo: int, hi: int, f: Callable[[int], bool]) -> int:
