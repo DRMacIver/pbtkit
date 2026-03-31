@@ -32,17 +32,21 @@ if TYPE_CHECKING:
 RANDOM_ATTEMPTS = 5
 
 
-def _max_value_for(node: ChoiceNode) -> object:
-    """Return the maximum valid value for a choice node's kind."""
+def _extreme_value_for(node: ChoiceNode, maximize: bool) -> object:
+    """Return the maximum or minimum valid value for a choice node's kind."""
     kind = node.kind
     if isinstance(kind, IntegerChoice):
-        return kind.max_value
+        return kind.max_value if maximize else kind.min_value
     if isinstance(kind, BooleanChoice):
-        return True
+        return True if maximize else False
     if isinstance(kind, BytesChoice):
-        return b"\xff" * kind.max_size
+        if maximize:
+            return b"\xff" * kind.max_size
+        return b"\x00" * kind.min_size
     if isinstance(kind, StringChoice):
-        return chr(kind.max_codepoint) * kind.max_size
+        if maximize:
+            return chr(kind.max_codepoint) * kind.max_size
+        return chr(kind.min_codepoint) * kind.min_size
     return node.value
 
 
@@ -81,14 +85,16 @@ def mutate_and_shrink(state: MinithesisState) -> None:
                 max_size=BUFFER_SIZE,
             )
             state.test_function(probe)
-            # Try maximizing all downstream values to find boundary cases
-            # (e.g. making bytes as long as possible).
+            # Try extreme downstream values (max and min) to find
+            # boundary cases like max-length bytes or min-value integers.
             if len(probe.nodes) > len(prefix):
-                max_values = prefix + [
-                    _max_value_for(n) for n in probe.nodes[len(prefix) :]
-                ]
-                tc_max = TestCase.for_choices(max_values)
-                state.test_function(tc_max)
+                for maximize in [True, False]:
+                    extreme = prefix + [
+                        _extreme_value_for(n, maximize)
+                        for n in probe.nodes[len(prefix) :]
+                    ]
+                    tc_ext = TestCase.for_choices(extreme)
+                    state.test_function(tc_ext)
             # Try random continuations for general exploration.
             for _ in range(RANDOM_ATTEMPTS):
                 tc = TestCase(
