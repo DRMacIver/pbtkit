@@ -814,9 +814,10 @@ def test_sort_insertion_stale_indices():
         if len(v2) != len(v3):
             tc.mark_status(Status.INTERESTING)
 
-    # Should not crash.
-    state = State(Random(0), tf, 1000)
-    state.run()
+    # Should not crash. Try multiple seeds to exercise sorting edge cases.
+    for seed in range(5):
+        state = State(Random(seed), tf, 1000)
+        state.run()
 
 
 @pytest.mark.requires("collections")
