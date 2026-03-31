@@ -62,9 +62,6 @@ def mutate_and_shrink(state: MinithesisState) -> None:
         return
     i = 0
     while i < len(state.result):
-        # Cap all attempts at current best length — anything longer
-        # can't be a shrink.
-        max_size = len(state.result)
         node = state.result[i]
         if not isinstance(node.value, int):
             i += 1
@@ -83,7 +80,7 @@ def mutate_and_shrink(state: MinithesisState) -> None:
             probe = TestCase(
                 prefix=tuple(prefix),
                 random=Random(0),
-                max_size=max_size,
+                max_size=len(state.result),
             )
             state.test_function(probe)
             # Try extreme downstream values (max and min) to find
@@ -97,7 +94,7 @@ def mutate_and_shrink(state: MinithesisState) -> None:
                     tc_ext = TestCase(
                         prefix=tuple(extreme),
                         random=Random(i),
-                        max_size=max_size,
+                        max_size=len(state.result),
                     )
                     state.test_function(tc_ext)
             # Also try setting each of the next few positions to
@@ -113,7 +110,7 @@ def mutate_and_shrink(state: MinithesisState) -> None:
                         tc2 = TestCase(
                             prefix=tuple(two_prefix),
                             random=Random(i * 1000 + j * 100 + fill * 10 + attempt),
-                            max_size=max_size,
+                            max_size=len(state.result),
                         )
                         state.test_function(tc2)
             # Try random continuations for general exploration.
@@ -121,7 +118,7 @@ def mutate_and_shrink(state: MinithesisState) -> None:
                 tc = TestCase(
                     prefix=tuple(prefix),
                     random=Random(i * 1000 + attempt),
-                    max_size=max_size,
+                    max_size=len(state.result),
                 )
                 state.test_function(tc)
         i += 1
