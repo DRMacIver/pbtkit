@@ -737,8 +737,9 @@ def binary_search_integer_towards_zero(
         # when the function is non-monotonic. Scan more when
         # the range is small (e.g. sampled_from with few options).
         range_size = kind.max_value - kind.min_value + 1
-        scan_limit = min(value, 8 if range_size > 32 else range_size)
-        for v in range(max(kind.simplest, 0), scan_limit):
+        lo = max(kind.simplest, 0)
+        scan_count = min(range_size, 32) if range_size <= 128 else 8
+        for v in range(lo, min(value, lo + scan_count)):
             try_replace(v)
         # Also try negative values with smaller absolute value,
         # which are simpler under sort_key (e.g. -1 < 2).
