@@ -221,6 +221,12 @@ def try_shortening_via_increment(state: MinithesisState) -> None:
                 [n.value for n in zeroed], prefix_nodes=zeroed
             )
             state.test_function(tc_zeroed)
+            # Try the increment with original values (not zeroed) to
+            # handle cases where filters reject simplest values.
+            tc_orig = TestCase.for_choices(
+                [n.value for n in attempt], prefix_nodes=attempt
+            )
+            state.test_function(tc_orig)
             # Also try with position i+1 set to 1 or -1, which handles
             # one_of branch switches and negative threshold conditions.
             if i + 1 < len(attempt):
