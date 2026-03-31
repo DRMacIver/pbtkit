@@ -820,6 +820,27 @@ def test_sort_insertion_stale_indices():
         state.run()
 
 
+@pytest.mark.requires("text")
+def test_string_length_redistribution():
+    """When two strings share a total length constraint (len(v0)+len(v1) >= N),
+    the shrinker should redistribute length to make the first string as short
+    as possible, even though shortening v0 requires lengthening v1.
+    Regression for shrink quality found by minismith."""
+
+    def tf(tc):
+        v0 = tc.any(text(min_codepoint=32, max_codepoint=126, max_size=20))
+        v1 = tc.any(text(min_codepoint=32, max_codepoint=126, max_size=20))
+        if len(v0) + len(v1) >= 30:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 100)
+    state.run()
+    assert state.result is not None
+    v0_len = len(state.result[0].value)
+    # Optimal: v0 as short as possible (10 chars, since v1 max is 20).
+    assert v0_len == 10
+
+
 @pytest.mark.requires("collections")
 def test_one_of_switches_to_shorter_branch():
     """When one_of branch 0 (lists) produces a truthy value in 4 choices
