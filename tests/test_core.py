@@ -969,6 +969,34 @@ def test_negative_zero_shrinks_to_positive_zero():
     assert math.copysign(1.0, float_val) == 1.0, f"Expected 0.0 but got {float_val!r}"
 
 
+@pytest.mark.requires("bytes")
+@pytest.mark.requires("collections")
+def test_lower_and_bump_stale_kind_after_replace():
+    """lower_and_bump must validate values against the CURRENT kind at
+    position j, not the kind from before the replace. A replace can
+    change types via value punning (e.g. BytesChoice → BooleanChoice).
+    Regression for TypeError in sort_key found by minismith."""
+
+    @composite
+    def pair(tc):
+        a = tc.any(booleans())
+        b = tc.any(booleans())
+        return (a, b)
+
+    def tf(tc):
+        v0 = tc.any(lists(booleans(), max_size=10))
+        tc.any(booleans())
+        tc.any(binary(max_size=20))
+        tc.any(pair())
+        tc.any(pair())
+        if len(v0) != 0:
+            tc.mark_status(Status.INTERESTING)
+
+    # Should not crash.
+    state = State(Random(0), tf, 100)
+    state.run()
+
+
 @pytest.mark.requires("collections")
 def test_one_of_switches_to_shorter_branch():
     """When one_of branch 0 (lists) produces a truthy value in 4 choices

@@ -73,7 +73,19 @@ def lower_and_bump(state: MinithesisState) -> None:
                 zeroed[k] = zeroed[k].with_value(zeroed[k].kind.simplest)
             tc_z = TestCase.for_choices([n.value for n in zeroed], prefix_nodes=zeroed)
             state.test_function(tc_z)
+
             # Try bumping the target by index offsets.
+            # Re-read kind_j before each attempt since prior replaces
+            # can change the result structure.
+            def _try_bump_j(val: object) -> bool:
+                result = state.result
+                assert result is not None
+                return (
+                    j < len(result)
+                    and result[j].kind.validate(val)
+                    and state.replace({i: new_val, j: val})
+                )
+
             if j < len(state.result) and state.result[j].kind.supports_index:
                 kind_j = state.result[j].kind
                 target_idx = kind_j.to_index(state.result[j].value)
@@ -82,7 +94,7 @@ def lower_and_bump(state: MinithesisState) -> None:
                 while bump <= 256:
                     bumped = kind_j.from_index(target_idx + bump)
                     if bumped is not None:
-                        if state.replace({i: new_val, j: bumped}):
+                        if _try_bump_j(bumped):
                             break
                     bump *= 2
                 # Try simplest, max, and powers-of-2 absolute indices.
@@ -95,7 +107,7 @@ def lower_and_bump(state: MinithesisState) -> None:
                 for abs_idx in abs_probes:
                     v = kind_j.from_index(abs_idx)
                     if v is not None:
-                        state.replace({i: new_val, j: v})
+                        _try_bump_j(v)
             idx += 1
 
 
@@ -183,12 +195,14 @@ def try_shortening_via_increment(state: MinithesisState) -> None:
             )
             state.test_function(tc_orig)
             # Try setting each nearby position to unit (from_index(1)).
-            for j in range(i + 1, min(i + 9, len(state.result))):
+            for j in range(i + 1, i + 9):
+                if j >= len(state.result):
+                    break
                 kind_j = state.result[j].kind
                 if not kind_j.supports_index:
                     continue
                 unit_val = kind_j.from_index(1)
-                if unit_val is not None:
+                if unit_val is not None and j < len(zeroed):
                     filled = list(zeroed)
                     filled[j] = filled[j].with_value(unit_val)
                     tc_filled = TestCase.for_choices(
