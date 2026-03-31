@@ -227,12 +227,13 @@ def try_shortening_via_increment(state: MinithesisState) -> None:
                 [n.value for n in attempt], prefix_nodes=attempt
             )
             state.test_function(tc_orig)
-            # Also try with position i+1 set to 1 or -1, which handles
-            # one_of branch switches and negative threshold conditions.
-            if i + 1 < len(attempt):
+            # Try setting each position after i to 1 or -1 individually
+            # (rest at simplest). Handles one_of branch switches (1/True)
+            # and negative threshold conditions (-1).
+            for j in range(i + 1, min(i + 9, len(attempt))):
                 for fill_val in [1, -1]:
                     filled = list(zeroed)
-                    filled[i + 1] = filled[i + 1].with_value(fill_val)
+                    filled[j] = filled[j].with_value(fill_val)
                     tc_filled = TestCase.for_choices(
                         [n.value for n in filled], prefix_nodes=filled
                     )
