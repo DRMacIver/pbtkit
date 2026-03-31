@@ -83,3 +83,34 @@ def _try_sort_group(
                 j -= 1
                 continue
             break
+
+
+@shrink_pass
+def swap_adjacent_blocks(state: MinithesisState) -> None:
+    """Try swapping adjacent blocks of choices of the same size.
+
+    This handles cases like dictionary entries where each entry spans
+    multiple choices (e.g. [continue, key, value]) and the sorting
+    pass can't swap individual values without breaking structure."""
+    assert state.result is not None
+    for block_size in range(2, 9):
+        i = 0
+        while i + 2 * block_size <= len(state.result):
+            j = i + block_size
+            # Only swap blocks with matching type structure.
+            types_a = [type(state.result[i + k].kind) for k in range(block_size)]
+            types_b = [type(state.result[j + k].kind) for k in range(block_size)]
+            if types_a != types_b:
+                i += 1
+                continue
+            block_a = [state.result[i + k].value for k in range(block_size)]
+            block_b = [state.result[j + k].value for k in range(block_size)]
+            if block_a == block_b:
+                i += 1
+                continue
+            swap = {}
+            for k in range(block_size):
+                swap[i + k] = block_b[k]
+                swap[j + k] = block_a[k]
+            state.replace(swap)
+            i += 1
