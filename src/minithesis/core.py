@@ -756,8 +756,10 @@ def binary_search_integer_towards_zero(
             -value,
             lambda a: try_replace(-a),
         )
-        # Linear scan small negative values for non-monotonic functions.
-        for v in range(1, min(-value, 8)):
+        # Linear scan negative values for non-monotonic functions.
+        range_size = kind.max_value - kind.min_value + 1
+        neg_scan = min(-value, 32) if range_size <= 128 else 8
+        for v in range(1, neg_scan):
             try_replace(-v)
         # Also try positive values with smaller absolute value,
         # which are simpler under sort_key (e.g. 2 < -3).
