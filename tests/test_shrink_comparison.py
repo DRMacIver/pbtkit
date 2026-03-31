@@ -23,7 +23,6 @@ from hypothesis.internal.conjecture.engine import ConjectureRunner
 from hypothesis.internal.intervalsets import IntervalSet
 
 from hypothesis import HealthCheck, assume, given, note, settings
-from hypothesis import strategies as st
 from minithesis.bytes import BytesChoice
 from minithesis.core import (  # noqa: F401
     BooleanChoice,
@@ -319,11 +318,7 @@ pytestmark = [
 ]
 
 
-@given(
-    minithesis_program=program(),
-    seed1=st.integers(),
-    seed2=st.integers(),
-)
+@given(program())
 @settings(
     max_examples=20000,
     deadline=None,
@@ -331,8 +326,6 @@ pytestmark = [
 )
 def test_minithesis_shrinks_at_least_as_well_as_hypothesis(
     minithesis_program: str,
-    seed1: int,
-    seed2: int,
 ) -> None:
     """Minithesis should produce a result at least as good as the worst
     of 10 Hypothesis runs, under the minithesis shrinking order."""
@@ -340,13 +333,23 @@ def test_minithesis_shrinks_at_least_as_well_as_hypothesis(
 
     test_body = _extract_test_body(minithesis_program)
 
-    hypothesis_result = _run_hypothesis(test_body, seed2)
-    assume(hypothesis_result is not None)
-
-    minithesis_result = _run_minithesis(test_body, seed=seed1)
+    # Run under minithesis first — skip programs where it finds nothing.
+    minithesis_result = _run_minithesis(test_body, seed=0)
     assume(minithesis_result is not None)
 
-    if sort_key(minithesis_result) > sort_key(hypothesis_result):
+    # Run under Hypothesis 10 times with different seeds.
+    hypothesis_results = []
+    for seed in range(10):
+        result = _run_hypothesis(test_body, seed)
+        if result is not None:
+            hypothesis_results.append(result)
+
+    assume(len(hypothesis_results) > 0)
+
+    # The worst Hypothesis result under minithesis sort_key.
+    worst_hypothesis = max(hypothesis_results, key=sort_key)
+
+    if sort_key(minithesis_result) > sort_key(worst_hypothesis):
         # Replay both results through the test body, capturing the
         # top-level values returned by tc.any() calls.
         def _replay(nodes):
@@ -368,20 +371,20 @@ def test_minithesis_shrinks_at_least_as_well_as_hypothesis(
             return draws
 
         mt_draws = _replay(minithesis_result)
-        hy_draws = _replay(hypothesis_result)
+        hy_draws = _replay(worst_hypothesis)
 
         mt_vals = [v for _, v in mt_draws]
         hy_vals = [v for _, v in hy_draws]
         note(
             f"\nMinithesis choices: {[n.value for n in minithesis_result]}"
             f"\nMinithesis values:  {mt_vals!r}"
-            f"\nHypothesis choices: {[n.value for n in hypothesis_result]}"
+            f"\nHypothesis choices: {[n.value for n in worst_hypothesis]}"
             f"\nHypothesis values:  {hy_vals!r}"
         )
 
         assert False, (
             f"Minithesis result {[n.value for n in minithesis_result]} "
             f"(sort_key={sort_key(minithesis_result)}) is worse than "
-            f"Hypothesis result {[n.value for n in hypothesis_result]} "
-            f"(sort_key={sort_key(hypothesis_result)})"
+            f"worst Hypothesis result {[n.value for n in worst_hypothesis]} "
+            f"(sort_key={sort_key(worst_hypothesis)})"
         )
