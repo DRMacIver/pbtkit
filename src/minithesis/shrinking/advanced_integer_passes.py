@@ -100,6 +100,11 @@ def lower_and_bump(state: MinithesisState) -> None:
                 for fv in [1.0, -1.0, 2.0, -2.0]:
                     if state.result[j].kind.validate(fv):
                         state.replace({i: new_i, j: fv})
+            # For StringChoice/BytesChoice targets, try unit values.
+            if j < len(state.result) and isinstance(
+                state.result[j].kind, (StringChoice, BytesChoice)
+            ):
+                state.replace({i: new_i, j: state.result[j].kind.unit})
             # Try bumping from current value by powers of 2.
             # Skip bumping for BytesChoice/StringChoice targets since
             # integer arithmetic doesn't apply.
