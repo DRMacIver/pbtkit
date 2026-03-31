@@ -366,7 +366,6 @@ def _shrink_float(
     if math.isinf(value):
         if value < 0:
             try_replace(math.inf)
-        # Try largest finite value.
         import sys
 
         try_replace(sys.float_info.max if value > 0 else -sys.float_info.max)
@@ -378,36 +377,44 @@ def _shrink_float(
     if not math.isfinite(value):
         return
 
-    # Step 3: Try reducing the exponent (trying smaller powers of 2
-    # with the same sign).
+    # Step 3: Reduce exponent toward 0 (binary search on biased_exp).
     bits = struct.unpack("!Q", struct.pack("!d", value))[0]
     sign = bits >> 63
     biased_exp = (bits >> 52) & 0x7FF
     mantissa = bits & ((1 << 52) - 1)
 
-    # Try mantissa=0 at smaller exponents (binary search on biased_exp
-    # toward 1023 which is exp 0).
-    if biased_exp != 1023:
-        target = 1023
-        lo_exp, hi_exp = min(biased_exp, target), max(biased_exp, target)
+    if biased_exp > 1023:
         bin_search_down(
-            lo_exp,
-            hi_exp,
+            1023,
+            biased_exp,
             lambda e: try_replace(
-                struct.unpack("!d", struct.pack("!Q", (sign << 63) | (e << 52)))[0]
+                struct.unpack(
+                    "!d", struct.pack("!Q", (sign << 63) | (e << 52))
+                )[0]
+            ),
+        )
+    elif biased_exp < 1023 and biased_exp > 0:
+        # For exponents below 1023, "simpler" means closer to 1023.
+        bin_search_down(
+            biased_exp,
+            1023,
+            lambda e: try_replace(
+                struct.unpack(
+                    "!d", struct.pack("!Q", (sign << 63) | (e << 52))
+                )[0]
             ),
         )
 
     # Step 4: Binary search the mantissa toward 0 within current exponent.
-    # Re-read current value since prior steps may have changed it.
     base_bits = (sign << 63) | (biased_exp << 52)
-
-    def try_mantissa(m: int) -> bool:
-        v = struct.unpack("!d", struct.pack("!Q", base_bits | m))[0]
-        return kind.validate(v) and try_replace(v)
-
-    try_mantissa(0)
-    bin_search_down(0, mantissa, try_mantissa)
+    try_replace(struct.unpack("!d", struct.pack("!Q", base_bits))[0])
+    bin_search_down(
+        0,
+        mantissa,
+        lambda m: try_replace(
+            struct.unpack("!d", struct.pack("!Q", base_bits | m))[0]
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
