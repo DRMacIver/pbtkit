@@ -48,6 +48,10 @@ def shrink_sequence(
         len(cur),
         lambda sz: tracking_replace(cur[:sz]),
     )
+    # Linear scan small lengths for non-monotonic functions where
+    # the binary search misses valid shorter lengths.
+    for sz in range(min_size, min(len(current[0]), min_size + 8)):
+        tracking_replace(current[0][:sz])
     for j in range(len(current[0]) - 1, -1, -1):
         v = current[0]
         if j < len(v) and len(v) > min_size:
