@@ -7,9 +7,12 @@
 # v. 2.0. If a copy of the MPL was not distributed with this file, You can
 # obtain one at https://mozilla.org/MPL/2.0/.
 
+from random import Random
+
 import pytest
 
 from minithesis import DirectoryDB, run_test
+from minithesis.core import MinithesisState, Status
 
 pytestmark = pytest.mark.requires("text")
 import minithesis.generators as gs
@@ -176,3 +179,41 @@ def test_truncated_string_database_entry():
         @run_test(database=db, max_examples=1)
         def _(test_case):
             pass
+
+
+def test_text_sorts_characters():
+    """String shrinker sorts characters (insertion sort path)."""
+
+    def tf(tc):
+        s = tc.any(
+            gs.text(
+                min_codepoint=ord("a"), max_codepoint=ord("z"), min_size=3, max_size=3
+            )
+        )
+        if len(set(s)) == 3:
+            tc.mark_status(Status.INTERESTING)
+
+    state = MinithesisState(Random(0), tf, 1000)
+    state.run()
+    assert state.result is not None
+    val = state.result[0].value
+    assert val == "".join(sorted(val))
+
+
+@pytest.mark.requires("shrinking.advanced_string_passes")
+def test_text_redistributes_pair():
+    """String redistribution moves content between two strings."""
+
+    def tf(tc):
+        s1 = tc.any(
+            gs.text(min_codepoint=ord("a"), max_codepoint=ord("z"), max_size=10)
+        )
+        s2 = tc.any(
+            gs.text(min_codepoint=ord("a"), max_codepoint=ord("z"), max_size=10)
+        )
+        if len(s1) + len(s2) >= 5:
+            tc.mark_status(Status.INTERESTING)
+
+    state = MinithesisState(Random(0), tf, 1000)
+    state.run()
+    assert state.result is not None

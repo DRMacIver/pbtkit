@@ -1302,6 +1302,92 @@ def test_run_test_with_preseeded_result():
                 assert n < 42
 
 
+@pytest.mark.requires("targeting")
+def test_targeting_skips_non_integer():
+    """Targeting skips non-integer nodes (booleans) without crashing."""
+    max_score = 0
+
+    @run_test(database={}, max_examples=200)
+    def _(tc):
+        nonlocal max_score
+        tc.weighted(0.5)  # boolean node
+        n = tc.choice(100)
+        tc.target(n)
+        max_score = max(n, max_score)
+
+    assert max_score == 100
+
+
+@pytest.mark.requires("shrinking.advanced_integer_passes")
+def test_redistribute_stale_indices():
+    """redistribute_integers must handle indices shrinking mid-loop
+    when redistribution changes the path (e.g. reducing count)."""
+
+    def tf(tc):
+        n = tc.draw_integer(1, 5)
+        total = 0
+        for _ in range(n):
+            total += tc.draw_integer(0, 100)
+        if total > 200:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 2000)
+    state.run()
+    assert state.result is not None
+
+
+@pytest.mark.requires("shrinking.duplication_passes")
+def test_shrink_duplicates_three_copies():
+    """shrink_duplicates handles 3+ copies of the same value."""
+
+    def tf(tc):
+        a = tc.draw_integer(0, 10)
+        b = tc.draw_integer(0, 10)
+        c = tc.draw_integer(0, 10)
+        if a == b == c and a > 0:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 10000)
+    state.run()
+    assert state.result is not None
+    assert state.result[0].value == 1
+    assert state.result[1].value == 1
+    assert state.result[2].value == 1
+
+
+@pytest.mark.requires("shrinking.sorting")
+def test_sort_values_swap_succeeds():
+    """sort_values swaps out-of-order integer pairs."""
+
+    def tf(tc):
+        a = tc.draw_integer(0, 100)
+        b = tc.draw_integer(0, 100)
+        # The interesting condition doesn't prevent sorting:
+        # a + b > 100 is invariant under swap.
+        if a + b > 100:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 1000)
+    state.run()
+    assert state.result is not None
+    # Sorting puts the smaller value first.
+    assert state.result[0].value <= state.result[1].value
+
+
+@pytest.mark.requires("shrinking.mutation")
+def test_mutate_skips_large_result():
+    """mutate_and_shrink returns early for results with >32 nodes."""
+
+    def tf(tc):
+        for _ in range(35):
+            tc.draw_integer(0, 10)
+        tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 100)
+    state.run()
+    assert state.result is not None
+
+
 def test_integer_shrinks_negative_only_range():
     """Shrinking in a range with max_value <= 0 exercises the
     early exit in binary_search_integer_towards_zero."""
