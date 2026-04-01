@@ -73,11 +73,18 @@ def _test_with_coverage(disabled: frozenset[str]) -> bool:
         return False
     test_output = result.stdout + result.stderr
     if result.returncode != 0:
-        for line in test_output.splitlines():
-            if "FAILED" in line or "Error" in line:
+        failure_lines = [
+            line for line in test_output.splitlines()
+            if "FAILED" in line or "Error" in line
+        ]
+        if failure_lines:
+            for line in failure_lines:
                 print(f"  {line}")
-        if "passed" not in test_output:
-            print(f"  Tests crashed")
+        else:
+            # Show last few lines for context
+            lines = test_output.strip().splitlines()
+            for line in lines[-3:]:
+                print(f"  {line}")
         return False
 
     result = subprocess.run(
