@@ -1092,11 +1092,12 @@ def test_regression_1():
 def test_regression_2():
     try:
 
-        @run_test(max_examples=1, database={}, quiet=True, random=Random(0))
+        @run_test(max_examples=1, database={}, random=Random(0))
         def _(tc):
             v0 = tc.draw(lists(booleans(), max_size=10))
             v1 = tc.draw(lists(integers(0, 0), max_size=10))
             if not (len(v0) == len(v1)):
                 raise Failure("len(v0) == len(v1)")
     except (Unsatisfiable, Failure):
+        raise
         pass

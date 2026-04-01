@@ -12,6 +12,7 @@
 import contextlib
 import inspect
 import textwrap
+from random import Random
 
 import libcst as cst
 import pytest
@@ -19,10 +20,10 @@ import pytest
 import pbtkit.draw_names  # noqa: F401  (importing patches TestCase)
 import pbtkit.generators as gs
 from pbtkit import run_test
-from pbtkit.core import TestCase
+from pbtkit.core import PbtkitState, TestCase
 from pbtkit.draw_names import (
+    _draw_names_hook,
     _DrawNameCollector,
-    rewrite_draws,
     rewrite_test_function,
 )
 
@@ -222,7 +223,6 @@ def test_rewriter_for_loop_body_is_repeatable(capsys):
     with pytest.raises(AssertionError):
 
         @run_test(database={}, max_examples=200)
-        @rewrite_draws
         def _(tc):
             results = []
             for _ in range(2):
@@ -240,7 +240,6 @@ def test_rewriter_while_loop_body_is_repeatable(capsys):
     with pytest.raises(AssertionError):
 
         @run_test(database={}, max_examples=200)
-        @rewrite_draws
         def _(tc):
             i = 0
             while i < 1:
@@ -257,7 +256,6 @@ def test_rewriter_if_body_is_repeatable(capsys):
     with pytest.raises(AssertionError):
 
         @run_test(database={}, max_examples=200)
-        @rewrite_draws
         def _(tc):
             if True:
                 x = tc.draw(gs.integers(0, 0))
@@ -272,7 +270,6 @@ def test_rewriter_with_block_is_repeatable(capsys):
     with pytest.raises(AssertionError):
 
         @run_test(database={}, max_examples=200)
-        @rewrite_draws
         def _(tc):
             with contextlib.nullcontext():
                 x = tc.draw(gs.integers(0, 0))
@@ -287,7 +284,6 @@ def test_rewriter_try_block_is_repeatable(capsys):
     with pytest.raises(AssertionError):
 
         @run_test(database={}, max_examples=200)
-        @rewrite_draws
         def _(tc):
             try:
                 x = tc.draw(gs.integers(0, 0))
@@ -304,7 +300,6 @@ def test_rewriter_nested_function_is_repeatable(capsys):
     with pytest.raises(AssertionError):
 
         @run_test(database={}, max_examples=200)
-        @rewrite_draws
         def _(tc):
             def inner():
                 return tc.draw(gs.integers(0, 0))
@@ -323,7 +318,6 @@ def test_rewriter_name_seen_at_top_and_loop_all_repeatable(capsys):
     with pytest.raises(AssertionError):
 
         @run_test(database={}, max_examples=200)
-        @rewrite_draws
         def _(tc):
             x = tc.draw(gs.integers(0, 0))
             for _ in range(1):
@@ -351,7 +345,6 @@ def test_rewriter_expression_context_not_rewritten(capsys):
     with pytest.raises(AssertionError):
 
         @run_test(database={}, max_examples=200)
-        @rewrite_draws
         def _(tc):
             # Not an assignment — should NOT be rewritten to draw_named.
             # The draw() format should still be draw_N = ...
@@ -368,7 +361,6 @@ def test_rewriter_tuple_target_not_rewritten(capsys):
     with pytest.raises(AssertionError):
 
         @run_test(database={}, max_examples=200)
-        @rewrite_draws
         def _(tc):
             a, b = tc.draw(gs.tuples(gs.integers(0, 0), gs.integers(0, 0)))
             assert False  # noqa: B011
@@ -388,7 +380,6 @@ def test_rewrite_draws_output_is_named(capsys):
     with pytest.raises(AssertionError):
 
         @run_test(database={})
-        @rewrite_draws
         def _(tc):
             value = tc.draw(gs.integers(0, 0))
             assert value < 0
@@ -403,7 +394,6 @@ def test_rewrite_draws_two_draws(capsys):
     with pytest.raises(AssertionError):
 
         @run_test(database={})
-        @rewrite_draws
         def _(tc):
             first = tc.draw(gs.integers(0, 0))
             second = tc.draw(gs.integers(0, 0))
@@ -414,8 +404,8 @@ def test_rewrite_draws_two_draws(capsys):
     assert "second = 0" in out
 
 
-def test_rewrite_draws_without_rewrite_draws_still_works(capsys):
-    """Without @rewrite_draws, output uses draw_N format."""
+def test_auto_rewriting_without_decorator(capsys):
+    """Importing draw_names enables auto-rewriting even without any decorator."""
     with pytest.raises(AssertionError):
 
         @run_test(database={})
@@ -424,8 +414,8 @@ def test_rewrite_draws_without_rewrite_draws_still_works(capsys):
             assert value < 0
 
     out = capsys.readouterr().out
-    assert "draw_1 = 0" in out
-    assert "value" not in out
+    assert "value = 0" in out
+    assert "draw_1" not in out
 
 
 def test_rewrite_draws_final_replay_uses_rewritten_function(capsys):
@@ -433,7 +423,6 @@ def test_rewrite_draws_final_replay_uses_rewritten_function(capsys):
     with pytest.raises(AssertionError):
 
         @run_test(database={})
-        @rewrite_draws
         def _(tc):
             answer = tc.draw(gs.integers(0, 0))
             assert answer < 0
@@ -448,7 +437,6 @@ def test_rewrite_draws_loop_output_numbered(capsys):
     with pytest.raises(AssertionError):
 
         @run_test(database={}, max_examples=200)
-        @rewrite_draws
         def _(tc):
             for _ in range(2):
                 item = tc.draw(gs.integers(0, 0))
@@ -466,7 +454,6 @@ def test_rewrite_draws_with_closure(capsys):
     with pytest.raises(AssertionError):
 
         @run_test(database={})
-        @rewrite_draws
         def _(tc):
             val = tc.draw(gs.integers(0, 0))
             # threshold is a free variable from the enclosing scope
@@ -481,7 +468,6 @@ def test_rewrite_draws_no_error_for_no_draw_function(capsys):
     with pytest.raises(AssertionError):
 
         @run_test(database={})
-        @rewrite_draws
         def _(tc):
             assert False  # noqa: B011
 
@@ -495,8 +481,8 @@ def test_rewrite_draws_no_error_for_no_draw_function(capsys):
 # ---------------------------------------------------------------------------
 
 
-def test_importing_draw_names_does_not_affect_plain_tests(capsys):
-    """Tests that don't use @rewrite_draws are unaffected by importing draw_names."""
+def test_importing_draw_names_enables_auto_rewriting(capsys):
+    """Importing draw_names rewrites all run_test() functions automatically."""
     with pytest.raises(AssertionError):
 
         @run_test(database={})
@@ -505,8 +491,7 @@ def test_importing_draw_names_does_not_affect_plain_tests(capsys):
             assert n < 0
 
     out = capsys.readouterr().out
-    # Should still use the default draw_N format
-    assert "draw_1 = 0" in out
+    assert "n = 0" in out
 
 
 def test_draw_named_stub_raises_before_import():
@@ -594,7 +579,6 @@ def test_rewriter_multiple_targets_in_same_fn(capsys):
     with pytest.raises(AssertionError):
 
         @run_test(database={})
-        @rewrite_draws
         def _(tc):
             x = tc.draw(gs.integers(0, 0))  # collected → rewritten
             a = b = tc.draw(
@@ -613,7 +597,6 @@ def test_rewriter_tuple_target_when_regular_draw_present(capsys):
     with pytest.raises(AssertionError):
 
         @run_test(database={})
-        @rewrite_draws
         def _(tc):
             x = tc.draw(gs.integers(0, 0))  # collected → rewritten
             a, b = tc.draw(  # tuple target → NOT collected/rewritten  # noqa: F841
@@ -631,7 +614,6 @@ def test_rewriter_nested_funcdef_line_268(capsys):
     with pytest.raises(AssertionError):
 
         @run_test(database={})
-        @rewrite_draws
         def _(tc):
             x = tc.draw(gs.integers(0, 0))
 
@@ -677,3 +659,10 @@ def test_rewrite_fallback_on_bad_source():
     f = ns["f"]
     result = rewrite_test_function(f)  # type: ignore[arg-type]
     assert result is f
+
+
+def test_hook_noop_when_original_test_is_none():
+    """_draw_names_hook returns early when state._original_test is None."""
+    state = PbtkitState(Random(), lambda tc: None, 1)
+    assert state._original_test is None
+    _draw_names_hook(state)  # must not raise

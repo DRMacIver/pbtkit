@@ -1,25 +1,21 @@
 """Named draws for pbtkit.
 
-This module adds two features when imported:
+When imported, this module automatically rewrites every test function run via
+``run_test()``: each ``x = tc.draw(gen)`` assignment is transformed to
+``x = tc.draw_named(gen, "x", repeatable)`` using a libcst-based CST rewrite,
+so failing test output shows ``x = 42`` instead of the generic ``draw_1 = 42``.
 
-1. ``TestCase.draw_named(generator, name, repeatable)`` — like ``draw()``, but
-   prints the value as ``name = value`` (or ``name_1 = value``, ``name_2 = value``
-   for repeatable draws) instead of the generic ``draw_N = value`` label.
-
-2. The ``@rewrite_draws`` decorator, which marks a test function for automatic
-   CST rewriting: every ``x = tc.draw(gen)`` assignment is transformed to
-   ``x = tc.draw_named(gen, "x", repeatable)`` where the ``repeatable`` flag is
-   computed by inspecting the function's control-flow structure.
+``TestCase.draw_named(generator, name, repeatable)`` is also available directly:
+prints ``name = value`` (non-repeatable) or ``name_1 = value``, ``name_2 = value``
+(repeatable) instead of the generic ``draw_N = value`` label.
 
 Usage::
 
-    import pbtkit.draw_names
+    import pbtkit.draw_names  # enables auto-rewriting for all run_test() tests
     from pbtkit import run_test
-    from pbtkit.draw_names import rewrite_draws
     from pbtkit.generators import integers
 
     @run_test()
-    @rewrite_draws
     def test_something(tc):
         x = tc.draw(integers(0, 100))
         assert x == 0
@@ -31,6 +27,7 @@ from __future__ import annotations
 
 import inspect
 import textwrap
+import types
 from collections.abc import Callable
 from typing import TypeVar, cast
 
@@ -347,7 +344,7 @@ def rewrite_test_function(func: Callable) -> Callable:
             # When exec'd at module level, free variables would be compiled as
             # globals, not free variables.  Wrap the source in an outer function
             # that takes those names as parameters so Python compiles the inner
-            # function with the correct closure cell references.
+            # function with the correct co_freevars in the code object.
             freevars = func.__code__.co_freevars
             params = ", ".join(freevars)
             outer_source = (
@@ -359,7 +356,16 @@ def rewrite_test_function(func: Callable) -> Callable:
             exec(outer_source, func.__globals__, outer_ns)  # noqa: S102
             cell_values = [c.cell_contents for c in func.__closure__]
             make = cast(Callable[..., Callable], outer_ns["_make_closure_"])
-            new_func: Callable = make(*cell_values)
+            intermediate = make(*cell_values)
+            # Rebind the rewritten code object to the *original* closure cells so
+            # that mutations via `nonlocal` are reflected in the enclosing scope.
+            new_func: Callable = types.FunctionType(
+                intermediate.__code__,
+                func.__globals__,
+                func.__name__,
+                func.__defaults__,
+                func.__closure__,
+            )
         else:
             # Exec the rewritten source in the function's global namespace.
             ns: dict[str, object] = {}
@@ -376,38 +382,18 @@ def rewrite_test_function(func: Callable) -> Callable:
 
 
 # ---------------------------------------------------------------------------
-# Public decorator: marks a function for rewriting via the setup hook.
-# ---------------------------------------------------------------------------
-
-
-def rewrite_draws(func: Callable) -> Callable:
-    """Mark a test function so that ``tc.draw()`` assignments are auto-rewritten
-    to ``tc.draw_named()`` calls before the test runs.
-
-    Apply *inside* ``@run_test()``::
-
-        @run_test()
-        @rewrite_draws
-        def test_something(tc):
-            x = tc.draw(integers(0, 100))
-            assert x == 0
-    """
-    func._wants_draw_names = True  # type: ignore[attr-defined]
-    return func
-
-
-# ---------------------------------------------------------------------------
-# Setup hook: performs the rewriting and patches the state.
+# Setup hook: automatically rewrite all test functions.
 # ---------------------------------------------------------------------------
 
 
 @setup_hook
 def _draw_names_hook(state: PbtkitState) -> None:
-    """If the test function was decorated with ``@rewrite_draws``, rewrite it
-    and install the rewritten version on the state for both execution and the
-    final failing replay."""
+    """Rewrite ``x = tc.draw(gen)`` → ``x = tc.draw_named(gen, "x", ...)`` for
+    every test function, installing the rewritten version on the state for both
+    execution and the final failing replay.  Active for all tests once this
+    module is imported."""
     orig = state._original_test
-    if orig is None or not getattr(orig, "_wants_draw_names", False):
+    if orig is None:
         return
     rewritten = rewrite_test_function(orig)
     if rewritten is orig:
