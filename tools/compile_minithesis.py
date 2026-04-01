@@ -366,13 +366,54 @@ def _is_import(line: str) -> bool:
     return line.startswith("import ") or line.startswith("from ")
 
 
-def _is_duplicate_typevar(line: str, core_source: str) -> bool:
-    """Check if a line is a TypeVar definition already present in core."""
-    m = re.match(r"^(\w+) = TypeVar\(", line)
-    if not m:
-        return False
-    name = m.group(1)
-    return f"{name} = TypeVar(" in core_source
+class _SubscriptNameCollector(cst.CSTTransformer):
+    """Collect all Name nodes that appear inside Subscript slices."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.names: set[str] = set()
+        self._in_subscript = 0
+
+    def visit_Subscript(self, node: cst.Subscript) -> bool:
+        self._in_subscript += 1
+        return True
+
+    def leave_Subscript(
+        self, original_node: cst.Subscript, updated_node: cst.Subscript
+    ) -> cst.Subscript:
+        self._in_subscript -= 1
+        return updated_node
+
+    def leave_Name(
+        self, original_node: cst.Name, updated_node: cst.Name
+    ) -> cst.Name:
+        if self._in_subscript > 0:
+            self.names.add(updated_node.value)
+        return updated_node
+
+
+def _strip_unused_typevars(source: str) -> str:
+    """Remove TypeVar definitions that are unused or duplicated.
+
+    A TypeVar is unused if its name never appears in a subscript index.
+    A TypeVar is a duplicate if a definition with the same name appeared
+    earlier in the source."""
+    tree = cst.parse_module(source)
+    collector = _SubscriptNameCollector()
+    tree.visit(collector)
+
+    seen: set[str] = set()
+    lines = source.splitlines(keepends=True)
+    out: list[str] = []
+    for line in lines:
+        m = re.match(r"^(\w+) = TypeVar\(", line)
+        if m:
+            name = m.group(1)
+            if name not in collector.names or name in seen:
+                continue
+            seen.add(name)
+        out.append(line)
+    return "".join(out)
 
 
 def _skip_import(lines: list[str], start: int) -> int:
@@ -443,7 +484,7 @@ def process_core(
     return "".join(out)
 
 
-def process_extension(source: str, moved_funcs: set[str], core_source: str = "") -> str:
+def process_extension(source: str, moved_funcs: set[str]) -> str:
     """Process an extension module: remove imports, docstring, section dividers,
     monkey-patch assignments, and functions that were moved to TestCase."""
     lines = source.splitlines(keepends=True)
@@ -457,12 +498,9 @@ def process_extension(source: str, moved_funcs: set[str], core_source: str = "")
     while i < len(lines):
         line = lines[i]
 
-        # Skip imports and TypeVar redefinitions
+        # Skip imports
         if _is_import(line):
             i = _skip_import(lines, i)
-            continue
-        if _is_duplicate_typevar(line, core_source):
-            i += 1
             continue
 
         # Skip section dividers (3-line blocks: divider, title, divider)
@@ -500,7 +538,7 @@ def process_extension(source: str, moved_funcs: set[str], core_source: str = "")
     return "".join(out)
 
 
-def process_generators(source: str, disabled: frozenset[str] = frozenset(), core_source: str = "") -> str:
+def process_generators(source: str, disabled: frozenset[str] = frozenset()) -> str:
     """Process generators.py: remove imports, docstring, and generators
     that depend on disabled extensions."""
     # Map generator function names to the extension they require.
@@ -524,9 +562,6 @@ def process_generators(source: str, disabled: frozenset[str] = frozenset(), core
         line = lines[i]
         if _is_import(line):
             i = _skip_import(lines, i)
-            continue
-        if _is_duplicate_typevar(line, core_source):
-            i += 1
             continue
         # Remove generator functions that depend on disabled extensions.
         func_match = re.match(r"^def (\w+)\(", line)
@@ -639,12 +674,12 @@ def compile_minithesis(disabled: frozenset[str] = frozenset()) -> str:
     ext_bodies: list[str] = []
     for ext in needed_utils + extensions:
         moved = {func for _, (en, func) in all_patches.items() if en == ext}
-        body = process_extension(sources[ext], moved, sources["core"])
+        body = process_extension(sources[ext], moved)
         if body.strip():
             ext_bodies.append(body)
 
     # Process generators (remove imports and generators for disabled types)
-    gen_body = process_generators(sources["generators"], disabled, sources["core"])
+    gen_body = process_generators(sources["generators"], disabled)
 
     # Determine which hook lists are used by the enabled extensions.
     # Map decorator names to the hook list they register into.
@@ -675,6 +710,9 @@ def compile_minithesis(disabled: frozenset[str] = frozenset()) -> str:
     for decorator, hook_list in _HOOK_LISTS.items():
         if hook_list not in used_hooks:
             result = _strip_empty_hook(result, hook_list, decorator)
+
+    # Remove TypeVar definitions that aren't used in any subscript.
+    result = _strip_unused_typevars(result)
 
     return result
 
