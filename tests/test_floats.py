@@ -49,7 +49,7 @@ def test_floats_shrinks_to_zero(capsys):
 
     captured = capsys.readouterr()
     # Should shrink to a small non-zero float
-    assert "draw(floats" in captured.out
+    assert "draw_1 =" in captured.out
 
 
 def test_floats_bounded_shrinks(capsys):
@@ -62,7 +62,7 @@ def test_floats_bounded_shrinks(capsys):
 
     captured = capsys.readouterr()
     # Should find some float >= 5.0
-    assert "draw(floats(" in captured.out
+    assert "draw_1 =" in captured.out
 
 
 def test_floats_no_nan():
@@ -96,7 +96,7 @@ def test_floats_shrinks_negative(capsys):
             assert f > -5.0
 
     captured = capsys.readouterr()
-    assert "draw(floats(" in captured.out
+    assert "draw_1 =" in captured.out
 
 
 def test_floats_shrinks_truncates(capsys):
@@ -110,7 +110,7 @@ def test_floats_shrinks_truncates(capsys):
 
     captured = capsys.readouterr()
     # Should shrink to a simple value (integer float)
-    assert "draw(floats(" in captured.out
+    assert "draw_1 =" in captured.out
 
 
 def test_floats_half_bounded():

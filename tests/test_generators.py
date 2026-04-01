@@ -280,7 +280,7 @@ def test_unique_lists_shrinks(capsys):
             assert len(ls) < 3
 
     captured = capsys.readouterr()
-    assert "lists(" in captured.out
+    assert "draw_1" in captured.out
 
 
 def test_unique_by():
@@ -315,7 +315,7 @@ def test_dictionaries_shrinks(capsys):
             assert sum(d.values()) <= 100
 
     captured = capsys.readouterr()
-    assert "dictionaries(" in captured.out
+    assert "draw_1" in captured.out
 
 
 def test_dictionaries_size_bounds():
@@ -327,3 +327,7 @@ def test_dictionaries_size_bounds():
             )
         )
         assert 1 <= len(d) <= 3
+
+
+def test_generator_repr():
+    assert repr(gs.integers(0, 5)) == "integers(min_value=0, max_value=5)"

@@ -29,7 +29,4 @@ def test_finds_small_list(capsys, seed):
 
     captured = capsys.readouterr()
 
-    assert (
-        captured.out.strip()
-        == "draw(lists(integers(min_value=0, max_value=10000), min_size=0, max_size=inf)): [1001]"
-    )
+    assert captured.out.strip() == "draw_1 = [1001]"

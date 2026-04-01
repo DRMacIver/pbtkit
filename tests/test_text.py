@@ -44,9 +44,9 @@ def test_text_shrinks_to_short(capsys):
             assert len(s) < 1
 
     captured = capsys.readouterr()
-    assert "text(" in captured.out
+    assert "draw_1 =" in captured.out
     # Should shrink to "a" (shortest, simplest character)
-    assert captured.out.strip().endswith(": a")
+    assert captured.out.strip().endswith("= 'a'")
 
 
 def test_text_shrinks_characters(capsys):
@@ -65,7 +65,7 @@ def test_text_shrinks_characters(capsys):
             assert "z" not in s
 
     captured = capsys.readouterr()
-    assert captured.out.strip().endswith(": z")
+    assert captured.out.strip().endswith("= 'z'")
 
 
 def test_text_no_surrogates():

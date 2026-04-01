@@ -300,6 +300,12 @@ def run_test(
             test_name=test.__name__,
             **kwargs,
         )
+        # Store the original (unwrapped) test function so setup hooks can
+        # inspect and replace it (e.g. pbtkit.draw_names does this).
+        state._original_test = test
+        # The function used for the final failing replay. Hooks may update
+        # this to a rewritten version.
+        state._print_function = test
 
         for hook in SETUP_HOOKS:
             hook(state)
@@ -314,7 +320,7 @@ def run_test(
             hook(state)
 
         if state.result is not None:
-            test(
+            state._print_function(
                 TestCase.for_choices(
                     [n.value for n in state.result], print_results=not quiet
                 )
@@ -358,8 +364,12 @@ class TestCase:
         self.status: Status | None = None
         self.print_results = print_results
         self.depth = 0
+        self._draw_counter = 0
         self.targeting_score: int | None = None
         self.prefix_nodes = prefix_nodes
+        # Named-draw tracking, used by pbtkit.draw_names when imported.
+        self._named_draw_used: set[str] = set()
+        self._named_draw_flags: dict[str, bool] = {}
 
     def draw_integer(self, min_value: int, max_value: int) -> int:
         """Returns a number in the range [min_value, max_value]."""
@@ -450,6 +460,10 @@ class TestCase:
         """Set a score to maximize. Stub — import pbtkit to enable."""
         raise NotImplementedError("import pbtkit.targeting to use target")
 
+    def draw_named(self, generator: "Generator[U]", name: str, repeatable: bool) -> U:
+        """Draw with an explicit name for output. Stub — import pbtkit.draw_names to enable."""
+        raise NotImplementedError("import pbtkit.draw_names to use draw_named")
+
     def draw(self, generator: Generator[U]) -> U:
         """Return a value from ``generator``, printing it if this is a failing example."""
         try:
@@ -459,7 +473,8 @@ class TestCase:
             self.depth -= 1
 
         if self._should_print():
-            print(f"draw({generator}): {result}")
+            self._draw_counter += 1
+            print(f"draw_{self._draw_counter} = {result!r}")
         return result
 
     def draw_silent(self, generator: Generator[U]) -> U:
@@ -690,6 +705,24 @@ class PbtkitState:
         self.best_scoring: tuple[int, list[ChoiceNode]] | None = None
         self.test_is_trivial = False
         self.extras = types.SimpleNamespace(**kwargs)
+        # Set by run_test() after construction; hooks may update _print_function.
+        self._original_test: Callable[[TestCase], None] | None = None
+        self._print_function: Callable[[TestCase], None] | None = None
+
+    def replace_test_function(self, new_test: Callable[[TestCase], None]) -> None:
+        """Replace the test function. The new function is wrapped in the same
+        error-marking shim as the original so that exceptions are counted as
+        interesting test cases."""
+
+        def mark_failures_interesting(test_case: TestCase) -> None:
+            try:
+                new_test(test_case)
+            except Exception:
+                if test_case.status is not None:
+                    raise
+                test_case.mark_status(Status.INTERESTING)
+
+        self.__test_function = mark_failures_interesting
 
     def test_function(self, test_case: TestCase) -> None:
         try:
