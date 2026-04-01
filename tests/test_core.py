@@ -9,6 +9,7 @@
 
 import math
 import struct
+import unittest.mock
 from random import Random
 
 import pytest
@@ -1122,3 +1123,210 @@ def test_lower_and_bump_j_past_end_after_shortening():
     # Shrinks to n=0 (1 node) since lower_and_bump now tries
     # decrementing to simplest, not just index-1.
     assert len(state.result) == 1
+
+
+# ---------------------------------------------------------------------------
+# Core-only tests: exercise paths that don't require any extensions.
+# These ensure 100% coverage of the compiled minimal build.
+# ---------------------------------------------------------------------------
+
+
+def test_flat_map_core():
+    """flat_map works with core types only."""
+
+    @run_test(database={})
+    def _(tc):
+        m, n = tc.any(
+            gs.integers(0, 5).flat_map(
+                lambda m: gs.tuples(gs.just(m), gs.integers(m, m + 10))
+            )
+        )
+        assert m <= n <= m + 10
+
+
+def test_filter_core():
+    """filter works with core types only."""
+
+    @run_test(database={})
+    def _(tc):
+        n = tc.any(gs.integers(0, 10).filter(lambda n: n % 2 == 0))
+        assert n % 2 == 0
+
+
+def test_nothing_core():
+    """nothing() raises Unsatisfiable."""
+    with pytest.raises(Unsatisfiable):
+
+        @run_test(database={})
+        def _(tc):
+            tc.any(gs.nothing())
+
+
+def test_one_of_empty_core():
+    """one_of() with no args raises Unsatisfiable."""
+    with pytest.raises(Unsatisfiable):
+
+        @run_test(database={})
+        def _(tc):
+            tc.any(gs.one_of())
+
+
+def test_one_of_single_core():
+    """one_of with a single generator passes through."""
+
+    @run_test(database={})
+    def _(tc):
+        n = tc.any(gs.one_of(gs.integers(0, 10)))
+        assert 0 <= n <= 10
+
+
+def test_sampled_from_core():
+    """sampled_from with basic values."""
+
+    @run_test(database={})
+    def _(tc):
+        v = tc.any(gs.sampled_from(["a", "b", "c"]))
+        assert v in ("a", "b", "c")
+
+
+def test_sampled_from_empty_core():
+    """sampled_from([]) raises Unsatisfiable."""
+    with pytest.raises(Unsatisfiable):
+
+        @run_test(database={})
+        def _(tc):
+            tc.any(gs.sampled_from([]))
+
+
+def test_sampled_from_single_core():
+    """sampled_from with one element returns just that."""
+
+    @run_test(database={})
+    def _(tc):
+        assert tc.any(gs.sampled_from(["only"])) == "only"
+
+
+def test_just_core():
+    """just(v) always returns v."""
+
+    @run_test(database={})
+    def _(tc):
+        assert tc.any(gs.just(42)) == 42
+
+
+def test_weighted_forced_true():
+    """weighted(1.0) always returns True (forced=True path)."""
+    with pytest.raises(AssertionError):
+
+        @run_test(database={})
+        def _(tc):
+            if tc.weighted(1.0):
+                tc.choice(1)
+                assert False
+
+
+def test_integer_shrinks_negative():
+    """Negative integers shrink toward zero via swap_integer_sign
+    and binary_search_integer_towards_zero."""
+
+    def tf(tc):
+        n = tc.draw_integer(-1000, 1000)
+        if n < 0:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 100)
+    state.run()
+    assert state.result is not None
+    assert state.result[0].value == -1
+
+
+def test_integer_shrinks_via_binary_search():
+    """Large integers shrink via binary search toward zero."""
+
+    def tf(tc):
+        n = tc.draw_integer(0, 10000)
+        if n > 100:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 100)
+    state.run()
+    assert state.result is not None
+    assert state.result[0].value == 101
+
+
+def test_map_core():
+    """Generator.map works with core types."""
+
+    @run_test(database={})
+    def _(tc):
+        n = tc.any(gs.integers(0, 5).map(lambda n: n * 2))
+        assert n % 2 == 0
+
+
+def test_delete_chunks_stale_index():
+    """delete_chunks must handle i going past the end of the result
+    when a successful deletion shortens it."""
+
+    def tf(tc):
+        # Always interesting, variable length. With many nodes,
+        # chunk deletions succeed and shorten the result, causing
+        # the loop index i to go past the new end.
+        n = tc.draw_integer(0, 30)
+        for _ in range(n):
+            tc.draw_integer(0, 10)
+        tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 200)
+    state.run()
+    assert state.result is not None
+    # Shrinks to n=0, one node.
+    assert len(state.result) == 1
+
+
+def test_run_test_with_preseeded_result():
+    """Exercise the run_test path where state.result is not None
+    before state.run() (normally set by database hooks)."""
+    original_init = State.__init__
+
+    def patched_init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        tc = TC.for_choices([42])
+        self.test_function(tc)
+
+    with unittest.mock.patch.object(State, "__init__", patched_init):
+        with pytest.raises(AssertionError):
+
+            @run_test(database={}, max_examples=1)
+            def _(tc):
+                n = tc.draw_integer(0, 100)
+                assert n < 42
+
+
+def test_integer_shrinks_negative_only_range():
+    """Shrinking in a range with max_value <= 0 exercises the
+    early exit in binary_search_integer_towards_zero."""
+
+    def tf(tc):
+        n = tc.draw_integer(-100, -1)
+        if n <= -10:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 100)
+    state.run()
+    assert state.result is not None
+    assert state.result[0].value == -10
+
+
+def test_bin_search_down_lo_satisfies():
+    """bin_search_down returns lo when f(lo) is True. Use a range
+    where simplest != 0 so zero_choices can't get there first."""
+
+    def tf(tc):
+        n = tc.draw_integer(5, 100)
+        # Always interesting — binary search tries simplest (5) first.
+        tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 100)
+    state.run()
+    assert state.result is not None
+    assert state.result[0].value == 5
