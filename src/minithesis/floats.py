@@ -382,7 +382,20 @@ def _shrink_float(
     if not math.isfinite(value):
         return
 
-    # Step 3: Reduce exponent toward 0 (binary search on biased_exp).
+    # Step 3: Binary search on the raw index toward simplest.
+    # This handles cross-exponent transitions (e.g. -4.0 → -3.0)
+    # where reducing the exponent alone doesn't work but a smaller
+    # raw index with a different exponent+mantissa combination does.
+    current_raw = _float_to_index(value)
+    simplest_raw = _float_to_index(kind.simplest)
+    bin_search_down(
+        simplest_raw,
+        current_raw,
+        lambda idx: try_replace(_index_to_float(idx)),
+    )
+
+    # Step 4: Reduce exponent toward 1023 (binary search on biased_exp).
+    # Re-read bits since step 3 may have changed the value.
     bits = struct.unpack("!Q", struct.pack("!d", value))[0]
     sign = bits >> 63
     biased_exp = (bits >> 52) & 0x7FF
@@ -406,7 +419,7 @@ def _shrink_float(
             ),
         )
 
-    # Step 4: Binary search the mantissa toward 0 within current exponent.
+    # Step 5: Binary search the mantissa toward 0 within current exponent.
     base_bits = (sign << 63) | (biased_exp << 52)
     try_replace(struct.unpack("!d", struct.pack("!Q", base_bits))[0])
     bin_search_down(

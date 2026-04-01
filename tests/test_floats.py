@@ -522,3 +522,24 @@ def test_float_negative_zero_simplest():
     fc = FloatChoice(-1.0, 0.0, False, False)
     # 0.0 validates (0.0 >= -1.0 and 0.0 <= 0.0), so simplest is 0.0
     assert fc.simplest == 0.0
+
+
+def test_float_shrinks_across_exponent_boundary():
+    """The float shrinker must find values across exponent boundaries.
+    E.g. shrinking -4.0 (exp=1025, mantissa=0) toward -2.0 requires
+    finding -3.0 (exp=1024, mantissa=2^51) or -2.0...004 (exp=1024,
+    mantissa=1). Binary search on raw index handles this.
+    Regression: shrinker was stuck at -4.0 because exponent and mantissa
+    searches couldn't cross the boundary independently."""
+
+    def tf(tc):
+        v0 = tc.any(floats(allow_nan=False, allow_infinity=False))
+        if v0 < -2.0:
+            tc.mark_status(Status.INTERESTING)
+
+    state = MinithesisState(Random(0), tf, 100)
+    state.run()
+    assert state.result is not None
+    v = state.result[0].value
+    # Should find the smallest float < -2.0, which is -2.0 - 1 ULP.
+    assert -3.0 < v < -2.0
