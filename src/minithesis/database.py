@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import os
 import struct
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from enum import IntEnum
 from typing import (
     Any,
@@ -86,117 +86,76 @@ class SerializationTag(IntEnum):
     STRING = 4
 
 
-# Serialization registry keyed on Python value types (int, bool, etc.).
-_SERIALIZERS: dict[type, tuple[int, Callable[[Any], bytes]]] = {}
-_DESERIALIZERS: dict[int, Callable[[bytes, int], tuple[Any, int]]] = {}
+def _serialize_value(v: Any) -> bytes:
+    """Serialize a single choice value to tag + payload bytes."""
+    # bool must be checked before int since bool is a subclass of int.
+    if isinstance(v, bool):
+        return bytes([SerializationTag.BOOLEAN, int(v)])
+    if isinstance(v, int):
+        return bytes([SerializationTag.INTEGER]) + v.to_bytes(8, "big", signed=True)
+    if isinstance(v, float):
+        return bytes([SerializationTag.FLOAT]) + struct.pack("!d", v)
+    if isinstance(v, bytes):
+        return bytes([SerializationTag.BYTES]) + len(v).to_bytes(4, "big") + v
+    assert isinstance(v, str), f"unsupported type: {type(v)}"
+    encoded = v.encode("utf-8")
+    return bytes([SerializationTag.STRING]) + len(encoded).to_bytes(4, "big") + encoded
 
 
-def register_serializer(
-    value_type: type,
-    tag: int,
-    serialize: Callable[[Any], bytes],
-    deserialize: Callable[[bytes, int], tuple[Any, int]],
-) -> None:
-    """Register serialization for a Python value type.
+def _read_fixed(data: bytes, offset: int, size: int) -> tuple[bytes, int]:
+    """Read exactly size bytes from data at offset."""
+    if offset + size > len(data):
+        raise ValueError("truncated")
+    return data[offset : offset + size], offset + size
 
-    serialize(value) -> bytes
-    deserialize(data, offset) -> (value, new_offset)
-        Should raise IndexError or ValueError on truncated data."""
-    _SERIALIZERS[value_type] = (tag, serialize)
-    _DESERIALIZERS[tag] = deserialize
+
+def _read_length_prefixed(data: bytes, offset: int) -> tuple[bytes, int]:
+    """Read a 4-byte-length-prefixed blob from data at offset."""
+    raw, offset = _read_fixed(data, offset, 4)
+    length = int.from_bytes(raw, "big")
+    return _read_fixed(data, offset, length)
+
+
+def _deserialize_value(data: bytes, offset: int) -> tuple[Any, int]:
+    """Deserialize a single choice value. Returns (value, new_offset).
+    Raises ValueError/IndexError on malformed data."""
+    tag = data[offset]
+    offset += 1
+    if tag == SerializationTag.INTEGER:
+        raw, offset = _read_fixed(data, offset, 8)
+        return int.from_bytes(raw, "big", signed=True), offset
+    if tag == SerializationTag.BOOLEAN:
+        raw, offset = _read_fixed(data, offset, 1)
+        return bool(raw[0]), offset
+    if tag == SerializationTag.FLOAT:
+        raw, offset = _read_fixed(data, offset, 8)
+        return struct.unpack("!d", raw)[0], offset
+    if tag == SerializationTag.BYTES:
+        raw, offset = _read_length_prefixed(data, offset)
+        return bytes(raw), offset
+    if tag == SerializationTag.STRING:
+        raw, offset = _read_length_prefixed(data, offset)
+        return raw.decode("utf-8"), offset
+    raise ValueError(f"unknown tag: {tag}")
 
 
 def _serialize_choices(values: Sequence[Any]) -> bytes:
     """Serialize a choice value sequence to bytes for database storage."""
-    parts: list[bytes] = []
-    for v in values:
-        tag, serialize = _SERIALIZERS[type(v)]
-        parts.append(bytes([tag]) + serialize(v))
-    return b"".join(parts)
+    return b"".join(_serialize_value(v) for v in values)
 
 
 def _deserialize_choices(data: bytes) -> list | None:
     """Deserialize a choice sequence from bytes. Returns None if
     the data is malformed (e.g. from an old format)."""
     values: list = []
-    i = 0
+    offset = 0
     try:
-        while i < len(data):
-            tag = data[i]
-            i += 1
-            if tag not in _DESERIALIZERS:
-                return None
-            value, i = _DESERIALIZERS[tag](data, i)
+        while offset < len(data):
+            value, offset = _deserialize_value(data, offset)
             values.append(value)
     except (IndexError, ValueError):
         return None
     return values
-
-
-def _deserialize_fixed(size: int, convert: Callable[[bytes], Any]) -> Callable:
-    """Helper to create a deserializer for fixed-size values."""
-
-    def deserialize(data: bytes, offset: int) -> tuple[Any, int]:
-        if offset + size > len(data):
-            raise ValueError("truncated")
-        return convert(data[offset : offset + size]), offset + size
-
-    return deserialize
-
-
-def _deserialize_length_prefixed(
-    convert: Callable[[bytes], Any],
-) -> Callable:
-    """Helper to create a deserializer for length-prefixed values."""
-
-    def deserialize(data: bytes, offset: int) -> tuple[Any, int]:
-        if offset + 4 > len(data):
-            raise ValueError("truncated")
-        length = int.from_bytes(data[offset : offset + 4], "big")
-        offset += 4
-        if offset + length > len(data):
-            raise ValueError("truncated")
-        return convert(data[offset : offset + length]), offset + length
-
-    return deserialize
-
-
-# Register all value types. Note: bool must be registered separately
-# from int because type(True) is bool, not int.
-register_serializer(
-    int,
-    SerializationTag.INTEGER,
-    lambda v: v.to_bytes(8, "big", signed=True),
-    _deserialize_fixed(8, lambda b: int.from_bytes(b, "big", signed=True)),
-)
-
-register_serializer(
-    bool,
-    SerializationTag.BOOLEAN,
-    lambda v: bytes([int(v)]),
-    _deserialize_fixed(1, lambda b: bool(b[0])),
-)
-
-register_serializer(
-    float,
-    SerializationTag.FLOAT,
-    lambda v: struct.pack("!d", v),
-    _deserialize_fixed(8, lambda b: struct.unpack("!d", b)[0]),
-)
-
-register_serializer(
-    bytes,
-    SerializationTag.BYTES,
-    lambda v: len(v).to_bytes(4, "big") + v,
-    _deserialize_length_prefixed(lambda b: bytes(b)),
-)
-
-register_serializer(
-    str,
-    SerializationTag.STRING,
-    lambda v: (e := v.encode("utf-8"), len(e).to_bytes(4, "big") + e)[1],
-    _deserialize_length_prefixed(lambda b: b.decode("utf-8")),
-)
 
 
 # ---------------------------------------------------------------------------

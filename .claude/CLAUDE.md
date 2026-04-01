@@ -44,7 +44,7 @@ All three must pass before committing.
 ## Architecture
 
 * **Shrink passes** are registered via the `@shrink_pass` decorator into the global `SHRINK_PASSES` list. Each pass takes a `TestingState` and uses `state.consider()` / `state.replace()`.
-* **Serialization** uses a registry (`register_serializer`). Tags are in the `SerializationTag` enum.
+* **Serialization** uses direct type-specific handling in `_serialize_value`/`_deserialize_value`. Tags are in the `SerializationTag` enum.
 * **Type extensions** (float, bytes, string) monkey-patch draw methods onto `TestCase` and register their serializers and shrink passes when `__init__.py` is imported.
 * **`minithesis.py`** must stand alone with no dependencies on the type extensions.
 
