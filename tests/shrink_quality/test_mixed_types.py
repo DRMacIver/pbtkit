@@ -5,7 +5,7 @@ Ported from Hypothesis via hegel-rust/tests/test_shrink_quality/mixed_types.rs.
 
 import pytest
 
-from minithesis.generators import booleans, composite, integers, lists, one_of, text
+import minithesis.generators as gs
 
 from .conftest import minimal
 
@@ -16,7 +16,7 @@ pytestmark = [pytest.mark.requires("text"), pytest.mark.requires("collections")]
 def test_minimize_one_of_integers():
     for _ in range(10):
         result = minimal(
-            one_of(integers(-(2**63), 2**63 - 1), integers(100, 200)),
+            gs.one_of(gs.integers(-(2**63), 2**63 - 1), gs.integers(100, 200)),
         )
         assert result == 0
 
@@ -25,10 +25,10 @@ def test_minimize_one_of_integers():
 def test_minimize_one_of_mixed():
     for _ in range(10):
         result = minimal(
-            one_of(
-                integers(-(2**63), 2**63 - 1).map(lambda x: ("int", x)),
-                text().map(lambda x: ("text", x)),
-                booleans().map(lambda x: ("bool", x)),
+            gs.one_of(
+                gs.integers(-(2**63), 2**63 - 1).map(lambda x: ("int", x)),
+                gs.text().map(lambda x: ("text", x)),
+                gs.booleans().map(lambda x: ("bool", x)),
             ),
         )
         assert result in [("int", 0), ("text", ""), ("bool", False)]
@@ -37,10 +37,10 @@ def test_minimize_one_of_mixed():
 # Mixed list
 def test_minimize_mixed_list():
     result = minimal(
-        lists(
-            one_of(
-                integers(-(2**63), 2**63 - 1).map(lambda x: ("int", x)),
-                text().map(lambda x: ("text", x)),
+        gs.lists(
+            gs.one_of(
+                gs.integers(-(2**63), 2**63 - 1).map(lambda x: ("int", x)),
+                gs.text().map(lambda x: ("text", x)),
             )
         ),
         lambda x: len(x) >= 10,
@@ -52,18 +52,18 @@ def test_minimize_mixed_list():
 
 
 # Mixed flatmap
-@composite
+@gs.composite
 def bool_or_text_via_flatmap(tc):
-    b = tc.any(booleans())
+    b = tc.any(gs.booleans())
     if b:
-        return ("bool", tc.any(booleans()))
+        return ("bool", tc.any(gs.booleans()))
     else:
-        return ("text", tc.any(text()))
+        return ("text", tc.any(gs.text()))
 
 
 def test_mixed_list_flatmap():
     result = minimal(
-        lists(bool_or_text_via_flatmap()),
+        gs.lists(bool_or_text_via_flatmap()),
         lambda ls: (
             sum(1 for x in ls if x[0] == "bool") >= 3
             and sum(1 for x in ls if x[0] == "text") >= 3
@@ -76,6 +76,6 @@ def test_mixed_list_flatmap():
 # one_of shrinks towards earlier branches
 def test_one_of_slip():
     result = minimal(
-        one_of(integers(101, 200), integers(0, 100)),
+        gs.one_of(gs.integers(101, 200), gs.integers(0, 100)),
     )
     assert result == 101

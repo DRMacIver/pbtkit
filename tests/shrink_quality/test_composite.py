@@ -7,27 +7,16 @@ from random import Random
 
 import pytest
 
+import minithesis.generators as gs
 from minithesis.core import MinithesisState, Status
-from minithesis.generators import (
-    binary,
-    booleans,
-    composite,
-    floats,
-    integers,
-    lists,
-    one_of,
-    sampled_from,
-    text,
-    tuples,
-)
 
 from .conftest import minimal
 
 
-@composite
+@gs.composite
 def int_pair(tc, lo, hi):
-    a = tc.any(integers(lo, hi))
-    b = tc.any(integers(lo, hi))
+    a = tc.any(gs.integers(lo, hi))
+    b = tc.any(gs.integers(lo, hi))
     return (a, b)
 
 
@@ -42,13 +31,13 @@ def test_negative_sum_of_pair():
 
 
 @pytest.mark.requires("text")
-@composite
+@gs.composite
 def separated_sum(tc):
-    n1 = tc.any(integers(0, 1000))
-    tc.any(text())
-    tc.any(booleans())
-    tc.any(integers(-(2**63), 2**63 - 1))
-    n2 = tc.any(integers(0, 1000))
+    n1 = tc.any(gs.integers(0, 1000))
+    tc.any(gs.text())
+    tc.any(gs.booleans())
+    tc.any(gs.integers(-(2**63), 2**63 - 1))
+    n2 = tc.any(gs.integers(0, 1000))
     return (n1, n2)
 
 
@@ -59,15 +48,15 @@ def test_sum_of_pair_separated():
 
 
 def test_minimize_dict_of_booleans():
-    result = minimal(tuples(booleans(), booleans()), lambda x: x[0] or x[1])
+    result = minimal(gs.tuples(gs.booleans(), gs.booleans()), lambda x: x[0] or x[1])
     assert not (result[0] and result[1])
     assert result[0] or result[1]
 
 
-@composite
+@gs.composite
 def int_struct(tc):
-    a = tc.any(integers(-(2**63), 2**63 - 1))
-    b = tc.any(integers(-(2**63), 2**63 - 1))
+    a = tc.any(gs.integers(-(2**63), 2**63 - 1))
+    b = tc.any(gs.integers(-(2**63), 2**63 - 1))
     return (a, b)
 
 
@@ -82,21 +71,21 @@ def test_earlier_exit_produces_shorter_sequence():
     v0=False followed by more draws, the shrinker should prefer the
     shorter path. Found by shrink comparison test."""
 
-    @composite
+    @gs.composite
     def pair_of_bools(tc):
-        a = tc.any(booleans())
-        b = tc.any(booleans())
+        a = tc.any(gs.booleans())
+        b = tc.any(gs.booleans())
         return (a, b)
 
     def tf(tc):
-        v0 = tc.any(booleans())
+        v0 = tc.any(gs.booleans())
         v1 = tc.any(pair_of_bools())
         v2 = tc.any(pair_of_bools())
         # First exit: when v0=True (5 choices used)
         if v0:
             tc.mark_status(Status.INTERESTING)
         # More draws only reached when v0=False
-        tc.any(booleans())
+        tc.any(gs.booleans())
         # Second exit: len(v1) is always 2, so this always fires (6 choices)
         if len(v1) != 0:
             tc.mark_status(Status.INTERESTING)
@@ -116,7 +105,7 @@ def test_one_of_shrinks_branch_selector():
     """one_of should shrink toward branch 0 even when a higher branch
     also produces an interesting result. Found by shrink comparison test."""
     result = minimal(
-        one_of(booleans(), floats(allow_nan=False, allow_infinity=False)),
+        gs.one_of(gs.booleans(), gs.floats(allow_nan=False, allow_infinity=False)),
         lambda v: bool(v),
     )
     # Branch 0 (booleans) with value True is simpler than
@@ -134,11 +123,11 @@ def test_early_exit_via_flag_with_preceding_draws():
 
     Found by the Hypothesis shrink comparison test."""
 
-    @composite
+    @gs.composite
     def test_data(tc):
-        v0 = tc.any(booleans())
-        v1 = tc.any(binary(max_size=20))
-        v2 = tc.any(lists(integers(0, 0), max_size=10))
+        v0 = tc.any(gs.booleans())
+        v1 = tc.any(gs.binary(max_size=20))
+        v2 = tc.any(gs.lists(gs.integers(0, 0), max_size=10))
         return (v0, v1, v2)
 
     result = minimal(
@@ -154,21 +143,23 @@ def test_early_exit_via_flag_with_preceding_draws():
 
 @pytest.mark.requires("floats")
 def test_one_of_branch_switch_with_trailing_draws():
-    """When one_of(booleans(), floats()) at branch=1 produces a truthy
+    """When gs.one_of(gs.booleans(), gs.floats()) at branch=1 produces a truthy
     float, switching to branch=0 (boolean True) is simpler but requires
     fixing the downstream kind AND keeping the trailing composite draws.
 
     Found by the Hypothesis shrink comparison test."""
 
-    @composite
+    @gs.composite
     def gen_pair(tc):
-        a = tc.any(booleans())
-        b = tc.any(booleans())
+        a = tc.any(gs.booleans())
+        b = tc.any(gs.booleans())
         return (a, b)
 
-    @composite
+    @gs.composite
     def test_data(tc):
-        v0 = tc.any(one_of(booleans(), floats(allow_nan=False, allow_infinity=False)))
+        v0 = tc.any(
+            gs.one_of(gs.booleans(), gs.floats(allow_nan=False, allow_infinity=False))
+        )
         tc.any(gen_pair())
         return v0
 
@@ -183,16 +174,16 @@ def test_shorter_path_via_later_assertion():
     still fails with fewer total choices, the shrinker should prefer
     the shorter path. Found by the Hypothesis shrink comparison test."""
 
-    @composite
+    @gs.composite
     def pair(tc):
-        a = tc.any(booleans())
-        b = tc.any(floats(allow_nan=False, allow_infinity=False))
+        a = tc.any(gs.booleans())
+        b = tc.any(gs.floats(allow_nan=False, allow_infinity=False))
         return (a, b)
 
-    @composite
+    @gs.composite
     def test_data(tc):
         v0 = tc.any(pair())
-        v1 = tc.any(lists(integers(0, 20), max_size=10, unique=True))
+        v1 = tc.any(gs.lists(gs.integers(0, 20), max_size=10, unique=True))
         tc.any(pair())
         return (v0, v1)
 
@@ -207,11 +198,11 @@ def test_shorter_path_via_later_assertion():
 
 @pytest.mark.requires("floats")
 def test_one_of_branch_switch_to_float():
-    """When one_of(floats(), booleans()) starts at branch=1 (booleans),
+    """When gs.one_of(gs.floats(), gs.booleans()) starts at branch=1 (booleans),
     switching to branch=0 (floats) is simpler but requires replacing
     the boolean value with a valid float. Found by shrink comparison test."""
     result = minimal(
-        one_of(floats(allow_nan=False, allow_infinity=False), booleans()),
+        gs.one_of(gs.floats(allow_nan=False, allow_infinity=False), gs.booleans()),
         lambda _: True,
     )
     # Branch 0 (floats) with simplest value 0.0 is simpler than
@@ -221,12 +212,12 @@ def test_one_of_branch_switch_to_float():
 
 
 def test_one_of_shorter_branch_needs_non_simplest_value():
-    """When one_of(tuples(booleans(), booleans()), booleans()) starts at
+    """When gs.one_of(gs.tuples(gs.booleans(), gs.booleans()), gs.booleans()) starts at
     branch=0 (tuple, 3 choices), branch=1 with True (2 choices) is shorter.
     But the increment + pun produces branch=1 with False (not interesting).
     Found by the Hypothesis shrink comparison test."""
     result = minimal(
-        one_of(tuples(booleans(), booleans()), booleans()),
+        gs.one_of(gs.tuples(gs.booleans(), gs.booleans()), gs.booleans()),
         lambda v: bool(v),
     )
     assert result is True
@@ -239,10 +230,10 @@ def test_switch_failure_mode_for_simpler_sort_key():
     mode where v1=0.0 (simpler float) even though it means v4 must
     be non-zero. Found by the Hypothesis shrink comparison test."""
 
-    @composite
+    @gs.composite
     def test_data(tc):
-        v1 = tc.any(floats(allow_nan=False, allow_infinity=False))
-        v4 = tc.any(sampled_from([1, 0]))
+        v1 = tc.any(gs.floats(allow_nan=False, allow_infinity=False))
+        v4 = tc.any(gs.sampled_from([1, 0]))
         return (v1, v4)
 
     result = minimal(
@@ -263,11 +254,11 @@ def test_shorter_path_when_guard_precedes_expensive_draw():
 
     Found by the Hypothesis shrink comparison test."""
 
-    @composite
+    @gs.composite
     def test_data(tc):
-        v0 = tc.any(integers(0, 10))
-        v1 = tc.any(booleans())
-        v2 = tc.any(lists(integers(0, 100), max_size=10))
+        v0 = tc.any(gs.integers(0, 10))
+        v1 = tc.any(gs.booleans())
+        v2 = tc.any(gs.lists(gs.integers(0, 100), max_size=10))
         return (v0, v1, v2)
 
     result = minimal(

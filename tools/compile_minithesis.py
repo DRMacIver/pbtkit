@@ -513,14 +513,9 @@ def process_generators(source: str, disabled: frozenset[str] = frozenset()) -> s
         if _is_import(line):
             i = _skip_import(lines, i)
             continue
-        # Replace generator functions for disabled extensions with stubs.
+        # Remove generator functions that depend on disabled extensions.
         func_match = re.match(r"^def (\w+)\(", line)
         if func_match and func_match.group(1) in skip_funcs:
-            # Keep the signature, replace body with NotImplementedError.
-            body_start = _find_body_start(lines, i)
-            for sig_line in lines[i:body_start]:
-                out.append(sig_line)
-            out.append("    raise NotImplementedError\n")
             i = _block_end(lines, i)
             continue
         out.append(line)

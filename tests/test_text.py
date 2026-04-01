@@ -12,23 +12,23 @@ import pytest
 from minithesis import DirectoryDB, run_test
 
 pytestmark = pytest.mark.requires("text")
+import minithesis.generators as gs
 from minithesis.core import TestCase as TC
 from minithesis.database import SerializationTag
-from minithesis.generators import text
 from minithesis.text import StringChoice
 
 
 def test_text_basic():
     @run_test(database={})
     def _(tc):
-        s = tc.any(text(min_size=1, max_size=5))
+        s = tc.any(gs.text(min_size=1, max_size=5))
         assert 1 <= len(s) <= 5
 
 
 def test_text_ascii():
     @run_test(database={})
     def _(tc):
-        s = tc.any(text(min_codepoint=32, max_codepoint=126))
+        s = tc.any(gs.text(min_codepoint=32, max_codepoint=126))
         assert all(32 <= ord(c) <= 126 for c in s)
 
 
@@ -37,7 +37,7 @@ def test_text_shrinks_to_short(capsys):
 
         @run_test(database={})
         def _(tc):
-            s = tc.any(text(min_codepoint=ord("a"), max_codepoint=ord("z")))
+            s = tc.any(gs.text(min_codepoint=ord("a"), max_codepoint=ord("z")))
             assert len(s) < 1
 
     captured = capsys.readouterr()
@@ -52,7 +52,7 @@ def test_text_shrinks_characters(capsys):
         @run_test(database={}, max_examples=1000)
         def _(tc):
             s = tc.any(
-                text(
+                gs.text(
                     min_codepoint=ord("a"),
                     max_codepoint=ord("z"),
                     min_size=1,
@@ -68,7 +68,7 @@ def test_text_shrinks_characters(capsys):
 def test_text_no_surrogates():
     @run_test(database={}, max_examples=200)
     def _(tc):
-        s = tc.any(text(min_codepoint=0xD700, max_codepoint=0xE000))
+        s = tc.any(gs.text(min_codepoint=0xD700, max_codepoint=0xE000))
         for c in s:
             assert not (0xD800 <= ord(c) <= 0xDFFF)
 
@@ -85,7 +85,7 @@ def test_text_database_round_trip(tmpdir):
             def _(test_case):
                 nonlocal count
                 count += 1
-                s = test_case.any(text(min_size=1, max_size=5))
+                s = test_case.any(gs.text(min_size=1, max_size=5))
                 assert len(s) < 1
 
     run()
@@ -155,7 +155,7 @@ def test_text_unicode_shrinks(capsys):
         @run_test(database={}, max_examples=1000)
         def _(tc):
             s = tc.any(
-                text(min_codepoint=128, max_codepoint=256, min_size=1, max_size=3)
+                gs.text(min_codepoint=128, max_codepoint=256, min_size=1, max_size=3)
             )
             # Must contain a high character, so the shrinker has to
             # search through codepoints >= 128.

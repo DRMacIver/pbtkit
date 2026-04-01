@@ -40,21 +40,24 @@ from minithesis.core import (  # noqa: F401
 from minithesis.floats import FloatChoice
 
 # We need the generators in scope so the exec'd program can reference them.
-from minithesis.generators import (  # noqa: F401
-    binary,
-    booleans,
-    composite,
-    dictionaries,
-    floats,
-    integers,
-    just,
-    lists,
-    nothing,
-    one_of,
-    sampled_from,
-    text,
-    tuples,
-)
+try:
+    from minithesis.generators import (  # noqa: F401
+        binary,
+        booleans,
+        composite,
+        dictionaries,
+        floats,
+        integers,
+        just,
+        lists,
+        nothing,
+        one_of,
+        sampled_from,
+        text,
+        tuples,
+    )
+except (ImportError, NotImplementedError):
+    pytest.skip("requires all generator types", allow_module_level=True)
 from minithesis.text import StringChoice
 
 from .test_minismith import Failure, program

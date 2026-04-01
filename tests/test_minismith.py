@@ -24,21 +24,27 @@ import pytest
 from hypothesis import HealthCheck, given, note, settings
 from hypothesis import strategies as st
 from minithesis.core import Unsatisfiable, run_test
-from minithesis.generators import (
-    binary,
-    booleans,
-    composite,
-    dictionaries,
-    floats,
-    integers,
-    just,
-    lists,
-    nothing,
-    one_of,
-    sampled_from,
-    text,
-    tuples,
-)
+
+# Bare names needed by exec'd generated programs (exec uses globals()).
+# These tests exercise all types, so skip the module if any type is disabled.
+try:
+    from minithesis.generators import (  # noqa: F401
+        binary,
+        booleans,
+        composite,
+        dictionaries,
+        floats,
+        integers,
+        just,
+        lists,
+        nothing,
+        one_of,
+        sampled_from,
+        text,
+        tuples,
+    )
+except (ImportError, NotImplementedError):
+    pytest.skip("requires all generator types", allow_module_level=True)
 
 
 class Failure(Exception):

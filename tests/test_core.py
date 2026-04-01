@@ -14,6 +14,7 @@ from random import Random
 import pytest
 
 import minithesis.core as core
+import minithesis.generators as gs
 from minithesis import Generator, Unsatisfiable, run_test
 from minithesis.bytes import BytesChoice
 from minithesis.caching import CachedTestFunction, _cache_key
@@ -26,19 +27,6 @@ from minithesis.core import MinithesisState as State
 from minithesis.core import TestCase as TC
 from minithesis.database import DirectoryDB
 from minithesis.floats import FloatChoice
-from minithesis.generators import (
-    binary,
-    booleans,
-    composite,
-    dictionaries,
-    floats,
-    integers,
-    lists,
-    nothing,
-    one_of,
-    sampled_from,
-    text,
-)
 from minithesis.shrinking.index_passes import lower_and_bump
 
 
@@ -197,7 +185,7 @@ def test_cache_distinguishes_negative_zero_in_lookup():
     for a sequence that used -0.0 (or vice versa)."""
 
     def tf(tc):
-        v = tc.any(floats(allow_nan=False, allow_infinity=False))
+        v = tc.any(gs.floats(allow_nan=False, allow_infinity=False))
         if v >= 0.0:
             tc.mark_status(Status.INTERESTING)
 
@@ -370,7 +358,7 @@ def test_lower_and_bump_with_type_change():
             # Branch 0 draws a boolean, branch 1 draws an integer.
             # Lower-and-bump will decrement the branch index and
             # find a BooleanChoice at the next position.
-            value = tc.any(one_of(booleans(), integers(0, 100)))
+            value = tc.any(gs.one_of(gs.booleans(), gs.integers(0, 100)))
             assert isinstance(value, bool) or value <= 50
 
 
@@ -427,8 +415,8 @@ def test_sorting_pass_survives_type_changes_from_lists():
 
         @run_test(max_examples=1, database={}, quiet=True, random=Random(0))
         def _(tc):
-            v0 = tc.any(lists(booleans(), max_size=10))
-            v1 = tc.any(lists(integers(0, 0), max_size=10))
+            v0 = tc.any(gs.lists(gs.booleans(), max_size=10))
+            v1 = tc.any(gs.lists(gs.integers(0, 0), max_size=10))
             assert len(v0) == len(v1)
 
 
@@ -442,8 +430,8 @@ def test_sorting_full_sort_survives_stale_indices():
 
         @run_test(max_examples=1, database={}, quiet=True, random=Random(1))
         def _(tc):
-            v0 = tc.any(lists(integers(0, 12), max_size=10))
-            tc.any(booleans())
+            v0 = tc.any(gs.lists(gs.integers(0, 12), max_size=10))
+            tc.any(gs.booleans())
             if not (len(v0) == 0 or v0[0] > 0):
                 raise AssertionError
             if len(v0) > 2:
@@ -459,15 +447,17 @@ def test_sorting_stale_filter_with_punning():
     changes node types so that a group has fewer than 2 members.
     Regression for AssertionError in sorting.py found by shrink comparison."""
 
-    @composite
+    @gs.composite
     def pair(tc):
-        a = tc.any(booleans())
-        b = tc.any(booleans())
+        a = tc.any(gs.booleans())
+        b = tc.any(gs.booleans())
         return (a, b)
 
     def tf(tc):
-        v0 = tc.any(lists(integers(0, 0), max_size=10))
-        v1 = tc.any(integers(0, 0).flat_map(lambda x: lists(booleans(), max_size=1)))
+        v0 = tc.any(gs.lists(gs.integers(0, 0), max_size=10))
+        v1 = tc.any(
+            gs.integers(0, 0).flat_map(lambda x: gs.lists(gs.booleans(), max_size=1))
+        )
         tc.any(pair())
         if len(v0) != len(v1):
             tc.mark_status(Status.INTERESTING)
@@ -484,7 +474,7 @@ def test_unique_list_shrinks_using_negative_values():
     Regression for shrink quality found by minismith."""
 
     def tf(tc):
-        v0 = tc.any(lists(integers(-10, 10), max_size=5, unique=True))
+        v0 = tc.any(gs.lists(gs.integers(-10, 10), max_size=5, unique=True))
         if len(v0) >= 5:
             tc.mark_status(Status.INTERESTING)
 
@@ -506,11 +496,11 @@ def test_bytes_increment_shortens_sequence():
     Regression for shrink quality found by minismith."""
 
     def tf(tc):
-        v0 = tc.any(binary(max_size=20))
+        v0 = tc.any(gs.binary(max_size=20))
         v1 = tc.any(
-            dictionaries(
-                integers(0, 0),
-                text(min_codepoint=32, max_codepoint=126, max_size=20),
+            gs.dictionaries(
+                gs.integers(0, 0),
+                gs.text(min_codepoint=32, max_codepoint=126, max_size=20),
                 max_size=5,
             )
         )
@@ -534,10 +524,10 @@ def test_lower_and_bump_explores_new_range():
     Regression for shrink quality found by minismith."""
 
     def tf(tc):
-        v0 = tc.any(sampled_from([32, 46]))
-        v1 = tc.any(sampled_from([32, 46]))
-        v2 = tc.any(integers(-abs(v0) - 1, abs(v0) + 1))
-        v3 = tc.any(integers(-abs(v2) - 1, abs(v2) + 1))
+        v0 = tc.any(gs.sampled_from([32, 46]))
+        v1 = tc.any(gs.sampled_from([32, 46]))
+        v2 = tc.any(gs.integers(-abs(v0) - 1, abs(v0) + 1))
+        v3 = tc.any(gs.integers(-abs(v2) - 1, abs(v2) + 1))
         if v2 == v0:
             tc.mark_status(Status.INTERESTING)
 
@@ -555,19 +545,19 @@ def test_lower_and_bump_tries_negative_values():
     exploring a new range, not just positive ones.
     Regression for shrink quality found by minismith."""
 
-    @composite
+    @gs.composite
     def pair(tc):
-        a = tc.any(booleans())
-        b = tc.any(booleans())
+        a = tc.any(gs.booleans())
+        b = tc.any(gs.booleans())
         return (a, b)
 
     def tf(tc):
         v0 = tc.any(pair())
         v1 = tc.any(pair())
-        v2 = tc.any(one_of(integers(0, 0), booleans()))
+        v2 = tc.any(gs.one_of(gs.integers(0, 0), gs.booleans()))
         if len(v0) <= 0:
             tc.mark_status(Status.INTERESTING)
-        v3 = tc.any(integers(-1, 1))
+        v3 = tc.any(gs.integers(-1, 1))
         if v2:
             tc.mark_status(Status.INTERESTING)
         if not v2 and v3 < 0:
@@ -577,7 +567,7 @@ def test_lower_and_bump_tries_negative_values():
     state.run()
     assert state.result is not None
     values = [n.value for n in state.result]
-    # one_of index 0 (integers(0,0)) with v3=-1 is simpler than
+    # one_of index 0 (gs.integers(0,0)) with v3=-1 is simpler than
     # one_of index 1 (booleans=True) with v3=0
     assert values == [False, False, False, False, 0, 0, -1]
 
@@ -586,15 +576,15 @@ def test_lower_and_bump_tries_negative_values():
 @pytest.mark.requires("shrinking.index_passes")
 def test_increment_to_max_shortens_via_sampled_from():
     """try_shortening_via_increment should try max_value, not just +1.
-    For sampled_from([1, 1, 0]), index 2 maps to 0 which triggers an
+    For gs.sampled_from([1, 1, 0]), index 2 maps to 0 which triggers an
     early exit (1 choice instead of 2).
     Regression for shrink quality found by minismith."""
 
     def tf(tc):
-        v0 = tc.any(sampled_from([1, 1, 0]))
+        v0 = tc.any(gs.sampled_from([1, 1, 0]))
         if v0 <= 0:
             tc.mark_status(Status.INTERESTING)
-        v1 = tc.any(booleans())
+        v1 = tc.any(gs.booleans())
         if v1:
             tc.mark_status(Status.INTERESTING)
 
@@ -611,11 +601,11 @@ def test_redistribute_stale_indices_after_type_change():
     become BooleanChoice. Regression for AssertionError found by minismith."""
 
     def tf(tc):
-        v0 = tc.any(booleans())
-        v1 = tc.any(booleans().map(lambda x: int(x)))
-        v2 = tc.any(integers(1, 7).filter(lambda x: x % 2 == 0))
-        v3 = tc.any(booleans())
-        v4 = tc.any(one_of(integers(0, 0), booleans()))
+        v0 = tc.any(gs.booleans())
+        v1 = tc.any(gs.booleans().map(lambda x: int(x)))
+        v2 = tc.any(gs.integers(1, 7).filter(lambda x: x % 2 == 0))
+        v3 = tc.any(gs.booleans())
+        v4 = tc.any(gs.one_of(gs.integers(0, 0), gs.booleans()))
         if v0:
             tc.mark_status(Status.INTERESTING)
 
@@ -632,8 +622,8 @@ def test_lower_and_bump_targets_booleans():
     Regression for shrink quality found by minismith."""
 
     def tf(tc):
-        v0 = tc.any(integers(0, 1))
-        v1 = tc.any(booleans())
+        v0 = tc.any(gs.integers(0, 1))
+        v1 = tc.any(gs.booleans())
         if v0 >= 1:
             tc.mark_status(Status.INTERESTING)
         if v1:
@@ -657,12 +647,12 @@ def test_float_increment_shortens_via_negative():
     Regression for shrink quality found by minismith."""
 
     def tf(tc):
-        v0 = tc.any(booleans())
-        v1 = tc.any(floats(allow_nan=False, allow_infinity=False))
-        v2 = tc.any(booleans())
+        v0 = tc.any(gs.booleans())
+        v1 = tc.any(gs.floats(allow_nan=False, allow_infinity=False))
+        v2 = tc.any(gs.booleans())
         if v1 < 0.0:
             tc.mark_status(Status.INTERESTING)
-        tc.any(booleans())
+        tc.any(gs.booleans())
         if v0:
             tc.mark_status(Status.INTERESTING)
 
@@ -681,14 +671,14 @@ def test_increment_with_dependent_continuation():
     Regression for shrink quality found by minismith."""
 
     def tf(tc):
-        v0 = tc.any(integers(0, 0))
-        v1 = tc.any(booleans())
-        v2 = tc.any(integers(0, 0))
-        v3 = tc.any(lists(integers(-21, -1), max_size=10, unique=True))
+        v0 = tc.any(gs.integers(0, 0))
+        v1 = tc.any(gs.booleans())
+        v2 = tc.any(gs.integers(0, 0))
+        v3 = tc.any(gs.lists(gs.integers(-21, -1), max_size=10, unique=True))
         if len(v3) != 0:
             tc.mark_status(Status.INTERESTING)
         if v1:
-            v4 = tc.any(integers(v0, v0 + 1))
+            v4 = tc.any(gs.integers(v0, v0 + 1))
             if v0 + v4 <= 0:
                 tc.mark_status(Status.INTERESTING)
 
@@ -707,8 +697,8 @@ def test_redistribute_bytes_between_pairs():
     Regression for shrink quality found by minismith."""
 
     def tf(tc):
-        v0 = tc.any(binary(max_size=20))
-        v1 = tc.any(binary(max_size=20))
+        v0 = tc.any(gs.binary(max_size=20))
+        v1 = tc.any(gs.binary(max_size=20))
         if len(v0) + len(v1) >= 20:
             tc.mark_status(Status.INTERESTING)
 
@@ -725,8 +715,8 @@ def test_redistribute_bytes_respects_max_size():
     """redistribute_bytes must skip transfers that exceed max_size."""
 
     def tf(tc):
-        v0 = tc.any(binary(min_size=5, max_size=10))
-        v1 = tc.any(binary(max_size=8))
+        v0 = tc.any(gs.binary(min_size=5, max_size=10))
+        v1 = tc.any(gs.binary(max_size=8))
         if len(v0) + len(v1) >= 15:
             tc.mark_status(Status.INTERESTING)
 
@@ -741,7 +731,7 @@ def test_string_sorts_characters_when_possible():
     Sorting '0e0' produces '00e' (smaller codepoints first)."""
 
     def tf(tc):
-        v0 = tc.any(text(min_codepoint=32, max_codepoint=126, max_size=20))
+        v0 = tc.any(gs.text(min_codepoint=32, max_codepoint=126, max_size=20))
         if len(v0) >= 3 and "e" in v0:
             tc.mark_status(Status.INTERESTING)
 
@@ -756,7 +746,7 @@ def test_bytes_sorts_when_order_matters():
     """Bytes shrinking should sort bytes when the test depends on order."""
 
     def tf(tc):
-        v0 = tc.any(binary(min_size=3, max_size=3))
+        v0 = tc.any(gs.binary(min_size=3, max_size=3))
         # Only interesting if the bytes are NOT already sorted but contain 0x01.
         if b"\x01" in v0 and v0 != bytes(sorted(v0)):
             tc.mark_status(Status.INTERESTING)
@@ -779,8 +769,8 @@ def test_lower_and_bump_with_float_target():
     float non-zero can produce a simpler overall result."""
 
     def tf(tc):
-        v0 = tc.any(text(min_codepoint=32, max_codepoint=126, max_size=20))
-        v1 = tc.any(floats(allow_nan=False, allow_infinity=False))
+        v0 = tc.any(gs.text(min_codepoint=32, max_codepoint=126, max_size=20))
+        v1 = tc.any(gs.floats(allow_nan=False, allow_infinity=False))
         if len(v0) >= 4:
             tc.mark_status(Status.INTERESTING)
         if v1 != 0.0:
@@ -802,9 +792,13 @@ def test_redistribute_stale_indices_with_one_of():
 
     def tf(tc):
         v0 = tc.any(
-            one_of(booleans(), integers(0, 0), integers(2, 2).filter(lambda x: x > 0))
+            gs.one_of(
+                gs.booleans(),
+                gs.integers(0, 0),
+                gs.integers(2, 2).filter(lambda x: x > 0),
+            )
         )
-        v1 = tc.any(integers(0, 0))
+        v1 = tc.any(gs.integers(0, 0))
         if v0:
             tc.mark_status(Status.INTERESTING)
 
@@ -821,14 +815,14 @@ def test_lower_and_bump_stale_j_after_replace():
     Regression for AssertionError in lower_and_bump found by minismith."""
 
     def tf(tc):
-        v0 = tc.any(booleans())
-        tc.any(booleans())
-        tc.any(booleans())
-        tc.any(lists(integers(0, 0), max_size=10).filter(lambda x: len(x) > 0))
+        v0 = tc.any(gs.booleans())
+        tc.any(gs.booleans())
+        tc.any(gs.booleans())
+        tc.any(gs.lists(gs.integers(0, 0), max_size=10).filter(lambda x: len(x) > 0))
         tc.any(
-            integers(-54, -32).flat_map(
-                lambda n: lists(
-                    integers(0, 100),
+            gs.integers(-54, -32).flat_map(
+                lambda n: gs.lists(
+                    gs.integers(0, 100),
                     min_size=abs(n) % 5,
                     max_size=abs(n) % 5 + 1,
                 )
@@ -847,8 +841,8 @@ def test_mutation_with_single_value_adjacent():
     from_index(1) returns None."""
 
     def tf(tc):
-        v0 = tc.any(booleans())
-        tc.any(integers(5, 5))  # single-value, from_index(1) = None
+        v0 = tc.any(gs.booleans())
+        tc.any(gs.integers(5, 5))  # single-value, from_index(1) = None
         if v0:
             tc.mark_status(Status.INTERESTING)
 
@@ -864,8 +858,8 @@ def test_lower_and_bump_with_float_source_gaps():
     float source has index gaps (bounded range with interleaved signs)."""
 
     def tf(tc):
-        v0 = tc.any(floats(min_value=1.0, max_value=2.0, allow_nan=False))
-        v1 = tc.any(booleans())
+        v0 = tc.any(gs.floats(min_value=1.0, max_value=2.0, allow_nan=False))
+        v1 = tc.any(gs.booleans())
         if v0 > 1.5 and v1:
             tc.mark_status(Status.INTERESTING)
 
@@ -881,8 +875,8 @@ def test_lower_and_bump_with_bounded_float_target():
     float's range doesn't include 1.0 or -1.0."""
 
     def tf(tc):
-        v0 = tc.any(integers(0, 5))
-        v1 = tc.any(floats(min_value=0.0, max_value=0.5, allow_nan=False))
+        v0 = tc.any(gs.integers(0, 5))
+        v1 = tc.any(gs.floats(min_value=0.0, max_value=0.5, allow_nan=False))
         if v0 >= 3 and v1 > 0.0:
             tc.mark_status(Status.INTERESTING)
 
@@ -900,17 +894,17 @@ def test_sort_insertion_stale_indices():
     Regression for IndexError in sorting.py found by minismith."""
 
     def tf(tc):
-        v0 = tc.any(lists(integers(0, 20), max_size=10, unique=True))
+        v0 = tc.any(gs.lists(gs.integers(0, 20), max_size=10, unique=True))
         v1 = tc.any(
-            dictionaries(
-                text(min_codepoint=32, max_codepoint=126, max_size=5),
-                booleans(),
+            gs.dictionaries(
+                gs.text(min_codepoint=32, max_codepoint=126, max_size=5),
+                gs.booleans(),
                 max_size=5,
             )
         )
-        v2 = tc.any(lists(booleans(), max_size=10))
-        v3 = tc.any(binary(max_size=20))
-        v4 = tc.any(booleans())
+        v2 = tc.any(gs.lists(gs.booleans(), max_size=10))
+        v3 = tc.any(gs.binary(max_size=20))
+        v4 = tc.any(gs.booleans())
         if len(v0) != 0:
             tc.mark_status(Status.INTERESTING)
         if len(v2) != len(v3):
@@ -931,8 +925,8 @@ def test_string_length_redistribution():
     Regression for shrink quality found by minismith."""
 
     def tf(tc):
-        v0 = tc.any(text(min_codepoint=32, max_codepoint=126, max_size=20))
-        v1 = tc.any(text(min_codepoint=32, max_codepoint=126, max_size=20))
+        v0 = tc.any(gs.text(min_codepoint=32, max_codepoint=126, max_size=20))
+        v1 = tc.any(gs.text(min_codepoint=32, max_codepoint=126, max_size=20))
         if len(v0) + len(v1) >= 30:
             tc.mark_status(Status.INTERESTING)
 
@@ -953,8 +947,8 @@ def test_bytes_length_redistribution():
     share the same shrinking infrastructure and often have the same bugs."""
 
     def tf(tc):
-        v0 = tc.any(binary(max_size=20))
-        v1 = tc.any(binary(max_size=20))
+        v0 = tc.any(gs.binary(max_size=20))
+        v1 = tc.any(gs.binary(max_size=20))
         if len(v0) + len(v1) >= 30:
             tc.mark_status(Status.INTERESTING)
 
@@ -974,8 +968,8 @@ def test_bytes_redistribution_moves_all():
     redistribution to do the work."""
 
     def tf(tc):
-        v0 = tc.any(binary(min_size=3, max_size=10))
-        v1 = tc.any(binary(max_size=20))
+        v0 = tc.any(gs.binary(min_size=3, max_size=10))
+        v1 = tc.any(gs.binary(max_size=20))
         if len(v0) + len(v1) >= 10:
             tc.mark_status(Status.INTERESTING)
 
@@ -994,24 +988,24 @@ def test_negative_zero_shrinks_to_positive_zero():
     in Python.
     Regression for shrink quality found by minismith."""
 
-    @composite
+    @gs.composite
     def pair(tc):
-        a = tc.any(booleans())
-        b = tc.any(booleans())
+        a = tc.any(gs.booleans())
+        b = tc.any(gs.booleans())
         return (a, b)
 
     def tf(tc):
         tc.any(pair())
         tc.any(pair())
         v2 = tc.any(
-            one_of(
-                floats(allow_nan=False, allow_infinity=False),
-                floats(allow_nan=False, allow_infinity=False),
-                nothing(),
+            gs.one_of(
+                gs.floats(allow_nan=False, allow_infinity=False),
+                gs.floats(allow_nan=False, allow_infinity=False),
+                gs.nothing(),
             )
         )
-        v3 = tc.any(booleans())
-        v4 = tc.any(booleans())
+        v3 = tc.any(gs.booleans())
+        v4 = tc.any(gs.booleans())
         if not (((v4) or (v2 > 0.0)) and (v2 >= 0.0)):
             tc.mark_status(Status.INTERESTING)
 
@@ -1032,16 +1026,16 @@ def test_lower_and_bump_stale_kind_after_replace():
     change types via value punning (e.g. BytesChoice → BooleanChoice).
     Regression for TypeError in sort_key found by minismith."""
 
-    @composite
+    @gs.composite
     def pair(tc):
-        a = tc.any(booleans())
-        b = tc.any(booleans())
+        a = tc.any(gs.booleans())
+        b = tc.any(gs.booleans())
         return (a, b)
 
     def tf(tc):
-        v0 = tc.any(lists(booleans(), max_size=10))
-        tc.any(booleans())
-        tc.any(binary(max_size=20))
+        v0 = tc.any(gs.lists(gs.booleans(), max_size=10))
+        tc.any(gs.booleans())
+        tc.any(gs.binary(max_size=20))
         tc.any(pair())
         tc.any(pair())
         if len(v0) != 0:
@@ -1067,9 +1061,9 @@ def test_one_of_switches_to_shorter_branch():
 
     def tf(tc):
         v0 = tc.any(
-            one_of(
-                lists(integers(0, 0), max_size=10),
-                one_of(integers(0, 0), booleans()),
+            gs.one_of(
+                gs.lists(gs.integers(0, 0), max_size=10),
+                gs.one_of(gs.integers(0, 0), gs.booleans()),
             )
         )
         if v0:

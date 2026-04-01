@@ -390,9 +390,7 @@ def _shrink_float(
         bin_search_down(
             0,
             abs(int_part),
-            lambda n: try_replace(
-                math.copysign(float(n), value) + (value - int_part)
-            ),
+            lambda n: try_replace(math.copysign(float(n), value) + (value - int_part)),
         )
 
     # Step 4: Binary search on the raw index toward simplest.

@@ -89,17 +89,13 @@ def lower_and_bump(state: MinithesisState) -> None:
                 if tc.status is not None and j < len(tc.nodes):
                     zeroed2_values = [n.value for n in state.result]
                     zeroed2_values[i] = new_val
-                    for k in range(
-                        i + 1, min(len(zeroed2_values), len(tc.nodes))
-                    ):
+                    for k in range(i + 1, min(len(zeroed2_values), len(tc.nodes))):
                         zeroed2_values[k] = tc.nodes[k].kind.simplest
                     tc2 = TestCase.for_choices(zeroed2_values)
                     state.test_function(tc2)
 
                 # Try bumping the target by index offsets.
-                def _try_bump_j(
-                    val: object, _new_val: object = new_val
-                ) -> bool:
+                def _try_bump_j(val: object, _new_val: object = new_val) -> bool:
                     result = state.result
                     assert result is not None
                     return (

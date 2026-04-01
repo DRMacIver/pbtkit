@@ -11,8 +11,8 @@ from random import Random
 
 import pytest
 
+import minithesis.generators as gs
 from minithesis import run_test
-from minithesis.generators import integers, lists
 
 pytestmark = pytest.mark.requires("collections")
 
@@ -24,7 +24,7 @@ def test_finds_small_list(capsys, seed):
 
         @run_test(database={}, random=Random(seed))
         def _(test_case):
-            ls = test_case.any(lists(integers(0, 10000)))
+            ls = test_case.any(gs.lists(gs.integers(0, 10000)))
             assert sum(ls) <= 1000
 
     captured = capsys.readouterr()
