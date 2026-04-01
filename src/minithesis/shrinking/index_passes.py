@@ -56,8 +56,13 @@ def lower_and_bump(state: MinithesisState) -> None:
             # ranges with gaps (e.g. FloatChoice(1.0, 2.0) where
             # index 1 maps to a negative float outside the range).
             v_prev = kind_i.from_index(current_idx - 1)
-            if v_prev is not None and v_prev not in decrement_targets:
-                decrement_targets.append(v_prev)
+            match v_prev:
+                case None:  # needed_for("floats")
+                    pass
+                case v if v in decrement_targets:  # needed_for("floats")
+                    pass
+                case v:
+                    decrement_targets.append(v)
             # Find the bump target: the gap'th indexed node after i.
             indices = _indexed_indices(state)
             targets_after_i = [k for k in indices if k > i]
@@ -117,9 +122,7 @@ def lower_and_bump(state: MinithesisState) -> None:
                         if p > kind_j.max_index:
                             break
                         for abs_idx in [p - 1, p]:
-                            v = kind_j.from_index(abs_idx)
-                            if v is not None:
-                                _try_bump_j(v)
+                            _try_bump_j(kind_j.from_index(abs_idx))
                         p *= 2
             idx += 1
 

@@ -48,7 +48,7 @@ class BytesChoice(ChoiceType[bytes]):
         """Shortlex ordering: shorter is simpler, then lexicographic."""
         return (len(value), value)
 
-    @needed_for("indexing")
+    @needed_for("shrinking.index_passes")
     @property
     def max_index(self) -> int:
         return self.to_index(b"\xff" * self.max_size)

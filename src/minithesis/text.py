@@ -99,7 +99,7 @@ class StringChoice(ChoiceType[str]):
         codepoint key (where '0' is simplest)."""
         return (len(value), tuple(_codepoint_key(ord(c)) for c in value))
 
-    @needed_for("indexing")
+    @needed_for("shrinking.index_passes")
     @property
     def max_index(self) -> int:
         alpha_size = self._alpha_size

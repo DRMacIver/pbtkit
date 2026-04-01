@@ -224,7 +224,7 @@ class FloatChoice(ChoiceType[float]):
             return (1, 0) if value > 0 else (1, 1)
         return (0, _float_to_index(value))
 
-    @needed_for("indexing")
+    @needed_for("shrinking.index_passes")
     @property
     def max_index(self) -> int:
         return _MAX_FINITE_INDEX + 3  # +inf, -inf, nan
