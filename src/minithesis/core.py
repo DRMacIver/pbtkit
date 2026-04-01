@@ -63,7 +63,7 @@ class ChoiceType(Generic[U]):
         """Whether this choice type implements to_index/from_index."""
         return type(self).to_index is not ChoiceType.to_index
 
-    @needed_for("indexing")
+    @needed_for("shrinking.index_passes")
     @property
     def max_index(self) -> int:
         """The largest valid index for from_index. Returns 0 for
@@ -120,7 +120,7 @@ class IntegerChoice(ChoiceType[int]):
     def sort_key(self, value: int) -> Any:
         return (abs(value), value < 0)
 
-    @needed_for("indexing")
+    @needed_for("shrinking.index_passes")
     @property
     def max_index(self) -> int:
         return self.max_value - self.min_value
@@ -200,7 +200,7 @@ class BooleanChoice(ChoiceType[bool]):
     def validate(self, value: bool) -> bool:
         return isinstance(value, int) and value in (0, 1)
 
-    @needed_for("indexing")
+    @needed_for("shrinking.index_passes")
     @property
     def max_index(self) -> int:
         return 1
