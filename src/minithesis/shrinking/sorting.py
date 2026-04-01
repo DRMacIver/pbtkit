@@ -67,7 +67,7 @@ def _try_sort_group(
                 for i in indices
                 if i < len(state.result) and type(state.result[i].kind) == choice_type
             ]
-            if j >= len(indices):
+            if j >= len(indices):  # needed_for("collections")
                 break
             idx_j = indices[j]
             idx_prev = indices[j - 1]

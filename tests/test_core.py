@@ -20,6 +20,7 @@ from minithesis import Generator, Unsatisfiable, run_test
 from minithesis.bytes import BytesChoice
 from minithesis.caching import CachedTestFunction, _cache_key
 from minithesis.core import (
+    ChoiceNode,
     Frozen,
     IntegerChoice,
     Status,
@@ -907,6 +908,30 @@ def test_lower_and_bump_with_bounded_float_target():
     assert state.result is not None
 
 
+@pytest.mark.requires("floats")
+@pytest.mark.requires("shrinking.index_passes")
+def test_lower_and_bump_negative_zero_decrement_target():
+    """lower_and_bump skips -0.0 when 0.0 is already a decrement target.
+
+    For a float with to_index=2 (e.g. 1.0), from_index(0)=0.0 is added to
+    decrement_targets. Then from_index(1)=-0.0 satisfies -0.0 in [0.0]
+    (Python equality), covering the 'case v if v in decrement_targets' branch.
+
+    The float is placed before the integer so it is the source node
+    processed by lower_and_bump (gap=1 requires at least two indexed nodes)."""
+
+    def tf(tc):
+        v = tc.any(gs.floats(allow_nan=False, allow_infinity=False))
+        a = tc.draw_integer(0, 10)
+        if v > 0.5 and a > 0:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 1000)
+    state.run()
+    assert state.result is not None
+    assert state.result[0].value == 1.0
+
+
 @pytest.mark.requires("bytes")
 @pytest.mark.requires("collections")
 @pytest.mark.requires("text")
@@ -1449,23 +1474,33 @@ def test_shrink_duplicates_three_copies():
 
 
 @pytest.mark.requires("shrinking.sorting")
-def test_sort_values_swap_succeeds():
-    """sort_values swaps out-of-order integer triples (exercises j -= 1
-    continuation in the insertion sort inner loop)."""
+def test_sort_values_insertion_natural_exit():
+    """sort_values insertion sort j-decrement and natural while-exit paths.
+
+    Calls sort_values directly (bypassing earlier passes like redistribute_integers
+    that would otherwise find the result first). Starting from [1, 0, 0] with
+    a+b>c: full sort [0,0,1] fails (0+0>1=False), insertion sort at pos=1 swaps
+    [1,0]→[0,1] (j→0, natural while-exit), covering both j-decrement and
+    2088→2086 branch."""
 
     def tf(tc):
-        a = tc.draw_integer(0, 100)
-        b = tc.draw_integer(0, 100)
-        c = tc.draw_integer(0, 100)
-        # Sum-based condition is invariant under permutation.
-        if a + b + c > 100:
+        a = tc.draw_integer(0, 10)
+        b = tc.draw_integer(0, 10)
+        c = tc.draw_integer(0, 10)
+        if a + b > c:
             tc.mark_status(Status.INTERESTING)
 
+    sort_fn = next(p for p in core.SHRINK_PASSES if p.__name__ == "sort_values")
+    ic = IntegerChoice(0, 10)
     state = State(Random(0), tf, 1000)
-    state.run()
+    state.result = [
+        ChoiceNode(kind=ic, value=1, was_forced=False),
+        ChoiceNode(kind=ic, value=0, was_forced=False),
+        ChoiceNode(kind=ic, value=0, was_forced=False),
+    ]
+    sort_fn(state)
     assert state.result is not None
-    vals = [n.value for n in state.result]
-    assert vals == sorted(vals)
+    assert [n.value for n in state.result] == [0, 1, 0]
 
 
 @pytest.mark.requires("shrinking.sorting")
@@ -1486,19 +1521,30 @@ def test_sort_stale_indices_after_punning():
 
 @pytest.mark.requires("shrinking.sorting")
 def test_swap_adjacent_blocks_identical():
-    """swap_adjacent_blocks skips identical adjacent blocks."""
+    """swap_adjacent_blocks skips identical adjacent blocks.
+    With a==b==c==d and a>0, minimum is [1,1,1,1]. Starting directly
+    from [1,1,1,1], block_size=2 gives block_a=[1,1]==block_b=[1,1],
+    covering the identical-block skip guard at every shrink iteration."""
 
     def tf(tc):
         a = tc.draw_integer(0, 10)
         b = tc.draw_integer(0, 10)
         c = tc.draw_integer(0, 10)
         d = tc.draw_integer(0, 10)
-        if a + b + c + d > 20:
+        if a == b == c == d and a > 0:
             tc.mark_status(Status.INTERESTING)
 
+    ic = IntegerChoice(0, 10)
     state = State(Random(0), tf, 1000)
-    state.run()
+    state.result = [
+        ChoiceNode(kind=ic, value=1, was_forced=False),
+        ChoiceNode(kind=ic, value=1, was_forced=False),
+        ChoiceNode(kind=ic, value=1, was_forced=False),
+        ChoiceNode(kind=ic, value=1, was_forced=False),
+    ]
+    state.shrink()
     assert state.result is not None
+    assert [n.value for n in state.result] == [1, 1, 1, 1]
 
 
 @pytest.mark.requires("shrinking.mutation")

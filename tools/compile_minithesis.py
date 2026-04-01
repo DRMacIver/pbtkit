@@ -266,8 +266,9 @@ class _StripNeededFor(cst.CSTTransformer):
     Decorators: strip the decorator if feature is enabled, remove the
     entire function/method if disabled.
 
-    Comments: remove match/case branches or statements that have a
+    Comments: remove match/case branches or if statements that have a
     trailing # needed_for("X") comment when X is disabled.
+    Only if statements without an else/elif clause may be removed.
     """
 
     def __init__(self, disabled_features: frozenset[str] = frozenset()) -> None:
@@ -292,11 +293,11 @@ class _StripNeededFor(cst.CSTTransformer):
     def _comment_needed_for(self, node: cst.CSTNode) -> str | None:
         """Extract feature from a # needed_for("X") trailing comment.
 
-        For MatchCase nodes, the comment is on the body's header
-        (the trailing comment after the colon on the case line)."""
+        For MatchCase and If nodes, the comment is on the body's header
+        (the trailing comment after the colon on the case/if line)."""
         comment_text = None
-        # MatchCase: comment on body.header.comment
-        if isinstance(node, cst.MatchCase) and isinstance(node.body, cst.IndentedBlock):
+        # MatchCase or If: comment on body.header.comment
+        if isinstance(node, (cst.MatchCase, cst.If)) and isinstance(node.body, cst.IndentedBlock):
             header = node.body.header
             if header.comment is not None:
                 comment_text = header.comment.value
@@ -340,6 +341,16 @@ class _StripNeededFor(cst.CSTTransformer):
     ) -> cst.MatchCase | cst.RemovalSentinel:
         feature = self._comment_needed_for(original_node)
         if feature and feature in self.disabled_features:
+            return cst.RemovalSentinel.REMOVE
+        return updated_node
+
+    def leave_If(
+        self,
+        original_node: cst.If,
+        updated_node: cst.If,
+    ) -> cst.If | cst.RemovalSentinel:
+        feature = self._comment_needed_for(original_node)
+        if feature and feature in self.disabled_features and original_node.orelse is None:
             return cst.RemovalSentinel.REMOVE
         return updated_node
 
