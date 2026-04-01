@@ -81,26 +81,22 @@ def lower_and_bump(state: MinithesisState) -> None:
             if j < len(state.result) and state.result[j].kind.supports_index:
                 kind_j = state.result[j].kind
                 target_idx = kind_j.to_index(state.result[j].value)
-                # Try index increments: powers of 2 from current position.
-                bump = 1
-                while bump <= 16:
+                # Try a few index increments from the current position.
+                for bump in [1, 2, 4]:
                     bumped = kind_j.from_index(target_idx + bump)
                     if bumped is not None:
                         if _try_bump_j(bumped):
                             break
-                    bump *= 2
-                # Try simplest and exponential probe of the index range.
-                for abs_idx in range(min(8, kind_j.max_index + 1)):
-                    v = kind_j.from_index(abs_idx)
-                    if v is not None:
-                        _try_bump_j(v)
-                # Also probe powers of 2 (and p-1) up to a cap.
-                p = 8
+                # Try powers of 2 (and p-1) as absolute indices.
+                # These help when decrementing i changes the range
+                # at j (e.g. one_of branch switch). Cap at 8
+                # iterations to avoid blowup on large index spaces.
+                p = 1
                 for _ in range(8):
                     if p > kind_j.max_index:
                         break
-                    for idx in [p, p - 1]:
-                        v = kind_j.from_index(idx)
+                    for abs_idx in [p - 1, p]:
+                        v = kind_j.from_index(abs_idx)
                         if v is not None:
                             _try_bump_j(v)
                     p *= 2
