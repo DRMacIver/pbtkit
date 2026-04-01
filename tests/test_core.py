@@ -1364,6 +1364,33 @@ def test_redistribute_stale_indices():
     assert state.result is not None
 
 
+@pytest.mark.requires("shrinking.advanced_integer_passes")
+def test_redistribute_stale_indices_at_gap_two():
+    """redistribute_integers must handle stale indices when gap=1 redistribution
+    shortens the result, making the outer gap=2 loop's pre-computed range stale.
+    The condition pair_idx - 1 + gap >= len(indices) fires when the replacement
+    shrinks the result from 3 integer nodes to 2, then gap=2 iterates pair_idx=1
+    which needs indices[2] that no longer exists.
+    Regression for stale index guard found by minismith."""
+
+    def tf(tc):
+        gate = tc.draw_integer(0, 138)
+        base = tc.draw_integer(0, 100)
+        if gate > 46:
+            extra = tc.draw_integer(0, 100)
+            if base + extra > 30:
+                tc.mark_status(Status.INTERESTING)
+        else:
+            if base > 27:
+                tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(117), tf, 3000)
+    state.run()
+    assert state.result is not None
+    # Should shrink to: gate=0 (short path), base=28 (> 27)
+    assert [n.value for n in state.result] == [0, 28]
+
+
 @pytest.mark.requires("shrinking.duplication_passes")
 def test_shrink_duplicates_two_copies():
     """shrink_duplicates handles exactly 2 copies (no wrapping loop)."""
