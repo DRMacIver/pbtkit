@@ -606,12 +606,14 @@ def compile_minithesis(disabled: frozenset[str] = frozenset()) -> str:
     extensions = [e for e in EXTENSIONS if e not in disabled]
 
     # A feature is disabled if ALL modules requiring it are disabled.
+    # Also treat disabled module names as disabled features, so that
+    # @needed_for("floats") gets stripped when the floats module is disabled.
     enabled_features: set[str] = set()
     for mod, feature in FEATURE_DEPS.items():
         if mod not in disabled:
             enabled_features.add(feature)
     disabled_features = frozenset(
-        set(FEATURE_DEPS.values()) - enabled_features
+        (set(FEATURE_DEPS.values()) - enabled_features) | disabled
     )
 
     def module_path(name: str) -> Path:

@@ -23,4 +23,6 @@ select = ["PLC0415", "I001", "F403"]
 [tool.coverage.report]
 exclude_also = [
     "raise NotImplementedError",
+    "assert False,",
+    "case _:",
 ]

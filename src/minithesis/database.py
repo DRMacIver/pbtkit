@@ -100,70 +100,27 @@ def _read_length_prefixed(data: bytes, offset: int) -> tuple[bytes, int]:
     return _read_fixed(data, offset, length)
 
 
-# Type-specific serializers/deserializers. Each pair handles one
-# SerializationTag. The compiler strips needed_for-decorated
-# functions when their feature is disabled.
-
-
-def _serialize_int(v: int) -> bytes:
-    return bytes([SerializationTag.INTEGER]) + v.to_bytes(8, "big", signed=True)
-
-
-def _deserialize_int(data: bytes, offset: int) -> tuple[int, int]:
-    raw, offset = _read_fixed(data, offset, 8)
-    return int.from_bytes(raw, "big", signed=True), offset
-
-
-def _serialize_bool(v: bool) -> bytes:
-    return bytes([SerializationTag.BOOLEAN, int(v)])
-
-
-def _deserialize_bool(data: bytes, offset: int) -> tuple[bool, int]:
-    raw, offset = _read_fixed(data, offset, 1)
-    return bool(raw[0]), offset
-
-
-def _serialize_float(v: float) -> bytes:
-    return bytes([SerializationTag.FLOAT]) + struct.pack("!d", v)
-
-
-def _deserialize_float(data: bytes, offset: int) -> tuple[float, int]:
-    raw, offset = _read_fixed(data, offset, 8)
-    return struct.unpack("!d", raw)[0], offset
-
-
-def _serialize_bytes(v: bytes) -> bytes:
-    return bytes([SerializationTag.BYTES]) + len(v).to_bytes(4, "big") + v
-
-
-def _deserialize_bytes(data: bytes, offset: int) -> tuple[bytes, int]:
-    raw, offset = _read_length_prefixed(data, offset)
-    return bytes(raw), offset
-
-
-def _serialize_str(v: str) -> bytes:
-    encoded = v.encode("utf-8")
-    return bytes([SerializationTag.STRING]) + len(encoded).to_bytes(4, "big") + encoded
-
-
-def _deserialize_str(data: bytes, offset: int) -> tuple[str, int]:
-    raw, offset = _read_length_prefixed(data, offset)
-    return raw.decode("utf-8"), offset
-
-
 def _serialize_value(v: Any) -> bytes:
     """Serialize a single choice value to tag + payload bytes."""
     # bool must be checked before int since bool is a subclass of int.
-    if isinstance(v, bool):
-        return _serialize_bool(v)
-    if isinstance(v, int):
-        return _serialize_int(v)
-    if isinstance(v, float):
-        return _serialize_float(v)
-    if isinstance(v, bytes):
-        return _serialize_bytes(v)
-    assert isinstance(v, str), f"unsupported type: {type(v)}"
-    return _serialize_str(v)
+    match v:
+        case bool():
+            return bytes([SerializationTag.BOOLEAN, int(v)])
+        case int():
+            return bytes([SerializationTag.INTEGER]) + v.to_bytes(8, "big", signed=True)
+        case float():  # needed_for("floats")
+            return bytes([SerializationTag.FLOAT]) + struct.pack("!d", v)
+        case bytes():  # needed_for("bytes")
+            return bytes([SerializationTag.BYTES]) + len(v).to_bytes(4, "big") + v
+        case str():  # needed_for("text")
+            encoded = v.encode("utf-8")
+            return (
+                bytes([SerializationTag.STRING])
+                + len(encoded).to_bytes(4, "big")
+                + encoded
+            )
+        case _:
+            assert False, f"unsupported type: {type(v)}"
 
 
 def _deserialize_value(data: bytes, offset: int) -> tuple[Any, int]:
@@ -171,17 +128,24 @@ def _deserialize_value(data: bytes, offset: int) -> tuple[Any, int]:
     Raises ValueError/IndexError on malformed data."""
     tag = data[offset]
     offset += 1
-    if tag == SerializationTag.INTEGER:
-        return _deserialize_int(data, offset)
-    if tag == SerializationTag.BOOLEAN:
-        return _deserialize_bool(data, offset)
-    if tag == SerializationTag.FLOAT:
-        return _deserialize_float(data, offset)
-    if tag == SerializationTag.BYTES:
-        return _deserialize_bytes(data, offset)
-    if tag == SerializationTag.STRING:
-        return _deserialize_str(data, offset)
-    raise ValueError(f"unknown tag: {tag}")
+    match tag:
+        case SerializationTag.INTEGER:
+            raw, offset = _read_fixed(data, offset, 8)
+            return int.from_bytes(raw, "big", signed=True), offset
+        case SerializationTag.BOOLEAN:
+            raw, offset = _read_fixed(data, offset, 1)
+            return bool(raw[0]), offset
+        case SerializationTag.FLOAT:  # needed_for("floats")
+            raw, offset = _read_fixed(data, offset, 8)
+            return struct.unpack("!d", raw)[0], offset
+        case SerializationTag.BYTES:  # needed_for("bytes")
+            raw, offset = _read_length_prefixed(data, offset)
+            return bytes(raw), offset
+        case SerializationTag.STRING:  # needed_for("text")
+            raw, offset = _read_length_prefixed(data, offset)
+            return raw.decode("utf-8"), offset
+        case _:
+            raise ValueError(f"unknown tag: {tag}")
 
 
 def _serialize_choices(values: Sequence[Any]) -> bytes:
