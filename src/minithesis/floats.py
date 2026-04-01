@@ -382,7 +382,20 @@ def _shrink_float(
     if not math.isfinite(value):
         return
 
-    # Step 3: Binary search on the raw index toward simplest.
+    # Step 3: Numeric reduction — shrink the integer part toward zero.
+    # This catches cases like -8.0 → -5.0 that are obvious numerically
+    # but hard to find via index or exponent/mantissa manipulation.
+    if abs(value) >= 2.0:
+        int_part = int(value)
+        bin_search_down(
+            0,
+            abs(int_part),
+            lambda n: try_replace(
+                math.copysign(float(n), value) + (value - int_part)
+            ),
+        )
+
+    # Step 4: Binary search on the raw index toward simplest.
     # This handles cross-exponent transitions (e.g. -4.0 → -3.0)
     # where reducing the exponent alone doesn't work but a smaller
     # raw index with a different exponent+mantissa combination does.
