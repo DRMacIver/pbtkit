@@ -139,3 +139,9 @@ def test_targeting_with_bytes():
         max_score = max(n, max_score)
 
     assert max_score == 100
+
+
+def test_bytes_choice_unit():
+    # Second-simplest in sort_key order: next byte value, not next length.
+    assert BytesChoice(0, 10).unit == b"\x01"
+    assert BytesChoice(3, 10).unit == b"\x00\x00\x01"

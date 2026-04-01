@@ -559,3 +559,14 @@ def test_float_shrinks_across_exponent_boundary():
     v = state.result[0].value
     # Should find the smallest float < -2.0, which is -2.0 - 1 ULP.
     assert -3.0 < v < -2.0
+
+
+def test_float_choice_unit():
+    # Under (exponent_rank, mantissa, sign) ordering:
+    # index 0 = 0.0, index 1 = -0.0, index 2 = 1.0, ...
+    assert FloatChoice(-10.0, 10.0, False, False).unit == -0.0
+    # Negative-only range: simplest has smallest exp_rank in range.
+    fc = FloatChoice(-10.0, -5.0, False, False)
+    assert fc.simplest == -5.0  # exp_rank=3, simpler than -8.0 (exp_rank=5)
+    # Single-value range: falls back to simplest.
+    assert FloatChoice(5.0, 5.0, False, False).unit == 5.0
