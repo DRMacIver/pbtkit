@@ -29,4 +29,4 @@ def test_finds_small_list(capsys, seed):
 
     captured = capsys.readouterr()
 
-    assert captured.out.strip() == "ls = [1001]"
+    assert "[1001]" in captured.out

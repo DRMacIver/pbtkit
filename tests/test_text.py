@@ -44,7 +44,7 @@ def test_text_shrinks_to_short(capsys):
             assert len(s) < 1
 
     captured = capsys.readouterr()
-    assert "s =" in captured.out
+    assert " = " in captured.out
     # Should shrink to "a" (shortest, simplest character)
     assert captured.out.strip().endswith("= 'a'")
 

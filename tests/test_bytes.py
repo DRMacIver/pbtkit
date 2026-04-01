@@ -26,7 +26,7 @@ def test_finds_short_binary(capsys):
             assert len(b) < 1
 
     captured = capsys.readouterr()
-    assert captured.out.strip() == r"b = b'\x00'"
+    assert r"b'\x00'" in captured.out
 
 
 def test_shrinks_bytes_to_minimal(capsys):
@@ -38,7 +38,7 @@ def test_shrinks_bytes_to_minimal(capsys):
             assert 0xFF not in b
 
     captured = capsys.readouterr()
-    assert captured.out.strip() == r"b = b'\xff'"
+    assert r"b'\xff'" in captured.out
 
 
 def test_binary_respects_size_bounds():
@@ -63,7 +63,7 @@ def test_shrinks_bytes_with_constraints(capsys):
     # Should find 2 bytes summing to 11. The exact byte distribution
     # varies because the shrinker can't redistribute value between bytes.
     output = captured.out.strip()
-    assert "b =" in output
+    assert " = " in output
     value = eval(output.split(" = ", 1)[1])
     assert len(value) == 2
     assert sum(value) == 11
@@ -105,7 +105,7 @@ def test_shrinks_bytes_to_simplest(capsys):
             assert sum(b) > 0
 
     captured = capsys.readouterr()
-    assert captured.out.strip() == "b = b''"
+    assert "b''" in captured.out
 
 
 @pytest.mark.requires("shrinking.index_passes")

@@ -308,7 +308,7 @@ def test_finds_small_list_even_with_bad_lists(capsys, seed):
 
     captured = capsys.readouterr()
 
-    assert captured.out.strip() == "ls = [1001]"
+    assert "[1001]" in captured.out
 
 
 def test_shrinking_mixed_choice_types_no_sort_crash():

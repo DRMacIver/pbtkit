@@ -17,6 +17,8 @@ from random import Random
 import libcst as cst
 import pytest
 
+pytestmark = pytest.mark.requires("draw_names")
+
 import pbtkit.draw_names  # noqa: F401  (importing patches TestCase)
 import pbtkit.generators as gs
 from pbtkit import run_test

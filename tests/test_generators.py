@@ -280,7 +280,7 @@ def test_unique_lists_shrinks(capsys):
             assert len(ls) < 3
 
     captured = capsys.readouterr()
-    assert "ls" in captured.out
+    assert " = " in captured.out
 
 
 def test_unique_by():
@@ -315,7 +315,7 @@ def test_dictionaries_shrinks(capsys):
             assert sum(d.values()) <= 100
 
     captured = capsys.readouterr()
-    assert "d" in captured.out
+    assert " = " in captured.out
 
 
 def test_dictionaries_size_bounds():
