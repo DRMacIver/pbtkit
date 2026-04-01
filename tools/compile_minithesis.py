@@ -634,15 +634,21 @@ def compile_minithesis(disabled: frozenset[str] = frozenset()) -> str:
     disabled = expand_disabled(disabled)
     extensions = [e for e in EXTENSIONS if e not in disabled]
 
-    # A feature is disabled if ALL modules requiring it are disabled.
-    # Also treat disabled module names as disabled features, so that
-    # @needed_for("floats") gets stripped when the floats module is disabled.
+    # Compute disabled features. A needed_for("X") annotation is stripped
+    # when X is a disabled module name (direct match) or a feature whose
+    # providing modules are all disabled.
     enabled_features: set[str] = set()
     for mod, feature in FEATURE_DEPS.items():
         if mod not in disabled:
             enabled_features.add(feature)
     disabled_features = frozenset(
         (set(FEATURE_DEPS.values()) - enabled_features) | disabled
+    )
+    # But never disable a feature that matches an ENABLED extension module.
+    # E.g. "bytes" as a feature should stay enabled when the bytes module
+    # is enabled, even if advanced_bytes_passes is disabled.
+    disabled_features = frozenset(
+        f for f in disabled_features if f not in (set(EXTENSIONS) - disabled)
     )
 
     def module_path(name: str) -> Path:
