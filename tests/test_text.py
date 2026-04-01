@@ -137,6 +137,17 @@ def test_string_from_index_out_of_range():
     assert sc.from_index(sc.max_index + 1) is None
 
 
+@pytest.mark.requires("shrinking.mutation")
+def test_string_from_index_past_end():
+    """from_index returns None for indices past all length buckets.
+
+    StringChoice(32, 126, 0, 2) has alpha_size=95 and
+    max_index = 95^0 + 95^1 + 95^2 - 1 = 9120,
+    so from_index(9121) exhausts all length buckets and returns None."""
+    sc = StringChoice(32, 126, 0, 2)
+    assert sc.from_index(9121) is None
+
+
 @pytest.mark.requires("shrinking.index_passes")
 def test_string_codepoint_rank_with_surrogates():
     """_codepoint_rank handles codepoint ranges that span surrogates."""

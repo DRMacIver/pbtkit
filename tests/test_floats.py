@@ -484,6 +484,22 @@ def test_float_from_index_out_of_bounded_range():
     assert fc.from_index(1) is None
 
 
+@pytest.mark.requires("shrinking.mutation")
+def test_float_from_index_none_paths():
+    """from_index returns None for various out-of-range cases.
+
+    Covers paths that are only reachable when index_passes is enabled
+    but also need coverage when only mutation is enabled."""
+    fc = FloatChoice(float("-inf"), float("inf"), False, False)
+    # offset == 1, allow_infinity=False: returns None (not math.inf)
+    assert fc.from_index(_MAX_FINITE_INDEX + 1) is None
+    # offset > 3, allow_nan=False: returns None
+    assert fc.from_index(10**20) is None
+    # bounded range where base + index exceeds _MAX_FINITE_INDEX
+    fc2 = FloatChoice(1e300, 2e300, False, False)
+    assert fc2.from_index(_MAX_FINITE_INDEX) is None
+
+
 def test_float_simplest_with_inf_bounds():
     """simplest works when bounds are infinite."""
     fc = FloatChoice(float("-inf"), float("inf"), False, False)

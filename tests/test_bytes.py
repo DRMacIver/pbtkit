@@ -115,6 +115,16 @@ def test_bytes_from_index_out_of_range():
     assert bc.from_index(bc.max_index + 1) is None
 
 
+@pytest.mark.requires("shrinking.mutation")
+def test_bytes_from_index_past_end():
+    """from_index returns None for indices past all length buckets.
+
+    BytesChoice(0, 2).max_index == 65792 (to_index(b"\\xff\\xff")),
+    so from_index(65793) exhausts all length buckets and returns None."""
+    bc = BytesChoice(0, 2)
+    assert bc.from_index(65793) is None
+
+
 @pytest.mark.requires("targeting")
 def test_targeting_with_bytes():
     """Targeting skips non-integer nodes without crashing."""
