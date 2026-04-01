@@ -488,8 +488,18 @@ def process_extension(source: str, moved_funcs: set[str]) -> str:
     return "".join(out)
 
 
-def process_generators(source: str) -> str:
-    """Process generators.py: remove imports and docstring."""
+def process_generators(source: str, disabled: frozenset[str] = frozenset()) -> str:
+    """Process generators.py: remove imports, docstring, and generators
+    that depend on disabled extensions."""
+    # Map generator function names to the extension they require.
+    _GEN_DEPS: dict[str, str] = {
+        "floats": "floats",
+        "text": "text",
+        "binary": "bytes",
+        "lists": "collections",
+        "dictionaries": "collections",
+    }
+    skip_funcs = {name for name, ext in _GEN_DEPS.items() if ext in disabled}
     lines = source.splitlines(keepends=True)
     out: list[str] = []
     i = _skip_header(lines)
@@ -502,6 +512,16 @@ def process_generators(source: str) -> str:
         line = lines[i]
         if _is_import(line):
             i = _skip_import(lines, i)
+            continue
+        # Replace generator functions for disabled extensions with stubs.
+        func_match = re.match(r"^def (\w+)\(", line)
+        if func_match and func_match.group(1) in skip_funcs:
+            # Keep the signature, replace body with NotImplementedError.
+            body_start = _find_body_start(lines, i)
+            for sig_line in lines[i:body_start]:
+                out.append(sig_line)
+            out.append("    raise NotImplementedError\n")
+            i = _block_end(lines, i)
             continue
         out.append(line)
         i += 1
@@ -554,11 +574,21 @@ def compile_minithesis(disabled: frozenset[str] = frozenset()) -> str:
         parts = name.split(".")
         return SRC / "/".join(parts[:-1]) / f"{parts[-1]}.py" if len(parts) > 1 else SRC / f"{name}.py"
 
+    # Determine which utility modules are actually needed by enabled extensions.
+    needed_utils: list[str] = []
+    for util in UTILITY_MODULES:
+        util_mod = f"minithesis.{util}"
+        for ext in extensions:
+            ext_src = module_path(ext).read_text()
+            if util_mod in ext_src or util.split(".")[-1] in ext_src:
+                needed_utils.append(util)
+                break
+
     # Read and parse all modules, stripping @needed_for decorators
     # (removing entire methods for disabled features)
     sources: dict[str, str] = {}
     trees: dict[str, cst.Module] = {}
-    for name in ["core", "__init__"] + UTILITY_MODULES + extensions + ["generators"]:
+    for name in ["core", "__init__"] + needed_utils + extensions + ["generators"]:
         src = strip_needed_for(module_path(name).read_text(), disabled_features)
         sources[name] = src
         trees[name] = cst.parse_module(src)
@@ -597,14 +627,14 @@ def compile_minithesis(disabled: frozenset[str] = frozenset()) -> str:
 
     # Process extensions and utility modules (remove imports, monkey-patches, moved functions)
     ext_bodies: list[str] = []
-    for ext in UTILITY_MODULES + extensions:
+    for ext in needed_utils + extensions:
         moved = {func for _, (en, func) in all_patches.items() if en == ext}
         body = process_extension(sources[ext], moved)
         if body.strip():
             ext_bodies.append(body)
 
-    # Process generators (remove imports)
-    gen_body = process_generators(sources["generators"])
+    # Process generators (remove imports and generators for disabled types)
+    gen_body = process_generators(sources["generators"], disabled)
 
     # Determine which hook lists are used by the enabled extensions.
     # Map decorator names to the hook list they register into.
@@ -801,10 +831,6 @@ def main() -> None:
     if args.minimal:
         disabled = frozenset(EXTENSIONS)
     elif args.features:
-        print("Cannot use both --features and --disable", file=sys.stderr)
-        sys.exit(1)
-
-    if args.features:
         enabled = frozenset(m for m in args.features.split(",") if m)
         unknown = enabled - set(EXTENSIONS)
         if unknown:
