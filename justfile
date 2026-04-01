@@ -16,12 +16,8 @@ compile:
 test-features:
     uv run python tools/test_features.py
 
-test-compiled: compile
-    uv run pytest tests/ -m 'not hypothesis' --override-ini='pythonpath=build/pkg' --verbose
-    for ext in {{extensions}}; do \
-        uv run python tools/compile_minithesis.py --disable=$ext && \
-        MINITHESIS_DISABLED=$ext uv run pytest tests/ -m 'not hypothesis' --override-ini='pythonpath=build/pkg' --verbose || exit 1; \
-    done
+test-compiled:
+    uv run python -u tools/test_compiled.py
 
 typecheck:
     uv run pyright src/
