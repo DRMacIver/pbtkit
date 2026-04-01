@@ -366,6 +366,15 @@ def _is_import(line: str) -> bool:
     return line.startswith("import ") or line.startswith("from ")
 
 
+def _is_duplicate_typevar(line: str, core_source: str) -> bool:
+    """Check if a line is a TypeVar definition already present in core."""
+    m = re.match(r"^(\w+) = TypeVar\(", line)
+    if not m:
+        return False
+    name = m.group(1)
+    return f"{name} = TypeVar(" in core_source
+
+
 def _skip_import(lines: list[str], start: int) -> int:
     """Skip an import (possibly multi-line with parens)."""
     if "(" in lines[start] and ")" not in lines[start]:
@@ -434,7 +443,7 @@ def process_core(
     return "".join(out)
 
 
-def process_extension(source: str, moved_funcs: set[str]) -> str:
+def process_extension(source: str, moved_funcs: set[str], core_source: str = "") -> str:
     """Process an extension module: remove imports, docstring, section dividers,
     monkey-patch assignments, and functions that were moved to TestCase."""
     lines = source.splitlines(keepends=True)
@@ -448,9 +457,12 @@ def process_extension(source: str, moved_funcs: set[str]) -> str:
     while i < len(lines):
         line = lines[i]
 
-        # Skip imports
+        # Skip imports and TypeVar redefinitions
         if _is_import(line):
             i = _skip_import(lines, i)
+            continue
+        if _is_duplicate_typevar(line, core_source):
+            i += 1
             continue
 
         # Skip section dividers (3-line blocks: divider, title, divider)
@@ -488,7 +500,7 @@ def process_extension(source: str, moved_funcs: set[str]) -> str:
     return "".join(out)
 
 
-def process_generators(source: str, disabled: frozenset[str] = frozenset()) -> str:
+def process_generators(source: str, disabled: frozenset[str] = frozenset(), core_source: str = "") -> str:
     """Process generators.py: remove imports, docstring, and generators
     that depend on disabled extensions."""
     # Map generator function names to the extension they require.
@@ -512,6 +524,9 @@ def process_generators(source: str, disabled: frozenset[str] = frozenset()) -> s
         line = lines[i]
         if _is_import(line):
             i = _skip_import(lines, i)
+            continue
+        if _is_duplicate_typevar(line, core_source):
+            i += 1
             continue
         # Remove generator functions that depend on disabled extensions.
         func_match = re.match(r"^def (\w+)\(", line)
@@ -624,12 +639,12 @@ def compile_minithesis(disabled: frozenset[str] = frozenset()) -> str:
     ext_bodies: list[str] = []
     for ext in needed_utils + extensions:
         moved = {func for _, (en, func) in all_patches.items() if en == ext}
-        body = process_extension(sources[ext], moved)
+        body = process_extension(sources[ext], moved, sources["core"])
         if body.strip():
             ext_bodies.append(body)
 
     # Process generators (remove imports and generators for disabled types)
-    gen_body = process_generators(sources["generators"], disabled)
+    gen_body = process_generators(sources["generators"], disabled, sources["core"])
 
     # Determine which hook lists are used by the enabled extensions.
     # Map decorator names to the hook list they register into.
