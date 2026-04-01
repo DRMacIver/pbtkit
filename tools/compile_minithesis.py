@@ -619,15 +619,15 @@ def compile_minithesis(disabled: frozenset[str] = frozenset()) -> str:
         parts = name.split(".")
         return SRC / "/".join(parts[:-1]) / f"{parts[-1]}.py" if len(parts) > 1 else SRC / f"{name}.py"
 
-    # Determine which utility modules are actually needed by enabled extensions.
+    # Determine which utility modules are actually needed by enabled
+    # extensions or core. Check for import statements referencing them.
     needed_utils: list[str] = []
+    enabled_sources = [module_path(ext).read_text() for ext in extensions]
+    enabled_sources.append(module_path("core").read_text())
     for util in UTILITY_MODULES:
         util_mod = f"minithesis.{util}"
-        for ext in extensions:
-            ext_src = module_path(ext).read_text()
-            if util_mod in ext_src or util.split(".")[-1] in ext_src:
-                needed_utils.append(util)
-                break
+        if any(util_mod in src for src in enabled_sources):
+            needed_utils.append(util)
 
     # Read and parse all modules, stripping @needed_for decorators
     # (removing entire methods for disabled features)

@@ -51,21 +51,26 @@ def _test_with_coverage(disabled: frozenset[str]) -> bool:
     if disabled:
         env["MINITHESIS_DISABLED"] = ",".join(sorted(disabled))
 
-    result = subprocess.run(
-        [
-            "uv", "run", "python", "-m", "coverage", "run",
-            f"--source={pkg / 'minithesis'}",
-            "--branch",
-            "-m", "pytest", "tests/",
-            "-m", "not hypothesis",
-            f"--override-ini=pythonpath={pkg}",
-            "-q",
-        ],
-        cwd=ROOT,
-        env=env,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            [
+                "uv", "run", "python", "-m", "coverage", "run",
+                f"--source={pkg / 'minithesis'}",
+                "--branch",
+                "-m", "pytest", "tests/",
+                "-m", "not hypothesis",
+                f"--override-ini=pythonpath={pkg}",
+                "-q",
+            ],
+            cwd=ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired:
+        print("  TIMEOUT (>30s)")
+        return False
     test_output = result.stdout + result.stderr
     if result.returncode != 0:
         for line in test_output.splitlines():
