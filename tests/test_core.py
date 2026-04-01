@@ -1254,6 +1254,28 @@ def test_integer_shrinks_via_binary_search():
     assert state.result[0].value == 101
 
 
+@pytest.mark.requires("database")
+def test_database_round_trip_with_booleans(tmp_path):
+    """Database serializes and deserializes boolean values."""
+    db = DirectoryDB(str(tmp_path))
+    count = 0
+
+    def run():
+        with pytest.raises(AssertionError):
+
+            @run_test(database=db)
+            def _(tc):
+                nonlocal count
+                count += 1
+                b = tc.weighted(0.5)
+                assert not b
+
+    run()
+    prev = count
+    run()
+    assert count == prev + 2
+
+
 def test_map_core():
     """Generator.map works with core types."""
 
@@ -1396,6 +1418,22 @@ def test_sort_values_swap_succeeds():
     assert state.result is not None
     vals = [n.value for n in state.result]
     assert vals == sorted(vals)
+
+
+@pytest.mark.requires("shrinking.sorting")
+def test_sort_stale_indices_after_punning():
+    """Sorting handles indices becoming stale when a swap changes types
+    via value punning (e.g. one_of branch switch)."""
+
+    def tf(tc):
+        v0 = tc.any(gs.one_of(gs.integers(0, 10), gs.integers(0, 10)))
+        v1 = tc.any(gs.one_of(gs.integers(0, 10), gs.integers(0, 10)))
+        if v0 + v1 > 10:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 1000)
+    state.run()
+    assert state.result is not None
 
 
 @pytest.mark.requires("shrinking.sorting")

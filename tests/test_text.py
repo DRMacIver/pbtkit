@@ -182,25 +182,25 @@ def test_truncated_string_database_entry():
 
 
 def test_text_sorts_characters():
-    """String shrinker sorts characters (insertion sort path).
-    Exercises both the successful swap (j -= 1) and failed swap
-    (else: break) branches."""
+    """String shrinker sorts characters via insertion sort.
+    The condition requires descending order, so the sort tries
+    to swap but fails (the swap makes it not interesting)."""
 
     def tf(tc):
         s = tc.any(
             gs.text(
-                min_codepoint=ord("a"), max_codepoint=ord("z"), min_size=2, max_size=5
+                min_codepoint=ord("a"), max_codepoint=ord("z"), min_size=3, max_size=5
             )
         )
-        # Condition that prevents full sorting: specific character
-        # must appear after another. The sort will try to swap but
-        # the condition prevents it.
-        if len(s) >= 2 and s[-1] > s[0]:
+        # Require descending: sorting would break this, so swaps fail.
+        if len(s) >= 3 and all(s[i] > s[i + 1] for i in range(len(s) - 1)):
             tc.mark_status(Status.INTERESTING)
 
-    state = MinithesisState(Random(0), tf, 1000)
+    state = MinithesisState(Random(0), tf, 10000)
     state.run()
     assert state.result is not None
+    val = state.result[0].value
+    assert all(val[i] > val[i + 1] for i in range(len(val) - 1))
 
 
 def test_text_shrinks_to_simplest():
@@ -218,8 +218,8 @@ def test_text_shrinks_to_simplest():
 
 
 @pytest.mark.requires("shrinking.advanced_string_passes")
-def test_text_redistributes_pair():
-    """String redistribution moves content between two strings."""
+def test_text_redistributes_to_empty():
+    """String redistribution empties one string when possible."""
 
     def tf(tc):
         s1 = tc.any(
@@ -227,6 +227,34 @@ def test_text_redistributes_pair():
         )
         s2 = tc.any(
             gs.text(min_codepoint=ord("a"), max_codepoint=ord("z"), max_size=10)
+        )
+        if len(s1) + len(s2) >= 3:
+            tc.mark_status(Status.INTERESTING)
+
+    state = MinithesisState(Random(0), tf, 1000)
+    state.run()
+    assert state.result is not None
+    vals = [n.value for n in state.result if isinstance(n.value, str)]
+    # Redistribution should empty one string.
+    assert "" in vals
+
+
+@pytest.mark.requires("shrinking.advanced_string_passes")
+def test_text_redistributes_pair():
+    """String redistribution moves content between two strings.
+    The condition requires both strings, so redistribution must
+    transfer content rather than just emptying one."""
+
+    def tf(tc):
+        s1 = tc.any(
+            gs.text(
+                min_codepoint=ord("a"), max_codepoint=ord("z"), min_size=1, max_size=10
+            )
+        )
+        s2 = tc.any(
+            gs.text(
+                min_codepoint=ord("a"), max_codepoint=ord("z"), min_size=1, max_size=10
+            )
         )
         if len(s1) + len(s2) >= 5:
             tc.mark_status(Status.INTERESTING)

@@ -104,6 +104,7 @@ def _read_length_prefixed(data: bytes, offset: int) -> tuple[bytes, int]:
 # SerializationTag. The compiler strips needed_for-decorated
 # functions when their feature is disabled.
 
+
 def _serialize_int(v: int) -> bytes:
     return bytes([SerializationTag.INTEGER]) + v.to_bytes(8, "big", signed=True)
 
@@ -122,10 +123,8 @@ def _deserialize_bool(data: bytes, offset: int) -> tuple[bool, int]:
     return bool(raw[0]), offset
 
 
-
 def _serialize_float(v: float) -> bytes:
     return bytes([SerializationTag.FLOAT]) + struct.pack("!d", v)
-
 
 
 def _deserialize_float(data: bytes, offset: int) -> tuple[float, int]:
@@ -133,10 +132,8 @@ def _deserialize_float(data: bytes, offset: int) -> tuple[float, int]:
     return struct.unpack("!d", raw)[0], offset
 
 
-
 def _serialize_bytes(v: bytes) -> bytes:
     return bytes([SerializationTag.BYTES]) + len(v).to_bytes(4, "big") + v
-
 
 
 def _deserialize_bytes(data: bytes, offset: int) -> tuple[bytes, int]:
@@ -144,11 +141,9 @@ def _deserialize_bytes(data: bytes, offset: int) -> tuple[bytes, int]:
     return bytes(raw), offset
 
 
-
 def _serialize_str(v: str) -> bytes:
     encoded = v.encode("utf-8")
     return bytes([SerializationTag.STRING]) + len(encoded).to_bytes(4, "big") + encoded
-
 
 
 def _deserialize_str(data: bytes, offset: int) -> tuple[str, int]:
