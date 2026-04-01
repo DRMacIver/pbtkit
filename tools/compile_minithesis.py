@@ -787,9 +787,20 @@ def main() -> None:
         default="",
         help="Comma-separated list of extensions to include (all others disabled)",
     )
+    p.add_argument(
+        "--minimal",
+        action="store_true",
+        help="Disable all extensions (core only)",
+    )
     args = p.parse_args()
 
-    if args.features and args.disable:
+    if sum(bool(x) for x in [args.features, args.disable, args.minimal]) > 1:
+        print("Cannot combine --features, --disable, and --minimal", file=sys.stderr)
+        sys.exit(1)
+
+    if args.minimal:
+        disabled = frozenset(EXTENSIONS)
+    elif args.features:
         print("Cannot use both --features and --disable", file=sys.stderr)
         sys.exit(1)
 
