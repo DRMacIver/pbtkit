@@ -93,13 +93,6 @@ def _read_fixed(data: bytes, offset: int, size: int) -> tuple[bytes, int]:
     return data[offset : offset + size], offset + size
 
 
-def _read_length_prefixed(data: bytes, offset: int) -> tuple[bytes, int]:
-    """Read a 4-byte-length-prefixed blob from data at offset."""
-    raw, offset = _read_fixed(data, offset, 4)
-    length = int.from_bytes(raw, "big")
-    return _read_fixed(data, offset, length)
-
-
 def _serialize_value(v: Any) -> bytes:
     """Serialize a single choice value to tag + payload bytes."""
     # bool must be checked before int since bool is a subclass of int.
@@ -139,10 +132,14 @@ def _deserialize_value(data: bytes, offset: int) -> tuple[Any, int]:
             raw, offset = _read_fixed(data, offset, 8)
             return struct.unpack("!d", raw)[0], offset
         case SerializationTag.BYTES:  # needed_for("bytes")
-            raw, offset = _read_length_prefixed(data, offset)
+            raw_len, offset = _read_fixed(data, offset, 4)
+            length = int.from_bytes(raw_len, "big")
+            raw, offset = _read_fixed(data, offset, length)
             return bytes(raw), offset
         case SerializationTag.STRING:  # needed_for("text")
-            raw, offset = _read_length_prefixed(data, offset)
+            raw_len, offset = _read_fixed(data, offset, 4)
+            length = int.from_bytes(raw_len, "big")
+            raw, offset = _read_fixed(data, offset, length)
             return raw.decode("utf-8"), offset
         case _:
             raise ValueError(f"unknown tag: {tag}")

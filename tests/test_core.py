@@ -742,6 +742,27 @@ def test_string_sorts_characters_when_possible():
     assert state.result[0].value == "00e"
 
 
+@pytest.mark.requires("text")
+def test_string_insertion_sort_swap_succeeds():
+    """String shrinker insertion sort swaps out-of-order adjacent chars,
+    covering j -= 1 and natural while-exit (j reaches 0).
+
+    Uses a fixed-length 2-char string where the condition requires both
+    'a' and 'b'. Starting from "ba" (out of order), insertion sort swaps
+    to "ab" (still satisfies the condition), covering both paths."""
+
+    def tf(tc):
+        s = tc.draw_string(ord("a"), ord("b"), 2, 2)
+        # Permutation-invariant condition: needs both 'a' and 'b'.
+        if "a" in s and "b" in s:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 1000)
+    state.run()
+    assert state.result is not None
+    assert state.result[0].value == "ab"
+
+
 @pytest.mark.requires("bytes")
 def test_bytes_sorts_when_order_matters():
     """Bytes shrinking should sort bytes when the test depends on order."""
