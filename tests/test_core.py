@@ -1324,16 +1324,39 @@ def test_redistribute_stale_indices():
     when redistribution changes the path (e.g. reducing count)."""
 
     def tf(tc):
-        n = tc.draw_integer(1, 5)
-        total = 0
-        for _ in range(n):
-            total += tc.draw_integer(0, 100)
-        if total > 200:
-            tc.mark_status(Status.INTERESTING)
+        # The boolean-controlled branch means redistribution can
+        # change the number of integer nodes.
+        b = tc.weighted(0.5)
+        a = tc.draw_integer(0, 100)
+        c = tc.draw_integer(0, 100)
+        if b:
+            d = tc.draw_integer(0, 100)
+            if a + c + d > 200:
+                tc.mark_status(Status.INTERESTING)
+        else:
+            if a + c > 100:
+                tc.mark_status(Status.INTERESTING)
 
     state = State(Random(0), tf, 2000)
     state.run()
     assert state.result is not None
+
+
+@pytest.mark.requires("shrinking.duplication_passes")
+def test_shrink_duplicates_two_copies():
+    """shrink_duplicates handles exactly 2 copies (no wrapping loop)."""
+
+    def tf(tc):
+        a = tc.draw_integer(0, 100)
+        b = tc.draw_integer(0, 100)
+        if a == b and a > 0:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 10000)
+    state.run()
+    assert state.result is not None
+    assert state.result[0].value == 1
+    assert state.result[1].value == 1
 
 
 @pytest.mark.requires("shrinking.duplication_passes")
@@ -1357,21 +1380,54 @@ def test_shrink_duplicates_three_copies():
 
 @pytest.mark.requires("shrinking.sorting")
 def test_sort_values_swap_succeeds():
-    """sort_values swaps out-of-order integer pairs."""
+    """sort_values swaps out-of-order integer triples (exercises j -= 1
+    continuation in the insertion sort inner loop)."""
 
     def tf(tc):
         a = tc.draw_integer(0, 100)
         b = tc.draw_integer(0, 100)
-        # The interesting condition doesn't prevent sorting:
-        # a + b > 100 is invariant under swap.
-        if a + b > 100:
+        c = tc.draw_integer(0, 100)
+        # Sum-based condition is invariant under permutation.
+        if a + b + c > 100:
             tc.mark_status(Status.INTERESTING)
 
     state = State(Random(0), tf, 1000)
     state.run()
     assert state.result is not None
-    # Sorting puts the smaller value first.
-    assert state.result[0].value <= state.result[1].value
+    vals = [n.value for n in state.result]
+    assert vals == sorted(vals)
+
+
+@pytest.mark.requires("shrinking.sorting")
+def test_swap_adjacent_blocks_identical():
+    """swap_adjacent_blocks skips identical adjacent blocks."""
+
+    def tf(tc):
+        a = tc.draw_integer(0, 10)
+        b = tc.draw_integer(0, 10)
+        c = tc.draw_integer(0, 10)
+        d = tc.draw_integer(0, 10)
+        if a + b + c + d > 20:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 1000)
+    state.run()
+    assert state.result is not None
+
+
+@pytest.mark.requires("shrinking.mutation")
+def test_mutate_exercises_index_probes():
+    """mutate_and_shrink probes max_index on integer and boolean nodes."""
+
+    def tf(tc):
+        a = tc.draw_integer(0, 10)
+        b = tc.weighted(0.5)
+        if a > 5 and b:
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(Random(0), tf, 200)
+    state.run()
+    assert state.result is not None
 
 
 @pytest.mark.requires("shrinking.mutation")

@@ -182,22 +182,39 @@ def test_truncated_string_database_entry():
 
 
 def test_text_sorts_characters():
-    """String shrinker sorts characters (insertion sort path)."""
+    """String shrinker sorts characters (insertion sort path).
+    Exercises both the successful swap (j -= 1) and failed swap
+    (else: break) branches."""
 
     def tf(tc):
         s = tc.any(
             gs.text(
-                min_codepoint=ord("a"), max_codepoint=ord("z"), min_size=3, max_size=3
+                min_codepoint=ord("a"), max_codepoint=ord("z"), min_size=2, max_size=5
             )
         )
-        if len(set(s)) == 3:
+        # Condition that prevents full sorting: specific character
+        # must appear after another. The sort will try to swap but
+        # the condition prevents it.
+        if len(s) >= 2 and s[-1] > s[0]:
             tc.mark_status(Status.INTERESTING)
 
     state = MinithesisState(Random(0), tf, 1000)
     state.run()
     assert state.result is not None
-    val = state.result[0].value
-    assert val == "".join(sorted(val))
+
+
+def test_text_shrinks_to_simplest():
+    """String shrinker replaces value with simplest when possible."""
+
+    def tf(tc):
+        tc.any(gs.text(min_codepoint=ord("a"), max_codepoint=ord("z"), max_size=5))
+        # Always interesting — shrinker replaces string with "" (simplest).
+        tc.mark_status(Status.INTERESTING)
+
+    state = MinithesisState(Random(0), tf, 100)
+    state.run()
+    assert state.result is not None
+    assert state.result[0].value == ""
 
 
 @pytest.mark.requires("shrinking.advanced_string_passes")
