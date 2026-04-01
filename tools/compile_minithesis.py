@@ -261,11 +261,13 @@ def _skip_docstring(lines: list[str], start: int) -> int:
 
 
 class _StripNeededFor(cst.CSTTransformer):
-    """Handle @needed_for("...") decorators.
+    """Handle @needed_for("...") decorators and # needed_for("...") comments.
 
-    When disabled_features is empty, just strip the decorators.
-    When disabled_features is set, remove the entire function/method
-    if its needed_for feature is disabled, otherwise strip the decorator.
+    Decorators: strip the decorator if feature is enabled, remove the
+    entire function/method if disabled.
+
+    Comments: remove match/case branches or statements that have a
+    trailing # needed_for("X") comment when X is disabled.
     """
 
     def __init__(self, disabled_features: frozenset[str] = frozenset()) -> None:
@@ -285,6 +287,23 @@ class _StripNeededFor(cst.CSTTransformer):
                 val = d.decorator.args[0].value.evaluated_value
                 if isinstance(val, str):
                     return val
+        return None
+
+    def _comment_needed_for(self, node: cst.CSTNode) -> str | None:
+        """Extract feature from a # needed_for("X") trailing comment.
+
+        For MatchCase nodes, the comment is on the body's header
+        (the trailing comment after the colon on the case line)."""
+        comment_text = None
+        # MatchCase: comment on body.header.comment
+        if isinstance(node, cst.MatchCase) and isinstance(node.body, cst.IndentedBlock):
+            header = node.body.header
+            if header.comment is not None:
+                comment_text = header.comment.value
+        if comment_text:
+            m = re.search(r'needed_for\("([\w.]+)"\)', comment_text)
+            if m:
+                return m.group(1)
         return None
 
     def _filter_decorators(
@@ -313,6 +332,16 @@ class _StripNeededFor(cst.CSTTransformer):
         if feature and feature in self.disabled_features:
             return cst.RemovalSentinel.REMOVE
         return self._filter_decorators(updated_node)
+
+    def leave_MatchCase(
+        self,
+        original_node: cst.MatchCase,
+        updated_node: cst.MatchCase,
+    ) -> cst.MatchCase | cst.RemovalSentinel:
+        feature = self._comment_needed_for(original_node)
+        if feature and feature in self.disabled_features:
+            return cst.RemovalSentinel.REMOVE
+        return updated_node
 
 
 def strip_needed_for(source: str, disabled_features: frozenset[str] = frozenset()) -> str:
