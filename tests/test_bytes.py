@@ -1,5 +1,5 @@
-# This file is part of Minithesis, which may be found at
-# https://github.com/DRMacIver/minithesis
+# This file is part of Pbtkit, which may be found at
+# https://github.com/DRMacIver/pbtkit
 #
 # This work is copyright (C) 2020 David R. MacIver.
 #
@@ -9,12 +9,12 @@
 
 import pytest
 
-from minithesis import run_test
-from minithesis.bytes import BytesChoice
+from pbtkit import run_test
+from pbtkit.bytes import BytesChoice
 
 pytestmark = pytest.mark.requires("bytes")
-import minithesis.generators as gs
-from minithesis.database import DirectoryDB
+import pbtkit.generators as gs
+from pbtkit.database import DirectoryDB
 
 
 def test_finds_short_binary(capsys):

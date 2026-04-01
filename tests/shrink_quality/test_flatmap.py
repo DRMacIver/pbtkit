@@ -5,7 +5,7 @@ Ported from Hypothesis via hegel-rust/tests/test_shrink_quality/flatmap.rs.
 
 import pytest
 
-import minithesis.generators as gs
+import pbtkit.generators as gs
 
 from .conftest import minimal
 

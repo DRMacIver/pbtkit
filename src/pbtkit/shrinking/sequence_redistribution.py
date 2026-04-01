@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import AnyStr, Callable
 
-from minithesis.core import bin_search_down
+from pbtkit.core import bin_search_down
 
 
 def redistribute_sequence_pair(

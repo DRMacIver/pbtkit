@@ -1,4 +1,4 @@
-"""Database support for minithesis.
+"""Database support for pbtkit.
 
 This module provides the Database protocol, DirectoryDB implementation,
 serialization for the test database, and lifecycle hooks that load/save
@@ -18,8 +18,8 @@ from typing import (
     Protocol,
 )
 
-from minithesis.core import (
-    MinithesisState,
+from pbtkit.core import (
+    PbtkitState,
     TestCase,
     setup_hook,
     teardown_hook,
@@ -34,7 +34,7 @@ class Database(Protocol):
     def __delitem__(self, key: str) -> None: ...
 
 
-_DEFAULT_DATABASE_PATH = ".minithesis-cache"
+_DEFAULT_DATABASE_PATH = ".pbtkit-cache"
 
 
 class DirectoryDB:
@@ -170,7 +170,7 @@ def _deserialize_choices(data: bytes) -> list | None:
 
 
 @setup_hook
-def _database_setup(state: MinithesisState) -> None:
+def _database_setup(state: PbtkitState) -> None:
     """Load a previous failure from the database before running."""
     db = getattr(state.extras, "database", None)
     if db is None:
@@ -185,7 +185,7 @@ def _database_setup(state: MinithesisState) -> None:
 
 
 @teardown_hook
-def _database_teardown(state: MinithesisState) -> None:
+def _database_teardown(state: PbtkitState) -> None:
     """Save or clear the result in the database after running."""
     db = state.extras.database
     test_name = state.extras.test_name

@@ -1,12 +1,12 @@
-"""Minismith: a random minithesis program generator.
+"""Pbtsmith: a random pbtkit program generator.
 
-Uses Hypothesis to generate random but valid minithesis test programs
+Uses Hypothesis to generate random but valid pbtkit test programs
 as Python source code, then executes them to verify they either succeed
 or fail with Failure (never crash internally).
 
 Ported from hegelsmith (which does the same for hegel-rust).
 
-The generated programs exercise minithesis's full API:
+The generated programs exercise pbtkit's full API:
   - integers, booleans, floats, text, binary, lists
   - dependent draws (bounds derived from earlier variables)
   - if blocks with nested draws and assertions
@@ -23,12 +23,12 @@ import pytest
 
 from hypothesis import HealthCheck, given, note, settings
 from hypothesis import strategies as st
-from minithesis.core import Unsatisfiable, run_test
+from pbtkit.core import Unsatisfiable, run_test
 
 # Bare names needed by exec'd generated programs (exec uses globals()).
 # These tests exercise all types, so skip the module if any type is disabled.
 try:
-    from minithesis.generators import (  # noqa: F401
+    from pbtkit.generators import (  # noqa: F401
         binary,
         booleans,
         composite,
@@ -124,7 +124,7 @@ class Env:
 
 
 def gen_expr_code(typ: str, int_lo: int, int_hi: int) -> str:
-    """Return source code for a minithesis generator expression."""
+    """Return source code for a pbtkit generator expression."""
     if typ == "bool":
         return "booleans()"
     elif typ == "int":
@@ -966,7 +966,7 @@ def gen_composite_function(draw: st.DrawFn) -> tuple[str, str, str]:
 
 @st.composite
 def program(draw: st.DrawFn) -> str:
-    """Generate a complete minismith program as Python source code.
+    """Generate a complete pbtsmith program as Python source code.
 
     Structure mirrors hegelsmith:
     1. Phase 0: optional @composite helper functions
@@ -1070,11 +1070,11 @@ pytestmark = [
     deadline=None,
     suppress_health_check=[HealthCheck.too_slow],
 )
-def test_minismith_no_internal_errors(minithesis_program: str) -> None:
+def test_pbtsmith_no_internal_errors(pbtkit_program: str) -> None:
     """Generated programs either succeed or fail with Failure,
     never with internal crashes."""
-    note(minithesis_program)
-    exec(minithesis_program, globals())
+    note(pbtkit_program)
+    exec(pbtkit_program, globals())
 
 
 def test_regression_1():

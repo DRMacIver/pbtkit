@@ -1,5 +1,5 @@
-# This file is part of Minithesis, which may be found at
-# https://github.com/DRMacIver/minithesis
+# This file is part of Pbtkit, which may be found at
+# https://github.com/DRMacIver/pbtkit
 #
 # This work is copyright (C) 2020 David R. MacIver.
 #
@@ -9,9 +9,9 @@
 
 import pytest
 
-import minithesis.generators as gs
-from minithesis import Unsatisfiable, run_test
-from minithesis.collections import many
+import pbtkit.generators as gs
+from pbtkit import Unsatisfiable, run_test
+from pbtkit.collections import many
 
 pytestmark = pytest.mark.requires("collections")
 

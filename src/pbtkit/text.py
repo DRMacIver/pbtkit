@@ -1,4 +1,4 @@
-"""String/text support for minithesis.
+"""String/text support for pbtkit.
 
 This module provides StringChoice, the draw_string method, string
 serialization, and the string shrink pass. It is imported by the
@@ -11,13 +11,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from minithesis.core import (
+from pbtkit.core import (
     ChoiceType,
     TestCase,
     value_shrinker,
 )
-from minithesis.features import needed_for
-from minithesis.shrinking.sequence import shrink_sequence
+from pbtkit.features import needed_for
+from pbtkit.shrinking.sequence import shrink_sequence
 
 
 def _codepoint_key(c: int) -> int:

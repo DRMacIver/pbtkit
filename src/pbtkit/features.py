@@ -1,6 +1,6 @@
-"""Feature management for minithesis.
+"""Feature management for pbtkit.
 
-Reads the MINITHESIS_DISABLED environment variable and prevents
+Reads the PBTKIT_DISABLED environment variable and prevents
 disabled extension modules from loading, replacing them with dummy
 modules that raise NotImplementedError when any symbol is called.
 
@@ -16,7 +16,7 @@ import types
 from typing import Any
 
 DISABLED_MODULES: frozenset[str] = frozenset(
-    m for m in os.environ.get("MINITHESIS_DISABLED", "").split(",") if m
+    m for m in os.environ.get("PBTKIT_DISABLED", "").split(",") if m
 )
 
 
@@ -31,11 +31,11 @@ class _DisabledSymbol:
     def __call__(self, *args, **kwargs):
         raise NotImplementedError(
             f"{self._module_name}.{self._symbol_name} is not available:"
-            f" minithesis.{self._module_name} is disabled"
+            f" pbtkit.{self._module_name} is disabled"
         )
 
     def __repr__(self):
-        return f"<disabled: minithesis.{self._module_name}.{self._symbol_name}>"
+        return f"<disabled: pbtkit.{self._module_name}.{self._symbol_name}>"
 
 
 class _DisabledModule(types.ModuleType):
@@ -55,7 +55,7 @@ class _DisabledModule(types.ModuleType):
 def disable_modules(modules: frozenset[str]) -> None:
     """Poison sys.modules entries for the given module names."""
     for name in modules:
-        full = f"minithesis.{name}"
+        full = f"pbtkit.{name}"
         sys.modules[full] = _DisabledModule(name, full)
 
 

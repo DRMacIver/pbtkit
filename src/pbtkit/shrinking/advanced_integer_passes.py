@@ -1,4 +1,4 @@
-"""Advanced integer shrink passes for minithesis.
+"""Advanced integer shrink passes for pbtkit.
 
 Provides redistribute_integers, which improves shrinking quality
 for tests involving multiple integer choices by redistributing
@@ -7,15 +7,15 @@ value between pairs.
 
 from __future__ import annotations
 
-from minithesis.core import (
+from pbtkit.core import (
     IntegerChoice,
-    MinithesisState,
+    PbtkitState,
     bin_search_down,
     shrink_pass,
 )
 
 
-def _integer_indices(state: MinithesisState) -> list[int]:
+def _integer_indices(state: PbtkitState) -> list[int]:
     """Return indices of all IntegerChoice nodes in the result."""
     assert state.result is not None
     return [
@@ -24,7 +24,7 @@ def _integer_indices(state: MinithesisState) -> list[int]:
 
 
 @shrink_pass
-def redistribute_integers(state: MinithesisState) -> None:
+def redistribute_integers(state: PbtkitState) -> None:
     """Try adjusting pairs of integer choices by redistributing
     value between them. Operates on pairs of IntegerChoice nodes
     at various distances, skipping non-integer choices in between.

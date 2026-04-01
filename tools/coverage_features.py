@@ -10,14 +10,14 @@ from __future__ import annotations
 import os
 import subprocess
 
-from compile_minithesis import EXTENSIONS, ROOT, BUILD, expand_disabled
+from compile_pbtkit import EXTENSIONS, ROOT, BUILD, expand_disabled
 
 
 def run_feature_coverage(ext: str) -> str | None:
     """Compile with only this feature and run coverage. Returns missing lines or None on failure."""
     # Compile
     result = subprocess.run(
-        ["uv", "run", "python", "tools/compile_minithesis.py", f"--features={ext}"],
+        ["uv", "run", "python", "tools/compile_pbtkit.py", f"--features={ext}"],
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -27,13 +27,13 @@ def run_feature_coverage(ext: str) -> str | None:
 
     # Compute disabled set
     disabled = expand_disabled(frozenset(set(EXTENSIONS) - {ext}))
-    env = {**os.environ, "MINITHESIS_DISABLED": ",".join(sorted(disabled))}
+    env = {**os.environ, "PBTKIT_DISABLED": ",".join(sorted(disabled))}
 
     # Run tests with coverage
     subprocess.run(
         [
             "uv", "run", "python", "-m", "coverage", "run",
-            f"--source={BUILD / 'pkg' / 'minithesis'}",
+            f"--source={BUILD / 'pkg' / 'pbtkit'}",
             "--branch",
             "-m", "pytest", "tests/",
             "-m", "not hypothesis",
@@ -47,7 +47,7 @@ def run_feature_coverage(ext: str) -> str | None:
     )
 
     # Get coverage report
-    pkg_core = str(BUILD / "pkg" / "minithesis" / "core.py")
+    pkg_core = str(BUILD / "pkg" / "pbtkit" / "core.py")
     result = subprocess.run(
         [
             "uv", "run", "coverage", "report",

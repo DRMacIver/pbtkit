@@ -1,5 +1,5 @@
-# This file is part of Minithesis, which may be found at
-# https://github.com/DRMacIver/minithesis
+# This file is part of Pbtkit, which may be found at
+# https://github.com/DRMacIver/pbtkit
 #
 # This work is copyright (C) 2020 David R. MacIver.
 #
@@ -8,16 +8,16 @@
 # obtain one at https://mozilla.org/MPL/2.0/.
 
 """
-minithesis2 is a minimal property-based testing library.
+pbtkit2 is a minimal property-based testing library.
 
 It's not really intended to be used as is, but is instead designed
 to illustrate the core ideas of Hypothesis for educational and porting
 purposes.
 
-minithesis2 is the second iteration of minithesis. The first, to be
-found at https://github.com/DRMacIver/minithesis, implemented the
+pbtkit2 is the second iteration of pbtkit. The first, to be
+found at https://github.com/DRMacIver/pbtkit, implemented the
 previous generation architecture of Hypothesis (based on a single
-datatype). minithesis2 started as an attempt to modernise minithesis
+datatype). pbtkit2 started as an attempt to modernise pbtkit
 to adopt the new Hypothesis architecture of having multiple types of
 primitive value in its representation.
 
@@ -26,7 +26,7 @@ has been significantly modularised. It is split up into a core and
 a number of extension modules, each of which adds some piece of
 functionality.
 
-The current minithesis modules of interest are:
+The current pbtkit modules of interest are:
 
 * core: This implements a minimal hypothesis-style property-based
   testing library. It provides primitives for booleans and integers,
@@ -43,7 +43,7 @@ The current minithesis modules of interest are:
   of some score.
 
 Understanding and porting `core` is the the main thing you need to get
-the basic idea of minithesis. Each of the individual datatypes are, of
+the basic idea of pbtkit. Each of the individual datatypes are, of
 course, quite important, but you can easily build simpler (but worse)
 versions of them on top of the core without understanding that.
 
@@ -56,23 +56,23 @@ you to support it, but if it's fiddly feel free to leave it out
 of a first pass.
 
 The caching layer you can skip. It's used more heavily in Hypothesis
-proper, but in minithesis you only really need it for shrinking
+proper, but in pbtkit you only really need it for shrinking
 performance, so it's mostly a nice to have.
 """
 
 from __future__ import annotations
 
 # Disable modules before importing extensions.
-import minithesis.features
+import pbtkit.features
 
 # Public API and internal names re-exported from the core.
-from minithesis.core import (
+from pbtkit.core import (
     Generator,
     TestCase,
     Unsatisfiable,
     run_test,
 )
-from minithesis.database import (
+from pbtkit.database import (
     Database,
     DirectoryDB,
 )
@@ -88,28 +88,28 @@ __all__ = [
 
 # Import type-specific modules for their side effects: each one
 # registers its serializer, shrink pass, and draw method on TestCase.
-import minithesis.bytes
-import minithesis.caching
-import minithesis.collections
-import minithesis.database
-import minithesis.floats
-import minithesis.shrinking.advanced_integer_passes
-import minithesis.shrinking.bind_deletion
-import minithesis.shrinking.duplication_passes
-import minithesis.shrinking.sorting
-import minithesis.targeting
-import minithesis.text
+import pbtkit.bytes
+import pbtkit.caching
+import pbtkit.collections
+import pbtkit.database
+import pbtkit.floats
+import pbtkit.shrinking.advanced_integer_passes
+import pbtkit.shrinking.bind_deletion
+import pbtkit.shrinking.duplication_passes
+import pbtkit.shrinking.sorting
+import pbtkit.targeting
+import pbtkit.text
 
 # Advanced passes that depend on specific type modules or features.
 # Hardcoded dependency list: each entry is (module, required_feature).
 _FEATURE_DEPENDENT_MODULES = {
-    "minithesis.shrinking.advanced_bytes_passes": "bytes",
-    "minithesis.shrinking.advanced_string_passes": "text",
-    "minithesis.shrinking.index_passes": "indexing",
-    "minithesis.shrinking.mutation": "indexing",
+    "pbtkit.shrinking.advanced_bytes_passes": "bytes",
+    "pbtkit.shrinking.advanced_string_passes": "text",
+    "pbtkit.shrinking.index_passes": "indexing",
+    "pbtkit.shrinking.mutation": "indexing",
 }
 
-from minithesis.features import DISABLED_MODULES as _disabled
+from pbtkit.features import DISABLED_MODULES as _disabled
 
 for _mod in sorted(
     m for m, f in _FEATURE_DEPENDENT_MODULES.items() if f not in _disabled

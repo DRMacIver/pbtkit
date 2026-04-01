@@ -1,5 +1,5 @@
-# This file is part of Minithesis, which may be found at
-# https://github.com/DRMacIver/minithesis
+# This file is part of Pbtkit, which may be found at
+# https://github.com/DRMacIver/pbtkit
 #
 # This work is copyright (C) 2020 David R. MacIver.
 #
@@ -14,8 +14,8 @@ import pytest
 
 from hypothesis import HealthCheck, given, note, reject, settings
 from hypothesis import strategies as st
-from minithesis import Generator, Unsatisfiable, run_test
-from minithesis.core import Status
+from pbtkit import Generator, Unsatisfiable, run_test
+from pbtkit.core import Status
 
 
 @Generator
@@ -37,7 +37,7 @@ class Failure(Exception):
     max_examples=50,
 )
 @given(st.data())
-def test_give_minithesis_a_workout(data):
+def test_give_pbtkit_a_workout(data):
     seed = data.draw(st.integers(0, 1000))
     rnd = Random(seed)
     max_examples = data.draw(st.integers(1, 100))

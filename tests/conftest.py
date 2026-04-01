@@ -3,16 +3,16 @@ import os
 import pytest
 
 try:
-    from minithesis.features import DISABLED_MODULES
+    from pbtkit.features import DISABLED_MODULES
 except (ImportError, AttributeError):
     # Compiled mode: features module not available.
     # Read disabled modules from env var directly.
     DISABLED_MODULES = frozenset(
-        m for m in os.environ.get("MINITHESIS_DISABLED", "").split(",") if m
+        m for m in os.environ.get("PBTKIT_DISABLED", "").split(",") if m
     )
 
 try:
-    import minithesis.database as _db_mod
+    import pbtkit.database as _db_mod
 except (ImportError, AttributeError):
     _db_mod = None
 
@@ -29,7 +29,7 @@ def pytest_collection_modifyitems(items):
             for mod in mark.args:
                 if mod in DISABLED_MODULES:
                     item.add_marker(
-                        pytest.mark.skip(reason=f"minithesis.{mod} is disabled")
+                        pytest.mark.skip(reason=f"pbtkit.{mod} is disabled")
                     )
                     break
 
@@ -37,6 +37,6 @@ def pytest_collection_modifyitems(items):
 @pytest.fixture(autouse=True)
 def _isolate_database(tmp_path, monkeypatch):
     """Ensure each test gets a fresh default database directory
-    so tests don't leak state via .minithesis-cache."""
+    so tests don't leak state via .pbtkit-cache."""
     if _db_mod is not None and "database" not in DISABLED_MODULES:
         monkeypatch.setattr(_db_mod, "_DEFAULT_DATABASE_PATH", str(tmp_path / "cache"))

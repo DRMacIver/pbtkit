@@ -1,5 +1,5 @@
-# This file is part of Minithesis, which may be found at
-# https://github.com/DRMacIver/minithesis
+# This file is part of Pbtkit, which may be found at
+# https://github.com/DRMacIver/pbtkit
 #
 # This work is copyright (C) 2020 David R. MacIver.
 #
@@ -14,18 +14,18 @@ from random import Random
 
 import pytest
 
-import minithesis.core as core
-import minithesis.generators as gs
-from minithesis import Unsatisfiable, run_test
-from minithesis.caching import CachedTestFunction, _cache_key
-from minithesis.core import (
+import pbtkit.core as core
+import pbtkit.generators as gs
+from pbtkit import Unsatisfiable, run_test
+from pbtkit.caching import CachedTestFunction, _cache_key
+from pbtkit.core import (
     Frozen,
     IntegerChoice,
     Status,
 )
-from minithesis.core import MinithesisState as State
-from minithesis.core import TestCase as TC
-from minithesis.database import DirectoryDB
+from pbtkit.core import PbtkitState as State
+from pbtkit.core import TestCase as TC
+from pbtkit.database import DirectoryDB
 
 
 @pytest.mark.requires("database")

@@ -1,4 +1,4 @@
-"""Advanced string shrink passes for minithesis.
+"""Advanced string shrink passes for pbtkit.
 
 Provides redistribute_string_pairs, which improves shrinking quality
 for tests involving multiple string choices by transferring length
@@ -7,22 +7,22 @@ from earlier values to later ones.
 
 from __future__ import annotations
 
-from minithesis.core import (
-    MinithesisState,
+from pbtkit.core import (
+    PbtkitState,
     shrink_pass,
 )
-from minithesis.shrinking.sequence_redistribution import redistribute_sequence_pair
-from minithesis.text import StringChoice
+from pbtkit.shrinking.sequence_redistribution import redistribute_sequence_pair
+from pbtkit.text import StringChoice
 
 
-def _string_indices(state: MinithesisState) -> list[int]:
+def _string_indices(state: PbtkitState) -> list[int]:
     """Return indices of all StringChoice nodes in the result."""
     assert state.result is not None
     return [i for i, n in enumerate(state.result) if isinstance(n.kind, StringChoice)]
 
 
 @shrink_pass
-def redistribute_string_pairs(state: MinithesisState) -> None:
+def redistribute_string_pairs(state: PbtkitState) -> None:
     """Try redistributing length between pairs of string values.
 
     For adjacent and skip-one-adjacent pairs of StringChoice nodes,

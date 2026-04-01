@@ -1,7 +1,7 @@
-"""Test function caching for minithesis.
+"""Test function caching for pbtkit.
 
 This module provides cached_test_function, a decorator/wrapper that
-adds choice-tree caching to MinithesisState.test_function. It avoids
+adds choice-tree caching to PbtkitState.test_function. It avoids
 redundant test evaluations during shrinking by predicting outcomes
 from previously observed choice sequences.
 
@@ -15,9 +15,9 @@ import struct
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from minithesis.core import (
+from pbtkit.core import (
     ChoiceNode,
-    MinithesisState,
+    PbtkitState,
     Status,
     TestCase,
     run_phase,
@@ -132,14 +132,14 @@ class CachedTestFunction:
 
 
 def cached_test_function(fn: Callable) -> Callable:
-    """Wrap a MinithesisState.test_function method to add
+    """Wrap a PbtkitState.test_function method to add
     choice-tree caching during shrinking.
 
     When the cache is not active (i.e. during generation),
     the original method is called directly. A run_phase
     activates the cache before shrinking begins."""
 
-    def wrapper(self: MinithesisState, test_case: TestCase) -> None:
+    def wrapper(self: PbtkitState, test_case: TestCase) -> None:
         cache: CachedTestFunction | None = getattr(self.extras, "cache", None)
         # Only cache deterministic test cases (from for_choices).
         # Test cases with a random source (generation, targeting)
@@ -158,11 +158,11 @@ def cached_test_function(fn: Callable) -> Callable:
     return wrapper
 
 
-# Apply to MinithesisState.
-MinithesisState.test_function = cached_test_function(MinithesisState.test_function)
+# Apply to PbtkitState.
+PbtkitState.test_function = cached_test_function(PbtkitState.test_function)
 
 
 @run_phase
-def _activate_cache(state: MinithesisState) -> None:
+def _activate_cache(state: PbtkitState) -> None:
     """Activate the choice-tree cache before shrinking."""
     state.extras.cache = CachedTestFunction()

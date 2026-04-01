@@ -1,4 +1,4 @@
-"""Float support for minithesis.
+"""Float support for pbtkit.
 
 This module provides FloatChoice, the draw_float method, float
 serialization, and the float shrink pass. It is imported by the
@@ -14,13 +14,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from minithesis.core import (
+from pbtkit.core import (
     ChoiceType,
     TestCase,
     bin_search_down,
     value_shrinker,
 )
-from minithesis.features import needed_for
+from pbtkit.features import needed_for
 
 # ---------------------------------------------------------------------------
 # Constants

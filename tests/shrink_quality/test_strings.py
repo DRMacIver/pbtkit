@@ -7,9 +7,9 @@ from random import Random
 
 import pytest
 
-import minithesis.generators as gs
-from minithesis.core import MinithesisState as State
-from minithesis.core import Status
+import pbtkit.generators as gs
+from pbtkit.core import PbtkitState as State
+from pbtkit.core import Status
 
 from .conftest import minimal
 
@@ -70,7 +70,7 @@ def test_string_length_redistribution():
     """When two strings share a total length constraint (len(v0)+len(v1) >= N),
     the shrinker should redistribute length to make the first string as short
     as possible, even though shortening v0 requires lengthening v1.
-    Regression for shrink quality found by minismith."""
+    Regression for shrink quality found by pbtsmith."""
 
     def tf(tc):
         v0 = tc.draw(gs.text(min_codepoint=32, max_codepoint=126, max_size=20))

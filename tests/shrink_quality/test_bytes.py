@@ -4,10 +4,10 @@ from random import Random
 
 import pytest
 
-import minithesis.generators as gs
-from minithesis.bytes import BytesChoice
-from minithesis.core import MinithesisState as State
-from minithesis.core import Status
+import pbtkit.generators as gs
+from pbtkit.bytes import BytesChoice
+from pbtkit.core import PbtkitState as State
+from pbtkit.core import Status
 
 pytestmark = pytest.mark.requires("bytes")
 
@@ -16,7 +16,7 @@ pytestmark = pytest.mark.requires("bytes")
 def test_redistribute_bytes_between_pairs():
     """When two bytes values share a total length constraint, the shrinker
     should redistribute to make the first empty and the second full.
-    Regression for shrink quality found by minismith."""
+    Regression for shrink quality found by pbtsmith."""
 
     def tf(tc):
         v0 = tc.draw(gs.binary(max_size=20))
@@ -108,7 +108,7 @@ def test_bytes_redistribution_moves_all():
 def test_bytes_increment_shortens_sequence():
     """Growing a bytes value by one byte can eliminate subsequent choices,
     producing a shorter (and thus simpler) overall sequence.
-    Regression for shrink quality found by minismith."""
+    Regression for shrink quality found by pbtsmith."""
 
     def tf(tc):
         v0 = tc.draw(gs.binary(max_size=20))
@@ -136,7 +136,7 @@ def test_lower_and_bump_stale_kind_after_replace():
     """lower_and_bump must validate values against the CURRENT kind at
     position j, not the kind from before the replace. A replace can
     change types via value punning (e.g. BytesChoice → BooleanChoice).
-    Regression for TypeError in sort_key found by minismith."""
+    Regression for TypeError in sort_key found by pbtsmith."""
 
     @gs.composite
     def pair(tc):

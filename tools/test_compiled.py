@@ -14,12 +14,12 @@ import os
 import subprocess
 import sys
 
-from compile_minithesis import EXTENSIONS, ROOT, BUILD, expand_disabled
+from compile_pbtkit import EXTENSIONS, ROOT, BUILD, expand_disabled
 
 
 def _compile(args: list[str]) -> bool:
     result = subprocess.run(
-        ["uv", "run", "python", "tools/compile_minithesis.py"] + args,
+        ["uv", "run", "python", "tools/compile_pbtkit.py"] + args,
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -33,7 +33,7 @@ def _compile(args: list[str]) -> bool:
 def _typecheck() -> bool:
     pkg = BUILD / "pkg"
     result = subprocess.run(
-        ["uv", "run", "pyright", str(pkg / "minithesis" / "core.py")],
+        ["uv", "run", "pyright", str(pkg / "pbtkit" / "core.py")],
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -49,13 +49,13 @@ def _test_with_coverage(disabled: frozenset[str]) -> bool:
     pkg = BUILD / "pkg"
     env = {**os.environ}
     if disabled:
-        env["MINITHESIS_DISABLED"] = ",".join(sorted(disabled))
+        env["PBTKIT_DISABLED"] = ",".join(sorted(disabled))
 
     try:
         result = subprocess.run(
             [
                 "uv", "run", "python", "-m", "coverage", "run",
-                f"--source={pkg / 'minithesis'}",
+                f"--source={pkg / 'pbtkit'}",
                 "--branch",
                 "-m", "pytest", "tests/",
                 "-m", "not hypothesis",
@@ -91,7 +91,7 @@ def _test_with_coverage(disabled: frozenset[str]) -> bool:
         [
             "uv", "run", "coverage", "report",
             "--show-missing",
-            f"--include={pkg / 'minithesis' / 'core.py'}",
+            f"--include={pkg / 'pbtkit' / 'core.py'}",
             "--fail-under=100",
         ],
         cwd=ROOT,

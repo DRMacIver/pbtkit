@@ -7,11 +7,11 @@ from random import Random
 
 import pytest
 
-import minithesis.core as core
-import minithesis.generators as gs
-from minithesis import run_test
-from minithesis.core import ChoiceNode, IntegerChoice, Status
-from minithesis.core import MinithesisState as State
+import pbtkit.core as core
+import pbtkit.generators as gs
+from pbtkit import run_test
+from pbtkit.core import ChoiceNode, IntegerChoice, Status
+from pbtkit.core import PbtkitState as State
 
 from .conftest import minimal
 
@@ -262,7 +262,7 @@ def test_can_collectively_minimize_text():
 def test_sorting_pass_survives_type_changes_from_lists():
     """Sorting insertion-sort must not crash when a successful swap
     changes the result so that choice types at pre-computed indices
-    shift. Regression for AssertionError in sorting.py found by minismith."""
+    shift. Regression for AssertionError in sorting.py found by pbtsmith."""
 
     with pytest.raises(AssertionError):
 
@@ -276,7 +276,7 @@ def test_sorting_pass_survives_type_changes_from_lists():
 def test_sorting_full_sort_survives_stale_indices():
     """Sorting full-sort path must not crash when a prior group's
     sort shortens the result, making indices for the next group
-    invalid. Regression for IndexError in sorting.py found by minismith."""
+    invalid. Regression for IndexError in sorting.py found by pbtsmith."""
 
     try:
 
@@ -321,7 +321,7 @@ def test_sorting_stale_filter_with_punning():
 def test_unique_list_shrinks_using_negative_values():
     """Unique signed integer lists should shrink to use negative values
     when that gives smaller absolute values (e.g. [0,1,-1,2,-2] not [0,1,2,3,4]).
-    Regression for shrink quality found by minismith."""
+    Regression for shrink quality found by pbtsmith."""
 
     def tf(tc):
         v0 = tc.draw(gs.lists(gs.integers(-10, 10), max_size=5, unique=True))
@@ -339,7 +339,7 @@ def test_unique_list_shrinks_using_negative_values():
 def test_redistribute_stale_indices_after_type_change():
     """redistribute_integers must handle stale indices when previous passes
     change the result structure, causing a node that was IntegerChoice to
-    become BooleanChoice. Regression for AssertionError found by minismith."""
+    become BooleanChoice. Regression for AssertionError found by pbtsmith."""
 
     def tf(tc):
         v0 = tc.draw(gs.booleans())
@@ -360,7 +360,7 @@ def test_redistribute_stale_indices_after_type_change():
 def test_sort_insertion_stale_indices():
     """Sorting insertion sort must handle stale indices when a swap
     changes the result structure (e.g. shortening via value punning).
-    Regression for IndexError in sorting.py found by minismith."""
+    Regression for IndexError in sorting.py found by pbtsmith."""
 
     def tf(tc):
         v0 = tc.draw(gs.lists(gs.integers(0, 20), max_size=10, unique=True))

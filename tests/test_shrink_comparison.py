@@ -1,9 +1,9 @@
-"""Compare minithesis shrinking quality against Hypothesis.
+"""Compare pbtkit shrinking quality against Hypothesis.
 
-Generates random minismith programs, runs them under both a Hypothesis
-ConjectureRunner and minithesis, and checks that minithesis produces a
+Generates random pbtsmith programs, runs them under both a Hypothesis
+ConjectureRunner and pbtkit, and checks that pbtkit produces a
 result at least as good as the worst of 10 Hypothesis runs under the
-minithesis shrinking order.
+pbtkit shrinking order.
 """
 
 from __future__ import annotations
@@ -23,13 +23,13 @@ from hypothesis.internal.conjecture.engine import ConjectureRunner
 from hypothesis.internal.intervalsets import IntervalSet
 
 from hypothesis import HealthCheck, assume, given, note, settings
-from minithesis.bytes import BytesChoice
-from minithesis.core import (  # noqa: F401
+from pbtkit.bytes import BytesChoice
+from pbtkit.core import (  # noqa: F401
     BooleanChoice,
     ChoiceNode,
     Generator,
     IntegerChoice,
-    MinithesisState,
+    PbtkitState,
     Status,
     StopTest,
     TestCase,
@@ -37,11 +37,11 @@ from minithesis.core import (  # noqa: F401
     run_test,
     sort_key,
 )
-from minithesis.floats import FloatChoice
+from pbtkit.floats import FloatChoice
 
 # We need the generators in scope so the exec'd program can reference them.
 try:
-    from minithesis.generators import (  # noqa: F401
+    from pbtkit.generators import (  # noqa: F401
         binary,
         booleans,
         composite,
@@ -58,9 +58,9 @@ try:
     )
 except (ImportError, NotImplementedError):
     pytest.skip("requires all generator types", allow_module_level=True)
-from minithesis.text import StringChoice
+from pbtkit.text import StringChoice
 
-from .test_minismith import Failure, program
+from .test_pbtsmith import Failure, program
 
 # ---------------------------------------------------------------------------
 # ConjectureTestCase adapter
@@ -68,10 +68,10 @@ from .test_minismith import Failure, program
 
 
 class ConjectureTestCase:
-    """Adapts a Hypothesis ConjectureData to the minithesis TestCase interface.
+    """Adapts a Hypothesis ConjectureData to the pbtkit TestCase interface.
 
     Each draw method delegates to the corresponding ConjectureData primitive
-    and records a ChoiceNode for later comparison under minithesis sort_key.
+    and records a ChoiceNode for later comparison under pbtkit sort_key.
     The any() method wraps generator calls in start_span/stop_span."""
 
     def __init__(self, data: ConjectureData):
@@ -189,7 +189,7 @@ class ConjectureTestCase:
         if status == Status.INVALID:
             self.data.mark_invalid("rejected")
         elif status == Status.INTERESTING:
-            self.data.mark_interesting(("minismith",))
+            self.data.mark_interesting(("pbtsmith",))
         elif status == Status.EARLY_STOP:
             self.data.mark_invalid("early stop")
 
@@ -203,7 +203,7 @@ class ConjectureTestCase:
 
 
 def _extract_test_body(program_code: str):
-    """Extract the test body function from a minismith program string.
+    """Extract the test body function from a pbtsmith program string.
 
     Returns a callable that takes a TestCase-like object and runs the
     test body, raising Failure on assertion failure."""
@@ -245,7 +245,7 @@ def _extract_test_body(program_code: str):
 
     func_source = "\n".join(preamble + body_lines)
     namespace = dict(globals())
-    exec(compile(func_source, "<minismith-body>", "exec"), namespace)
+    exec(compile(func_source, "<pbtsmith-body>", "exec"), namespace)
     return namespace["_test_body"]
 
 
@@ -262,7 +262,7 @@ def _run_hypothesis(test_body, seed: int) -> list[ChoiceNode] | None:
             test_body(tc)
         except Failure:
             captured_nodes.append(list(tc.nodes))
-            data.mark_interesting(("minismith",))
+            data.mark_interesting(("pbtsmith",))
         except StopTest:
             pass
 
@@ -291,8 +291,8 @@ def _run_hypothesis(test_body, seed: int) -> list[ChoiceNode] | None:
     return tc.nodes
 
 
-def _run_minithesis(test_body, seed: int) -> list[ChoiceNode] | None:
-    """Run the test body under minithesis with shrinking.
+def _run_pbtkit(test_body, seed: int) -> list[ChoiceNode] | None:
+    """Run the test body under pbtkit with shrinking.
 
     Returns the shrunk choice nodes, or None if no interesting
     example was found."""
@@ -303,7 +303,7 @@ def _run_minithesis(test_body, seed: int) -> list[ChoiceNode] | None:
         except Failure:
             tc.mark_status(Status.INTERESTING)
 
-    state = MinithesisState(Random(seed), test_fn, 100)
+    state = PbtkitState(Random(seed), test_fn, 100)
     state.run()
     return state.result
 
@@ -327,18 +327,18 @@ pytestmark = [
     deadline=None,
     suppress_health_check=[HealthCheck.too_slow],
 )
-def test_minithesis_shrinks_at_least_as_well_as_hypothesis(
-    minithesis_program: str,
+def test_pbtkit_shrinks_at_least_as_well_as_hypothesis(
+    pbtkit_program: str,
 ) -> None:
-    """Minithesis should produce a result at least as good as the worst
-    of 10 Hypothesis runs, under the minithesis shrinking order."""
-    note(minithesis_program)
+    """Pbtkit should produce a result at least as good as the worst
+    of 10 Hypothesis runs, under the pbtkit shrinking order."""
+    note(pbtkit_program)
 
-    test_body = _extract_test_body(minithesis_program)
+    test_body = _extract_test_body(pbtkit_program)
 
-    # Run under minithesis first — skip programs where it finds nothing.
-    minithesis_result = _run_minithesis(test_body, seed=0)
-    assume(minithesis_result is not None)
+    # Run under pbtkit first — skip programs where it finds nothing.
+    pbtkit_result = _run_pbtkit(test_body, seed=0)
+    assume(pbtkit_result is not None)
 
     # Run under Hypothesis 10 times with different seeds.
     hypothesis_results = []
@@ -349,10 +349,10 @@ def test_minithesis_shrinks_at_least_as_well_as_hypothesis(
 
     assume(len(hypothesis_results) > 0)
 
-    # The worst Hypothesis result under minithesis sort_key.
+    # The worst Hypothesis result under pbtkit sort_key.
     worst_hypothesis = max(hypothesis_results, key=sort_key)
 
-    if sort_key(minithesis_result) > sort_key(worst_hypothesis):
+    if sort_key(pbtkit_result) > sort_key(worst_hypothesis):
         # Replay both results through the test body, capturing the
         # top-level values returned by tc.draw() calls.
         def _replay(nodes):
@@ -373,21 +373,21 @@ def test_minithesis_shrinks_at_least_as_well_as_hypothesis(
                 pass
             return draws
 
-        mt_draws = _replay(minithesis_result)
+        mt_draws = _replay(pbtkit_result)
         hy_draws = _replay(worst_hypothesis)
 
         mt_vals = [v for _, v in mt_draws]
         hy_vals = [v for _, v in hy_draws]
         note(
-            f"\nMinithesis choices: {[n.value for n in minithesis_result]}"
-            f"\nMinithesis values:  {mt_vals!r}"
+            f"\nPbtkit choices: {[n.value for n in pbtkit_result]}"
+            f"\nPbtkit values:  {mt_vals!r}"
             f"\nHypothesis choices: {[n.value for n in worst_hypothesis]}"
             f"\nHypothesis values:  {hy_vals!r}"
         )
 
         assert False, (
-            f"Minithesis result {[n.value for n in minithesis_result]} "
-            f"(sort_key={sort_key(minithesis_result)}) is worse than "
+            f"Pbtkit result {[n.value for n in pbtkit_result]} "
+            f"(sort_key={sort_key(pbtkit_result)}) is worse than "
             f"worst Hypothesis result {[n.value for n in worst_hypothesis]} "
             f"(sort_key={sort_key(worst_hypothesis)})"
         )

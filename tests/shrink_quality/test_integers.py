@@ -7,10 +7,10 @@ from random import Random
 
 import pytest
 
-import minithesis.generators as gs
-from minithesis import run_test
-from minithesis.core import MinithesisState as State
-from minithesis.core import Status
+import pbtkit.generators as gs
+from pbtkit import run_test
+from pbtkit.core import PbtkitState as State
+from pbtkit.core import Status
 
 from .conftest import minimal
 
@@ -167,7 +167,7 @@ def test_redistribute_stale_indices_at_gap_two():
     The condition pair_idx - 1 + gap >= len(indices) fires when the replacement
     shrinks the result from 3 integer nodes to 2, then gap=2 iterates pair_idx=1
     which needs indices[2] that no longer exists.
-    Regression for stale index guard found by minismith."""
+    Regression for stale index guard found by pbtsmith."""
 
     def tf(tc):
         gate = tc.draw_integer(0, 138)

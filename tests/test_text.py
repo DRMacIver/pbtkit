@@ -1,5 +1,5 @@
-# This file is part of Minithesis, which may be found at
-# https://github.com/DRMacIver/minithesis
+# This file is part of Pbtkit, which may be found at
+# https://github.com/DRMacIver/pbtkit
 #
 # This work is copyright (C) 2020 David R. MacIver.
 #
@@ -11,14 +11,14 @@ from random import Random
 
 import pytest
 
-from minithesis import DirectoryDB, run_test
-from minithesis.core import MinithesisState, Status
+from pbtkit import DirectoryDB, run_test
+from pbtkit.core import PbtkitState, Status
 
 pytestmark = pytest.mark.requires("text")
-import minithesis.generators as gs
-from minithesis.core import TestCase as TC
-from minithesis.database import SerializationTag
-from minithesis.text import StringChoice
+import pbtkit.generators as gs
+from pbtkit.core import TestCase as TC
+from pbtkit.database import SerializationTag
+from pbtkit.text import StringChoice
 
 
 def test_text_basic():
@@ -207,7 +207,7 @@ def test_text_sorts_characters():
         if len(s) >= 3 and all(s[i] > s[i + 1] for i in range(len(s) - 1)):
             tc.mark_status(Status.INTERESTING)
 
-    state = MinithesisState(Random(0), tf, 10000)
+    state = PbtkitState(Random(0), tf, 10000)
     state.run()
     assert state.result is not None
     val = state.result[0].value
@@ -222,7 +222,7 @@ def test_text_shrinks_to_simplest():
         # Always interesting — shrinker replaces string with "" (simplest).
         tc.mark_status(Status.INTERESTING)
 
-    state = MinithesisState(Random(0), tf, 100)
+    state = PbtkitState(Random(0), tf, 100)
     state.run()
     assert state.result is not None
     assert state.result[0].value == ""
@@ -242,7 +242,7 @@ def test_text_redistributes_to_empty():
         if len(s1) + len(s2) >= 3:
             tc.mark_status(Status.INTERESTING)
 
-    state = MinithesisState(Random(0), tf, 1000)
+    state = PbtkitState(Random(0), tf, 1000)
     state.run()
     assert state.result is not None
     vals = [n.value for n in state.result if isinstance(n.value, str)]
@@ -270,6 +270,6 @@ def test_text_redistributes_pair():
         if len(s1) + len(s2) >= 5:
             tc.mark_status(Status.INTERESTING)
 
-    state = MinithesisState(Random(0), tf, 1000)
+    state = PbtkitState(Random(0), tf, 1000)
     state.run()
     assert state.result is not None

@@ -1,4 +1,4 @@
-"""Sorting shrink pass for minithesis.
+"""Sorting shrink pass for pbtkit.
 
 Groups values by ChoiceType and tries sorting each group by sort key.
 First attempts a full sort, then falls back to insertion sort where
@@ -9,14 +9,14 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from minithesis.core import (
-    MinithesisState,
+from pbtkit.core import (
+    PbtkitState,
     shrink_pass,
 )
 
 
 @shrink_pass
-def sort_values(state: MinithesisState) -> None:
+def sort_values(state: PbtkitState) -> None:
     """Group values by choice type and try sorting each group."""
     assert state.result is not None
 
@@ -39,9 +39,7 @@ def sort_values(state: MinithesisState) -> None:
             break
 
 
-def _try_sort_group(
-    state: MinithesisState, choice_type: type, indices: list[int]
-) -> None:
+def _try_sort_group(state: PbtkitState, choice_type: type, indices: list[int]) -> None:
     """Try sorting the values at the given indices by the sort key
     of the first node's kind. First try a full sort, then fall back
     to insertion sort."""
@@ -85,7 +83,7 @@ def _try_sort_group(
 
 
 @shrink_pass
-def swap_adjacent_blocks(state: MinithesisState) -> None:
+def swap_adjacent_blocks(state: PbtkitState) -> None:
     """Try swapping adjacent blocks of choices of the same size.
 
     This handles cases like dictionary entries where each entry spans

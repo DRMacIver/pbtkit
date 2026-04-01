@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Test each feature in isolation.
 
-For each extension, compiles minithesis with only that feature enabled,
+For each extension, compiles pbtkit with only that feature enabled,
 then runs the test suite against the compiled output.
 """
 
@@ -11,7 +11,7 @@ import os
 import subprocess
 import sys
 
-from compile_minithesis import EXTENSIONS, ROOT, expand_disabled
+from compile_pbtkit import EXTENSIONS, ROOT, expand_disabled
 
 
 def main() -> None:
@@ -23,7 +23,7 @@ def main() -> None:
 
         # Compile with only this feature
         result = subprocess.run(
-            ["uv", "run", "python", "tools/compile_minithesis.py", f"--features={ext}"],
+            ["uv", "run", "python", "tools/compile_pbtkit.py", f"--features={ext}"],
             cwd=ROOT,
         )
         if result.returncode != 0:
@@ -31,9 +31,9 @@ def main() -> None:
             failed.append(ext)
             continue
 
-        # Compute disabled set for MINITHESIS_DISABLED env var
+        # Compute disabled set for PBTKIT_DISABLED env var
         disabled = expand_disabled(frozenset(set(EXTENSIONS) - {ext}))
-        env = {**os.environ, "MINITHESIS_DISABLED": ",".join(sorted(disabled))}
+        env = {**os.environ, "PBTKIT_DISABLED": ",".join(sorted(disabled))}
 
         result = subprocess.run(
             [

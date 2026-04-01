@@ -1,4 +1,4 @@
-"""Duplication shrink passes for minithesis.
+"""Duplication shrink passes for pbtkit.
 
 This module adds passes that reduce duplicate values simultaneously.
 For each (ChoiceType, value) pair that appears more than once, it
@@ -10,15 +10,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from minithesis.core import (
+from pbtkit.core import (
     VALUE_SHRINKERS,
-    MinithesisState,
+    PbtkitState,
     shrink_pass,
 )
 
 
 def _find_duplicate_groups(
-    state: MinithesisState,
+    state: PbtkitState,
 ) -> list[tuple[type, list[int]]]:
     """Find groups of indices sharing the same (type, value),
     with at least 2 members."""
@@ -35,7 +35,7 @@ def _find_duplicate_groups(
 
 
 @shrink_pass
-def shrink_duplicates(state: MinithesisState) -> None:
+def shrink_duplicates(state: PbtkitState) -> None:
     """Find duplicate (type, value) pairs and try shrinking them
     simultaneously using all registered value shrinkers."""
     assert state.result is not None

@@ -1,4 +1,4 @@
-"""Sequence shrinking utilities for minithesis.
+"""Sequence shrinking utilities for pbtkit.
 
 Provides shrink_sequence, used by the bytes and text value shrinkers
 to shrink variable-length sequence choices (shorten, remove elements,
@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from minithesis.core import bin_search_down
+from pbtkit.core import bin_search_down
 
 
 def shrink_sequence(

@@ -7,12 +7,12 @@ from random import Random
 
 import pytest
 
-import minithesis.generators as gs
-from minithesis import Generator, run_test
-from minithesis.core import MinithesisState as State
-from minithesis.core import Status
-from minithesis.core import TestCase as TC
-from minithesis.shrinking.index_passes import lower_and_bump
+import pbtkit.generators as gs
+from pbtkit import Generator, run_test
+from pbtkit.core import PbtkitState as State
+from pbtkit.core import Status
+from pbtkit.core import TestCase as TC
+from pbtkit.shrinking.index_passes import lower_and_bump
 
 from .conftest import minimal
 
@@ -123,7 +123,7 @@ def test_early_exit_via_flag_with_preceding_draws():
     """When v0=True triggers an early exit but v1 and v2 are drawn
     BEFORE the v0 check, the shrinker must coordinate: shorten v1/v2
     AND flip v0 simultaneously. Hypothesis finds [True, b'', False]
-    (3 choices) but minithesis gets stuck at 5 choices with v0=False.
+    (3 choices) but pbtkit gets stuck at 5 choices with v0=False.
 
     Found by the Hypothesis shrink comparison test."""
 
@@ -279,7 +279,7 @@ def test_shorter_path_when_guard_precedes_expensive_draw():
 
 @pytest.mark.parametrize("seed", range(10))
 def test_finds_small_list_even_with_bad_lists(capsys, seed):
-    """Minithesis can't really handle shrinking arbitrary
+    """Pbtkit can't really handle shrinking arbitrary
     monadic bind, but length parameters are a common case
     of monadic bind that it has a little bit of special
     casing for. This test ensures that that special casing
@@ -288,7 +288,7 @@ def test_finds_small_list_even_with_bad_lists(capsys, seed):
     The problem is that if you generate a list by drawing
     a length and then drawing that many elements, you can
     end up with something like ``[1001, 0, 0]`` then
-    deleting those zeroes in the middle is a pain. minithesis
+    deleting those zeroes in the middle is a pain. pbtkit
     will solve this by first sorting those elements, so that
     we have ``[0, 0, 1001]``, and then lowering the length
     by two, turning it into ``[1001]`` as desired.
@@ -316,7 +316,7 @@ def test_shrinking_mixed_choice_types_no_sort_crash():
     IntegerChoice and BooleanChoice nodes and shrinking changes
     which type is at a given position.
 
-    Regression test for a TypeError found by minismith."""
+    Regression test for a TypeError found by pbtsmith."""
 
     def tf(tc):
         # Mix integer and boolean choices — shrinking may change
@@ -337,7 +337,7 @@ def test_shrinking_stale_indices_no_redistribute_crash():
     shrinking changes the result length, making pre-computed
     indices stale.
 
-    Regression test for an IndexError found by minismith."""
+    Regression test for an IndexError found by pbtsmith."""
 
     def tf(tc):
         # Variable-length sequence: the number of integers drawn
@@ -376,7 +376,7 @@ def test_lower_and_bump_explores_new_range():
     """When decrementing an integer changes the range of a non-adjacent
     later integer, lower_and_bump should explore the new range via
     absolute power-of-2 values at various gaps.
-    Regression for shrink quality found by minismith."""
+    Regression for shrink quality found by pbtsmith."""
 
     def tf(tc):
         v0 = tc.draw(gs.sampled_from([32, 46]))
@@ -398,7 +398,7 @@ def test_lower_and_bump_explores_new_range():
 def test_lower_and_bump_tries_negative_values():
     """lower_and_bump should try negative absolute powers of 2 when
     exploring a new range, not just positive ones.
-    Regression for shrink quality found by minismith."""
+    Regression for shrink quality found by pbtsmith."""
 
     @gs.composite
     def pair(tc):
@@ -433,7 +433,7 @@ def test_increment_to_max_shortens_via_sampled_from():
     """try_shortening_via_increment should try max_value, not just +1.
     For gs.sampled_from([1, 1, 0]), index 2 maps to 0 which triggers an
     early exit (1 choice instead of 2).
-    Regression for shrink quality found by minismith."""
+    Regression for shrink quality found by pbtsmith."""
 
     def tf(tc):
         v0 = tc.draw(gs.sampled_from([1, 1, 0]))
@@ -454,7 +454,7 @@ def test_lower_and_bump_targets_booleans():
     """lower_and_bump should try bumping boolean targets, not just
     integer ones. Decrementing an integer while bumping a boolean
     from False to True can produce a simpler overall sort_key.
-    Regression for shrink quality found by minismith."""
+    Regression for shrink quality found by pbtsmith."""
 
     def tf(tc):
         v0 = tc.draw(gs.integers(0, 1))
@@ -479,7 +479,7 @@ def test_increment_with_dependent_continuation():
     """try_shortening_via_increment must pass prefix_nodes so that
     value punning maps simplest→simplest when the continuation
     changes type (e.g. list boolean → integer).
-    Regression for shrink quality found by minismith."""
+    Regression for shrink quality found by pbtsmith."""
 
     def tf(tc):
         v0 = tc.draw(gs.integers(0, 0))
@@ -530,7 +530,7 @@ def test_lower_and_bump_with_float_target():
 def test_redistribute_stale_indices_with_one_of():
     """redistribute_integers must handle stale indices when one_of
     changes the result structure during shrinking.
-    Regression for AssertionError in redistribute found by minismith."""
+    Regression for AssertionError in redistribute found by pbtsmith."""
 
     def tf(tc):
         v0 = tc.draw(
@@ -554,7 +554,7 @@ def test_redistribute_stale_indices_with_one_of():
 def test_lower_and_bump_stale_j_after_replace():
     """lower_and_bump must handle j going out of bounds when a replace
     shortens the result during the bytes/string bump loop.
-    Regression for AssertionError in lower_and_bump found by minismith."""
+    Regression for AssertionError in lower_and_bump found by pbtsmith."""
 
     def tf(tc):
         v0 = tc.draw(gs.booleans())
@@ -671,7 +671,7 @@ def test_one_of_switches_to_shorter_branch():
     setting the inner index AND the value to non-zero simultaneously —
     a 3-position compound change.
 
-    Regression for shrink quality found by minismith."""
+    Regression for shrink quality found by pbtsmith."""
 
     def tf(tc):
         v0 = tc.draw(

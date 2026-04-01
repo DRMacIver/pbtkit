@@ -1,4 +1,4 @@
-"""Bind deletion shrink pass for minithesis.
+"""Bind deletion shrink pass for pbtkit.
 
 When a value controls the length of a downstream sequence (e.g.
 via flat_map), reducing that value may shorten the test case without
@@ -10,10 +10,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from minithesis.core import (
+from pbtkit.core import (
     VALUE_SHRINKERS,
     ChoiceNode,
-    MinithesisState,
+    PbtkitState,
     Status,
     TestCase,
     shrink_pass,
@@ -21,7 +21,7 @@ from minithesis.core import (
 
 
 @shrink_pass
-def bind_deletion(state: MinithesisState) -> None:
+def bind_deletion(state: PbtkitState) -> None:
     """For each non-minimal value, try shrinking it and then deleting
     the excess choices that result from the shorter test case."""
     assert state.result is not None
@@ -44,7 +44,7 @@ def bind_deletion(state: MinithesisState) -> None:
         i += 1
 
 
-def _try_replace_with_deletion(state: MinithesisState, idx: int, value: Any) -> bool:
+def _try_replace_with_deletion(state: PbtkitState, idx: int, value: Any) -> bool:
     """Try replacing the value at idx. If the result is valid but
     not interesting, and the test case used fewer choices, try
     deleting regions after idx to recover an interesting result."""
@@ -78,7 +78,7 @@ def _try_replace_with_deletion(state: MinithesisState, idx: int, value: Any) -> 
 
 
 def _try_deletions(
-    state: MinithesisState,
+    state: PbtkitState,
     attempt: list[ChoiceNode],
     idx: int,
     k: int,

@@ -1,5 +1,5 @@
-# This file is part of Minithesis, which may be found at
-# https://github.com/DRMacIver/minithesis
+# This file is part of Pbtkit, which may be found at
+# https://github.com/DRMacIver/pbtkit
 #
 # This work is copyright (C) 2020 David R. MacIver.
 #
@@ -11,7 +11,7 @@ from random import Random
 
 import pytest
 
-from minithesis import run_test
+from pbtkit import run_test
 
 pytestmark = pytest.mark.requires("targeting")
 

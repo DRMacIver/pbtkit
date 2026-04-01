@@ -1,4 +1,4 @@
-"""Generator functions for minithesis.
+"""Generator functions for pbtkit.
 
 This module provides the user-facing API for generating test data,
 analogous to hypothesis.strategies in Hypothesis.
@@ -14,8 +14,8 @@ from typing import (
     TypeVar,
 )
 
-from minithesis.collections import many
-from minithesis.core import Generator, TestCase
+from pbtkit.collections import many
+from pbtkit.core import Generator, TestCase
 
 T = TypeVar("T", covariant=True)
 U = TypeVar("U")

@@ -1,4 +1,4 @@
-"""Index-based shrink passes for minithesis.
+"""Index-based shrink passes for pbtkit.
 
 Provides lower_and_bump and try_shortening_via_increment, which use
 the to_index/from_index API on ChoiceType for type-generic shrinking.
@@ -6,21 +6,21 @@ the to_index/from_index API on ChoiceType for type-generic shrinking.
 
 from __future__ import annotations
 
-from minithesis.core import (
-    MinithesisState,
+from pbtkit.core import (
+    PbtkitState,
     TestCase,
     shrink_pass,
 )
 
 
-def _indexed_indices(state: MinithesisState) -> list[int]:
+def _indexed_indices(state: PbtkitState) -> list[int]:
     """Return indices of all nodes whose kind supports to_index/from_index."""
     assert state.result is not None
     return [i for i, n in enumerate(state.result) if n.kind.supports_index]
 
 
 @shrink_pass
-def lower_and_bump(state: MinithesisState) -> None:
+def lower_and_bump(state: PbtkitState) -> None:
     """For indexed nodes not at simplest, try decrementing (lowering the
     index) and bumping a later node (raising its index). Uses
     to_index/from_index for type-generic operation.
@@ -128,7 +128,7 @@ def lower_and_bump(state: MinithesisState) -> None:
 
 
 @shrink_pass
-def try_shortening_via_increment(state: MinithesisState) -> None:
+def try_shortening_via_increment(state: PbtkitState) -> None:
     """Try incrementing each node's index to see if the test takes a
     shorter path (e.g., triggering an earlier assertion).
 

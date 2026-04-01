@@ -9,7 +9,7 @@ from collections.abc import Callable
 from random import Random
 from typing import TypeVar
 
-from minithesis.core import Generator, MinithesisState, Status, StopTest, TestCase
+from pbtkit.core import Generator, PbtkitState, Status, StopTest, TestCase
 
 T = TypeVar("T")
 
@@ -31,7 +31,7 @@ def minimal(
             best[0] = value
             tc.mark_status(Status.INTERESTING)
 
-    state = MinithesisState(Random(0), test_function, max_examples)
+    state = PbtkitState(Random(0), test_function, max_examples)
     state.run()
     assert state.result is not None, "No example found"
     # Replay to capture the final shrunk value.

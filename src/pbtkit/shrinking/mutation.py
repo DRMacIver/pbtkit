@@ -1,4 +1,4 @@
-"""Mutation-based shrink pass for minithesis.
+"""Mutation-based shrink pass for pbtkit.
 
 Tries random mutations of the current best result to escape local optima
 that deterministic passes can't find. Particularly useful when switching
@@ -13,8 +13,8 @@ from __future__ import annotations
 
 from random import Random
 
-from minithesis.core import (
-    MinithesisState,
+from pbtkit.core import (
+    PbtkitState,
     TestCase,
     shrink_pass,
 )
@@ -24,7 +24,7 @@ RANDOM_ATTEMPTS = 3
 
 
 @shrink_pass
-def mutate_and_shrink(state: MinithesisState) -> None:
+def mutate_and_shrink(state: PbtkitState) -> None:
     """Try random mutations of a few positions to escape local optima.
 
     For each indexed position, try changing its value by small index

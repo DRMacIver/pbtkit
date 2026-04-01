@@ -1,16 +1,16 @@
 ---
 name: debug-shrink
-description: Find and fix minithesis shrink bugs by running minismith fuzzing (both crash tests and shrink quality comparison against Hypothesis). Use this skill when the user says "/debug-shrink", asks to find shrink bugs, wants to run minismith, or wants to iterate on shrink pass quality. Also use proactively after modifying any shrink pass code.
+description: Find and fix pbtkit shrink bugs by running pbtsmith fuzzing (both crash tests and shrink quality comparison against Hypothesis). Use this skill when the user says "/debug-shrink", asks to find shrink bugs, wants to run pbtsmith, or wants to iterate on shrink pass quality. Also use proactively after modifying any shrink pass code.
 ---
 
 # Debug Shrink
 
-Find bugs in minithesis shrink passes by running two minismith-based test suites, then fix each bug with a regression-test-first workflow.
+Find bugs in pbtkit shrink passes by running two pbtsmith-based test suites, then fix each bug with a regression-test-first workflow.
 
 There are two test suites to run:
 
-1. **test_minismith.py** — generates random minithesis programs and checks they don't crash internally.
-2. **test_shrink_comparison.py** — generates random programs, runs them under both minithesis and Hypothesis, and asserts minithesis shrinks at least as well as the worst of 10 Hypothesis runs.
+1. **test_pbtsmith.py** — generates random pbtkit programs and checks they don't crash internally.
+2. **test_shrink_comparison.py** — generates random programs, runs them under both pbtkit and Hypothesis, and asserts pbtkit shrinks at least as well as the worst of 10 Hypothesis runs.
 
 Both find real bugs, but the shrink comparison test is the more important one — it catches shrink quality regressions, not just crashes.
 
@@ -29,7 +29,7 @@ uv run python -m pytest tests/test_shrink_comparison.py -x --no-header --tb=long
 Read the file. If it passes, also run the crash test:
 
 ```bash
-uv run python -m pytest tests/test_minismith.py -x --no-header --tb=long -q 2>&1 > /tmp/minismith-output.txt
+uv run python -m pytest tests/test_pbtsmith.py -x --no-header --tb=long -q 2>&1 > /tmp/pbtsmith-output.txt
 ```
 
 If both pass, report success and stop.
@@ -40,18 +40,18 @@ The failing program is shown via Hypothesis `note()` in the output. Extract it.
 
 Classify the failure:
 
-- **Internal error** (AssertionError, IndexError, OverflowError from `src/minithesis/`): the regression test just needs to run the program without crashing.
-- **Shrink quality failure** (minithesis result is worse than Hypothesis under `sort_key`): need to determine what minithesis should shrink to and assert on it. The comparison test output shows both the minithesis result and the worst Hypothesis result with their sort_keys.
+- **Internal error** (AssertionError, IndexError, OverflowError from `src/pbtkit/`): the regression test just needs to run the program without crashing.
+- **Shrink quality failure** (pbtkit result is worse than Hypothesis under `sort_key`): need to determine what pbtkit should shrink to and assert on it. The comparison test output shows both the pbtkit result and the worst Hypothesis result with their sort_keys.
 
 ### Step 3: Write a regression test
 
-**Put it in `tests/test_core.py`**, not test_minismith.py or test_shrink_comparison.py. Those files have `pytestmark = [pytest.mark.hypothesis]` which excludes them from coverage runs.
+**Put it in `tests/test_core.py`**, not test_pbtsmith.py or test_shrink_comparison.py. Those files have `pytestmark = [pytest.mark.hypothesis]` which excludes them from coverage runs.
 
 For internal errors, use this pattern:
 
 ```python
 def test_descriptive_name():
-    """One-line description. Regression for <ErrorType> in <file> found by minismith."""
+    """One-line description. Regression for <ErrorType> in <file> found by pbtsmith."""
     try:
         @run_test(max_examples=<N>, database={}, quiet=True, random=Random(<seed>))
         def _(tc):
@@ -61,11 +61,11 @@ def test_descriptive_name():
         pass
 ```
 
-For shrink quality failures, use the `minimal()` helper from `tests/shrink_quality/conftest.py`, or write a direct test using `MinithesisState`:
+For shrink quality failures, use the `minimal()` helper from `tests/shrink_quality/conftest.py`, or write a direct test using `PbtkitState`:
 
 ```python
 def test_descriptive_name():
-    """One-line description. Regression for shrink quality found by minismith."""
+    """One-line description. Regression for shrink quality found by pbtsmith."""
     def tf(tc):
         # ... test body that marks INTERESTING ...
         tc.mark_status(Status.INTERESTING)
@@ -85,11 +85,11 @@ uv run python -m pytest tests/test_core.py::test_descriptive_name -x --no-header
 
 ### Step 4: Simplify the regression test
 
-The minismith-generated test body is usually more complex than needed. Simplify it:
+The pbtsmith-generated test body is usually more complex than needed. Simplify it:
 
 **Critical rule: reproduce EXACTLY first.** Before simplifying anything, write a
 test that reproduces the exact failure using the same seed, max_examples, and
-program body from the minismith output. Verify it fails. Only THEN simplify.
+program body from the pbtsmith output. Verify it fails. Only THEN simplify.
 
 **Simplification procedure:**
 
@@ -114,12 +114,12 @@ program body from the minismith output. Verify it fails. Only THEN simplify.
    `assert values == [...]` over vague assertions. The reader should see exactly
    what the expected vs actual result is.
 
-To understand what minithesis shrinks a test to, use this helper:
+To understand what pbtkit shrinks a test to, use this helper:
 
 ```bash
 PYTHONPATH=src uv run python -c "
 from random import Random
-from minithesis.core import MinithesisState, Status, StopTest, TestCase
+from pbtkit.core import PbtkitState, Status, StopTest, TestCase
 
 def test_fn(tc):
     # paste the test body here
@@ -130,7 +130,7 @@ def wrapper(tc):
     test_fn(tc)
     best[0] = [n.value for n in tc.nodes]
 
-state = MinithesisState(Random(0), wrapper, 1000)
+state = PbtkitState(Random(0), wrapper, 1000)
 state.run()
 if state.result:
     tc = TestCase.for_choices([n.value for n in state.result])
@@ -149,7 +149,7 @@ After each simplification, re-run the test to confirm it still fails the same wa
 
 ### Step 5: Verify with canaries
 
-If the fix involves adding a guard or new branch, place an `assert False` canary inside it and verify the regression test (or minismith) hits it:
+If the fix involves adding a guard or new branch, place an `assert False` canary inside it and verify the regression test (or pbtsmith) hits it:
 
 ```python
 if stale_index_detected:
@@ -199,7 +199,7 @@ All three must pass before committing.
 
 ### Step 8: Commit
 
-Commit the regression test and fix together. The commit message should name the bug and mention minismith:
+Commit the regression test and fix together. The commit message should name the bug and mention pbtsmith:
 
 ```
 Fix <description of bug>
@@ -217,8 +217,8 @@ Go back to Step 1. Run both test suites again. Repeat until clean.
 
 - **Regression test FIRST.** Never write a fix before the test exists and is verified to fail. This is non-negotiable per project CLAUDE.md.
 - **Bytes and strings share infrastructure.** When you write a regression test for a bytes shrink issue, also write the parallel test for strings (and vice versa). The test is valuable even if it already passes — it guards against future regressions in the shared code.
-- **tests/test_core.py, not test_minismith.py.** Coverage is only collected from tests that run in `just test` (which uses `-m 'not hypothesis'`).
+- **tests/test_core.py, not test_pbtsmith.py.** Coverage is only collected from tests that run in `just test` (which uses `-m 'not hypothesis'`).
 - **No piping to tail or head.** Pipe to a file and use the Read tool.
 - **Simplify before fixing.** A 3-line regression test is worth more than a 30-line one. The simpler the test, the clearer the bug, the better the fix.
-- **Crashes before quality.** Either suite can surface crashes. If you see a crash (internal AssertionError, IndexError, etc. from minithesis source), fix it before tackling shrink quality failures. Crashes indicate a fundamental problem in the shrinker code.
+- **Crashes before quality.** Either suite can surface crashes. If you see a crash (internal AssertionError, IndexError, etc. from pbtkit source), fix it before tackling shrink quality failures. Crashes indicate a fundamental problem in the shrinker code.
 - **Unit test specific components.** When a shrink bug reveals a problem in a specific component (cache, serialization, value punning, etc.), write targeted unit tests for that component in addition to the end-to-end regression test. The unit tests are more focused and easier to reason about.

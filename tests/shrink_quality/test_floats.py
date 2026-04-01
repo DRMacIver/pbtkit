@@ -8,9 +8,9 @@ from random import Random
 
 import pytest
 
-import minithesis.generators as gs
-from minithesis.core import MinithesisState as State
-from minithesis.core import Status
+import pbtkit.generators as gs
+from pbtkit.core import PbtkitState as State
+from pbtkit.core import Status
 
 from .conftest import minimal
 
@@ -61,7 +61,7 @@ def test_float_increment_shortens_via_negative():
     """Making a float negative can trigger an earlier check and shorten
     the overall choice sequence. try_shortening_via_increment should
     try negative float values.
-    Regression for shrink quality found by minismith."""
+    Regression for shrink quality found by pbtsmith."""
 
     def tf(tc):
         v0 = tc.draw(gs.booleans())
@@ -139,7 +139,7 @@ def test_negative_zero_shrinks_to_positive_zero():
     """The shrinker should prefer 0.0 over -0.0 since sort_key(0.0) <
     sort_key(-0.0). The cache must distinguish them despite 0.0 == -0.0
     in Python.
-    Regression for shrink quality found by minismith."""
+    Regression for shrink quality found by pbtsmith."""
 
     @gs.composite
     def pair(tc):

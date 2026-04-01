@@ -1,5 +1,5 @@
-# This file is part of Minithesis, which may be found at
-# https://github.com/DRMacIver/minithesis
+# This file is part of Pbtkit, which may be found at
+# https://github.com/DRMacIver/pbtkit
 #
 # This work is copyright (C) 2020 David R. MacIver.
 #
@@ -12,15 +12,15 @@ from random import Random
 
 import pytest
 
-import minithesis.floats
+import pbtkit.floats
 
 pytestmark = pytest.mark.requires("floats")
-import minithesis.generators as gs
-from minithesis import DirectoryDB, run_test
-from minithesis.core import MinithesisState, Status
-from minithesis.core import TestCase as TC
-from minithesis.database import SerializationTag
-from minithesis.floats import _MAX_FINITE_INDEX, FloatChoice, _draw_unbounded_float
+import pbtkit.generators as gs
+from pbtkit import DirectoryDB, run_test
+from pbtkit.core import PbtkitState, Status
+from pbtkit.core import TestCase as TC
+from pbtkit.database import SerializationTag
+from pbtkit.floats import _MAX_FINITE_INDEX, FloatChoice, _draw_unbounded_float
 
 
 def test_floats_bounded():
@@ -32,7 +32,7 @@ def test_floats_bounded():
 
 def test_floats_unbounded(monkeypatch):
     # Boost NaN probability so we reliably cover _draw_nan.
-    monkeypatch.setattr(minithesis.floats, "NAN_DRAW_PROBABILITY", 0.5)
+    monkeypatch.setattr(pbtkit.floats, "NAN_DRAW_PROBABILITY", 0.5)
 
     @run_test(database={}, max_examples=200)
     def _(tc):
@@ -181,7 +181,7 @@ def test_floats_shrinks_negative_exponent():
         if 0 < f < 1e-100:
             tc.mark_status(Status.INTERESTING)
 
-    state = MinithesisState(Random(0), tf, 1)
+    state = PbtkitState(Random(0), tf, 1)
     state.test_function(TC.for_choices([1e-200]))
     assert state.result is not None
     state.shrink()
@@ -245,7 +245,7 @@ def test_floats_shrinks_nan_only():
         if math.isnan(f):
             tc.mark_status(Status.INTERESTING)
 
-    state = MinithesisState(Random(0), tf, 1)
+    state = PbtkitState(Random(0), tf, 1)
     state.test_function(TC.for_choices([math.nan]))
     assert state.result is not None
     state.shrink()
@@ -261,7 +261,7 @@ def test_floats_shrinks_nan_to_simpler():
         if math.isnan(f) or math.isinf(f):
             tc.mark_status(Status.INTERESTING)
 
-    state = MinithesisState(Random(0), tf, 1)
+    state = PbtkitState(Random(0), tf, 1)
     state.test_function(TC.for_choices([math.nan]))
     assert state.result is not None
     state.shrink()
@@ -277,7 +277,7 @@ def test_floats_shrinks_neg_inf():
         if math.isinf(f):
             tc.mark_status(Status.INTERESTING)
 
-    state = MinithesisState(Random(0), tf, 1)
+    state = PbtkitState(Random(0), tf, 1)
     state.test_function(TC.for_choices([-math.inf]))
     assert state.result is not None
     state.shrink()
@@ -292,7 +292,7 @@ def test_floats_shrinks_neg_inf_to_finite():
         if abs(f) > 1e300:
             tc.mark_status(Status.INTERESTING)
 
-    state = MinithesisState(Random(0), tf, 1)
+    state = PbtkitState(Random(0), tf, 1)
     state.test_function(TC.for_choices([-math.inf]))
     assert state.result is not None
     state.shrink()
@@ -309,7 +309,7 @@ def test_floats_shrinks_inf_to_finite():
         if f > 1e300:
             tc.mark_status(Status.INTERESTING)
 
-    state = MinithesisState(Random(0), tf, 1)
+    state = PbtkitState(Random(0), tf, 1)
     state.test_function(TC.for_choices([math.inf]))
     assert state.result is not None
     state.shrink()
@@ -338,7 +338,7 @@ def test_floats_shrinks_large_exponent():
         if f >= 1e15:
             tc.mark_status(Status.INTERESTING)
 
-    state = MinithesisState(Random(0), tf, 1)
+    state = PbtkitState(Random(0), tf, 1)
     state.test_function(TC.for_choices([1e20]))
     assert state.result is not None
     state.shrink()
@@ -396,7 +396,7 @@ def test_floats_shrinks_small_positive():
         if 0.01 < f < 0.5:
             tc.mark_status(Status.INTERESTING)
 
-    state = MinithesisState(Random(0), tf, 1)
+    state = PbtkitState(Random(0), tf, 1)
     state.test_function(TC.for_choices([0.3]))
     assert state.result is not None
     state.shrink()
@@ -414,7 +414,7 @@ def test_shrinks_float_with_large_fractional():
         if 0.001 < f < 0.5:
             tc.mark_status(Status.INTERESTING)
 
-    state = MinithesisState(Random(0), tf, 1)
+    state = PbtkitState(Random(0), tf, 1)
     state.test_function(TC.for_choices([0.123456789]))
     assert state.result is not None
     state.shrink()
@@ -553,7 +553,7 @@ def test_float_shrinks_across_exponent_boundary():
         if v0 < -2.0:
             tc.mark_status(Status.INTERESTING)
 
-    state = MinithesisState(Random(0), tf, 100)
+    state = PbtkitState(Random(0), tf, 100)
     state.run()
     assert state.result is not None
     v = state.result[0].value

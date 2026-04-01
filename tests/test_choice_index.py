@@ -7,10 +7,10 @@ import pytest
 
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
-from minithesis.bytes import BytesChoice
-from minithesis.core import BooleanChoice, IntegerChoice
-from minithesis.floats import FloatChoice
-from minithesis.text import StringChoice
+from pbtkit.bytes import BytesChoice
+from pbtkit.core import BooleanChoice, IntegerChoice
+from pbtkit.floats import FloatChoice
+from pbtkit.text import StringChoice
 
 pytestmark = [pytest.mark.hypothesis]
 

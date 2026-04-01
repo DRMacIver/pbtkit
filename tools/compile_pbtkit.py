@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile the minithesis package into a single minithesis.py file.
+"""Compile the pbtkit package into a single pbtkit.py file.
 
 Uses libcst for structural analysis (finding monkey-patches, imports, stubs)
 and text-based manipulation for assembly. The result is formatted with ruff.
@@ -18,15 +18,15 @@ from pathlib import Path
 import libcst as cst
 
 ROOT = Path(__file__).resolve().parent.parent
-SRC = ROOT / "src" / "minithesis"
+SRC = ROOT / "src" / "pbtkit"
 BUILD = ROOT / "build"
 
 HEADER = """\
-# Compiled minithesis — generated from the modular source.
+# Compiled pbtkit — generated from the modular source.
 # Do not edit by hand.
 #
-# This file is part of Minithesis, which may be found at
-# https://github.com/DRMacIver/minithesis
+# This file is part of Pbtkit, which may be found at
+# https://github.com/DRMacIver/pbtkit
 #
 # This work is copyright (C) 2020 David R. MacIver.
 #
@@ -63,7 +63,7 @@ def find_monkey_patches(tree: cst.Module) -> dict[str, str]:
 
 
 def collect_imports(trees: dict[str, cst.Module]) -> str:
-    """Merge all non-minithesis imports from all modules."""
+    """Merge all non-pbtkit imports from all modules."""
     from_imports: dict[str, set[str]] = defaultdict(set)
     regular: set[str] = set()
 
@@ -74,7 +74,7 @@ def collect_imports(trees: dict[str, cst.Module]) -> str:
             for s in stmt.body:
                 if isinstance(s, cst.ImportFrom):
                     mod_name = _dotted(s.module)
-                    if mod_name.startswith("minithesis") or mod_name == "__future__":
+                    if mod_name.startswith("pbtkit") or mod_name == "__future__":
                         continue
                     if isinstance(s.names, cst.ImportStar):
                         continue
@@ -85,7 +85,7 @@ def collect_imports(trees: dict[str, cst.Module]) -> str:
                         continue
                     for alias in s.names:
                         name = _dotted(alias.name)
-                        if name.startswith("minithesis"):
+                        if name.startswith("pbtkit"):
                             continue
                         regular.add(name)
 
@@ -122,12 +122,12 @@ def _discover_extensions() -> tuple[list[str], dict[str, str]]:
         if not isinstance(stmt, cst.SimpleStatementLine):
             continue
         for s in stmt.body:
-            # Direct imports: `import minithesis.X`
+            # Direct imports: `import pbtkit.X`
             if isinstance(s, cst.Import) and not isinstance(s.names, cst.ImportStar):
                 for alias in s.names:
                     name = _dotted(alias.name)
-                    if name.startswith("minithesis.") and name != "minithesis.features":
-                        extensions.append(name.removeprefix("minithesis."))
+                    if name.startswith("pbtkit.") and name != "pbtkit.features":
+                        extensions.append(name.removeprefix("pbtkit."))
             # _FEATURE_DEPENDENT_MODULES dict
             if (
                 isinstance(s, cst.Assign)
@@ -145,8 +145,8 @@ def _discover_extensions() -> tuple[list[str], dict[str, str]]:
                     ):
                         key = el.key.evaluated_value
                         dep = el.value.evaluated_value
-                        if isinstance(key, str) and key.startswith("minithesis.") and isinstance(dep, str):
-                            mod = key.removeprefix("minithesis.")
+                        if isinstance(key, str) and key.startswith("pbtkit.") and isinstance(dep, str):
+                            mod = key.removeprefix("pbtkit.")
                             extensions.append(mod)
                             feature_deps[mod] = dep
     return extensions, feature_deps
@@ -635,8 +635,8 @@ def extract_docstring(source: str) -> str:
     return ""
 
 
-def compile_minithesis(disabled: frozenset[str] = frozenset()) -> str:
-    """Compile the minithesis package into a single source string.
+def compile_pbtkit(disabled: frozenset[str] = frozenset()) -> str:
+    """Compile the pbtkit package into a single source string.
 
     Extensions listed in ``disabled`` are excluded from the compiled
     output — their TestCase stubs are removed entirely. Extensions that
@@ -673,7 +673,7 @@ def compile_minithesis(disabled: frozenset[str] = frozenset()) -> str:
     enabled_sources = [module_path(ext).read_text() for ext in extensions]
     enabled_sources.append(module_path("core").read_text())
     for util in UTILITY_MODULES:
-        util_mod = f"minithesis.{util}"
+        util_mod = f"pbtkit.{util}"
         if any(util_mod in src for src in enabled_sources):
             needed_utils.append(util)
 
@@ -790,16 +790,16 @@ def _generate_init_py(disabled: frozenset[str]) -> str:
         "import sys",
         "import types",
         "",
-        "import minithesis.core as _core",
+        "import pbtkit.core as _core",
         "",
-        "from minithesis.core import (  # noqa: PLC0415",
+        "from pbtkit.core import (  # noqa: PLC0415",
     ]
     for name in core_imports:
         lines.append(f"    {name},")
     lines.append(")")
     lines.extend([
         "",
-        "import minithesis as _pkg  # noqa: PLC0415",
+        "import pbtkit as _pkg  # noqa: PLC0415",
         "",
         "# Alias enabled submodules to the compiled core.",
     ])
@@ -812,9 +812,9 @@ def _generate_init_py(disabled: frozenset[str]) -> str:
         for i in range(1, len(parts)):
             parent = ".".join(parts[:i])
             if parent not in aliased_parents:
-                lines.append(f'sys.modules["minithesis.{parent}"] = _core')
+                lines.append(f'sys.modules["pbtkit.{parent}"] = _core')
                 aliased_parents.add(parent)
-        lines.append(f'sys.modules["minithesis.{name}"] = _core')
+        lines.append(f'sys.modules["pbtkit.{name}"] = _core')
         lines.append(f'setattr(_pkg, "{parts[0]}", _core)')
 
     if disabled_list:
@@ -830,7 +830,7 @@ def _generate_init_py(disabled: frozenset[str]) -> str:
             'f"{self._mod}.{self._name} is not available")'
         )
         lines.append("    def __repr__(self):")
-        lines.append('        return f"<disabled: minithesis.{self._mod}.{self._name}>"')
+        lines.append('        return f"<disabled: pbtkit.{self._mod}.{self._name}>"')
         lines.append("")
         lines.append("class _DisabledModule(types.ModuleType):")
         lines.append("    def __init__(self, mod, full):")
@@ -844,7 +844,7 @@ def _generate_init_py(disabled: frozenset[str]) -> str:
         lines.append("")
         for name in disabled_list:
             lines.append(
-                f'sys.modules["minithesis.{name}"] = _DisabledModule("{name}", "minithesis.{name}")'
+                f'sys.modules["pbtkit.{name}"] = _DisabledModule("{name}", "pbtkit.{name}")'
             )
         if not has_database:
             lines.append("")
@@ -887,18 +887,18 @@ def write_test_package(
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="Compile minithesis into a single file")
+    p = argparse.ArgumentParser(description="Compile pbtkit into a single file")
     p.add_argument(
         "-o",
         "--output",
         type=Path,
-        default=BUILD / "minithesis.py",
+        default=BUILD / "pbtkit.py",
         help="Output path for the compiled file",
     )
     p.add_argument(
         "--pkg",
         type=Path,
-        default=BUILD / "pkg" / "minithesis",
+        default=BUILD / "pkg" / "pbtkit",
         help="Output directory for the test package",
     )
     p.add_argument(
@@ -951,7 +951,7 @@ def main() -> None:
                 print(msg, file=sys.stderr)
             print(f"Valid extensions: {', '.join(EXTENSIONS)}", file=sys.stderr)
             sys.exit(1)
-    result = compile_minithesis(disabled=disabled)
+    result = compile_pbtkit(disabled=disabled)
 
     # Write standalone compiled file
     args.output.parent.mkdir(parents=True, exist_ok=True)

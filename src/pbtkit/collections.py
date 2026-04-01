@@ -1,10 +1,10 @@
-"""Variable-length collection support for minithesis."""
+"""Variable-length collection support for pbtkit."""
 
 from __future__ import annotations
 
 import math
 
-from minithesis.core import Status, TestCase
+from pbtkit.core import Status, TestCase
 
 
 class many:

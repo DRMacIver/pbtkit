@@ -1,5 +1,5 @@
-# This file is part of Minithesis, which may be found at
-# https://github.com/DRMacIver/minithesis
+# This file is part of Pbtkit, which may be found at
+# https://github.com/DRMacIver/pbtkit
 #
 # This work is copyright (C) 2020 David R. MacIver.
 #
@@ -22,7 +22,7 @@ from typing import (
     TypeVar,
 )
 
-from minithesis.features import needed_for
+from pbtkit.features import needed_for
 
 T = TypeVar("T", covariant=True)
 S = TypeVar("S", covariant=True)
@@ -263,7 +263,7 @@ def run_test(
     The decorated function takes a ``TestCase`` argument,
     and should raise an exception to indicate a test failure.
     It will either run silently or print drawn values and then
-    fail with an exception if minithesis finds some test case
+    fail with an exception if pbtkit finds some test case
     that fails.
 
     The test will be run immediately, unlike in Hypothesis where
@@ -293,7 +293,7 @@ def run_test(
                     raise
                 test_case.mark_status(Status.INTERESTING)
 
-        state = MinithesisState(
+        state = PbtkitState(
             random or Random(),
             mark_failures_interesting,
             max_examples,
@@ -371,7 +371,7 @@ class TestCase:
             lambda: self.random.randint(min_value, max_value),
         )
 
-    # draw_float, draw_bytes, draw_string are added by minithesis.__init__
+    # draw_float, draw_bytes, draw_string are added by pbtkit.__init__
     # when it is imported. These stubs exist only for type-checking.
     def draw_float(
         self,
@@ -381,8 +381,8 @@ class TestCase:
         allow_nan: bool = True,
         allow_infinity: bool = True,
     ) -> float:
-        """Returns a random float. Stub — import minithesis.floats to enable."""
-        raise NotImplementedError("import minithesis.floats to use draw_float")
+        """Returns a random float. Stub — import pbtkit.floats to enable."""
+        raise NotImplementedError("import pbtkit.floats to use draw_float")
 
     def draw_string(
         self,
@@ -391,12 +391,12 @@ class TestCase:
         min_size: int = 0,
         max_size: int = 10,
     ) -> str:
-        """Returns a random string. Stub — import minithesis.text to enable."""
-        raise NotImplementedError("import minithesis.text to use draw_string")
+        """Returns a random string. Stub — import pbtkit.text to enable."""
+        raise NotImplementedError("import pbtkit.text to use draw_string")
 
     def draw_bytes(self, min_size: int, max_size: int) -> bytes:
-        """Returns a random byte string. Stub — import minithesis.bytes to enable."""
-        raise NotImplementedError("import minithesis.bytes to use draw_bytes")
+        """Returns a random byte string. Stub — import pbtkit.bytes to enable."""
+        raise NotImplementedError("import pbtkit.bytes to use draw_bytes")
 
     def choice(self, n: int) -> int:
         """Returns a number in the range [0, n]"""
@@ -447,8 +447,8 @@ class TestCase:
             self.reject()
 
     def target(self, score: int) -> None:
-        """Set a score to maximize. Stub — import minithesis to enable."""
-        raise NotImplementedError("import minithesis.targeting to use target")
+        """Set a score to maximize. Stub — import pbtkit to enable."""
+        raise NotImplementedError("import pbtkit.targeting to use target")
 
     def draw(self, generator: Generator[U]) -> U:
         """Return a value from ``generator``, printing it if this is a failing example."""
@@ -582,53 +582,53 @@ class Generator(Generic[T]):
 
 
 # Shrink pass registry. Each pass is a function taking a
-# MinithesisState and attempting to simplify state.result.
+# PbtkitState and attempting to simplify state.result.
 # Passes are run in order, repeating until a fixed point.
-SHRINK_PASSES: list[Callable[["MinithesisState"], None]] = []
+SHRINK_PASSES: list[Callable[["PbtkitState"], None]] = []
 # Value shrinker registry. Maps choice type to list of value
 # shrinker functions (kind, value, try_replace) -> None.
 VALUE_SHRINKERS: dict[type, list[Callable]] = defaultdict(list)
-TEST_FUNCTION_HOOKS: list[Callable[["MinithesisState", "TestCase"], None]] = []
-RUN_PHASES: list[Callable[["MinithesisState"], None]] = []
-SETUP_HOOKS: list[Callable[["MinithesisState"], None]] = []
-TEARDOWN_HOOKS: list[Callable[["MinithesisState"], None]] = []
+TEST_FUNCTION_HOOKS: list[Callable[["PbtkitState", "TestCase"], None]] = []
+RUN_PHASES: list[Callable[["PbtkitState"], None]] = []
+SETUP_HOOKS: list[Callable[["PbtkitState"], None]] = []
+TEARDOWN_HOOKS: list[Callable[["PbtkitState"], None]] = []
 
 
 def shrink_pass(
-    fn: Callable[["MinithesisState"], None],
-) -> Callable[["MinithesisState"], None]:
+    fn: Callable[["PbtkitState"], None],
+) -> Callable[["PbtkitState"], None]:
     """Decorator that registers a function as a shrink pass."""
     SHRINK_PASSES.append(fn)
     return fn
 
 
 def test_function_hook(
-    fn: Callable[["MinithesisState", "TestCase"], None],
-) -> Callable[["MinithesisState", "TestCase"], None]:
+    fn: Callable[["PbtkitState", "TestCase"], None],
+) -> Callable[["PbtkitState", "TestCase"], None]:
     """Decorator that registers a hook called after each test function run."""
     TEST_FUNCTION_HOOKS.append(fn)
     return fn
 
 
 def run_phase(
-    fn: Callable[["MinithesisState"], None],
-) -> Callable[["MinithesisState"], None]:
+    fn: Callable[["PbtkitState"], None],
+) -> Callable[["PbtkitState"], None]:
     """Decorator that registers a phase in the test run (between generate and shrink)."""
     RUN_PHASES.append(fn)
     return fn
 
 
 def setup_hook(
-    fn: Callable[["MinithesisState"], None],
-) -> Callable[["MinithesisState"], None]:
+    fn: Callable[["PbtkitState"], None],
+) -> Callable[["PbtkitState"], None]:
     """Decorator that registers a hook called before the test run."""
     SETUP_HOOKS.append(fn)
     return fn
 
 
 def teardown_hook(
-    fn: Callable[["MinithesisState"], None],
-) -> Callable[["MinithesisState"], None]:
+    fn: Callable[["PbtkitState"], None],
+) -> Callable[["PbtkitState"], None]:
     """Decorator that registers a hook called after the test run."""
     TEARDOWN_HOOKS.append(fn)
     return fn
@@ -644,7 +644,7 @@ def value_shrinker(
     try_replace(v) -> bool attempts to replace the current value with v."""
 
     def accept(fn: Callable) -> Callable:
-        def shrink_pass_fn(state: "MinithesisState") -> None:
+        def shrink_pass_fn(state: "PbtkitState") -> None:
             assert state.result is not None
             i = 0
             while i < len(state.result):
@@ -673,7 +673,7 @@ def sort_key(nodes: Sequence[ChoiceNode]) -> tuple:
     return (len(nodes), [n.sort_key for n in nodes])
 
 
-class MinithesisState:
+class PbtkitState:
     def __init__(
         self,
         random: Random,
@@ -784,7 +784,7 @@ class MinithesisState:
 
 
 @shrink_pass
-def delete_chunks(state: MinithesisState) -> None:
+def delete_chunks(state: PbtkitState) -> None:
     """Try deleting chunks of choices from the sequence.
 
     We try longer chunks because this allows us to delete whole
@@ -820,7 +820,7 @@ def delete_chunks(state: MinithesisState) -> None:
 
 
 @shrink_pass
-def zero_choices(state: MinithesisState) -> None:
+def zero_choices(state: PbtkitState) -> None:
     """Replace blocks of choices with their simplest values.
     Skip k=1 because we handle that in the per-choice pass."""
     assert state.result is not None

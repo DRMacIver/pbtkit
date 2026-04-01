@@ -1,9 +1,9 @@
-# Minithesis Development Guide
+# Pbtkit Development Guide
 
 ## Project structure
 
 ```
-src/minithesis/
+src/pbtkit/
   core.py            — standalone core (integers + booleans only)
   __init__.py        — adds float/bytes/string types, re-exports public API
   generators.py      — user-facing generator functions
@@ -38,7 +38,7 @@ All three must pass before committing.
 ## Public API vs internals
 
 * **Public API** (in `__all__`): `run_test`, `TestCase`, `Generator`, `Unsatisfiable`, `Database`, `DirectoryDB`.
-* Everything else is internal. Tests should import internals from `minithesis.core` directly, not via the package.
+* Everything else is internal. Tests should import internals from `pbtkit.core` directly, not via the package.
 * Do not add internal names to `__all__` for testing convenience.
 
 ## Architecture
@@ -46,17 +46,17 @@ All three must pass before committing.
 * **Shrink passes** are registered via the `@shrink_pass` decorator into the global `SHRINK_PASSES` list. Each pass takes a `TestingState` and uses `state.consider()` / `state.replace()`.
 * **Serialization** uses direct type-specific handling in `_serialize_value`/`_deserialize_value`. Tags are in the `SerializationTag` enum.
 * **Type extensions** (float, bytes, string) monkey-patch draw methods onto `TestCase` and register their serializers and shrink passes when `__init__.py` is imported.
-* **`minithesis.py`** must stand alone with no dependencies on the type extensions.
+* **`pbtkit.py`** must stand alone with no dependencies on the type extensions.
 
 ## Testing
 
-* Tests that need to monkeypatch module constants (like `BUFFER_SIZE`, `_DEFAULT_DATABASE_PATH`) should target `minithesis.core` (the module where the constant is defined and read).
-* `NAN_DRAW_PROBABILITY` is defined in `__init__.py` and can be monkeypatched via `import minithesis; monkeypatch.setattr(minithesis, ...)`.
-* The database isolation fixture in `conftest.py` ensures tests don't share state via `.minithesis-cache`. Each test gets a fresh tmp directory.
+* Tests that need to monkeypatch module constants (like `BUFFER_SIZE`, `_DEFAULT_DATABASE_PATH`) should target `pbtkit.core` (the module where the constant is defined and read).
+* `NAN_DRAW_PROBABILITY` is defined in `__init__.py` and can be monkeypatched via `import pbtkit; monkeypatch.setattr(pbtkit, ...)`.
+* The database isolation fixture in `conftest.py` ensures tests don't share state via `.pbtkit-cache`. Each test gets a fresh tmp directory.
 * **NEVER delete the `.hypothesis/` directory or its contents.** The Hypothesis database stores failing examples that reproduce known bugs. Deleting it destroys reproductions the user just told you about. If you need a clean run for a different reason, ask first.
 * Coverage must be deterministically 100%. If a path depends on randomness, boost the probability via monkeypatch rather than increasing `max_examples`.
-* Coverage should be assumed to be working correctly. If the tool says that a line isn't being covered, it almost certainly really isn't, or the tests that cover it are not running as part of your coverage set. If you still do not believe this, add a canary assertion that would fire if that line was covered. You can also use this to try to come up with a test that covers that line - run the minismith crash tests, and see if it can hit that assertion. If it can, it will give you a good starting point for a regression test.
-* If you replace guards that you believe to be genuinely uncoverable with assertions, make sure to run the minismith tests to find out if those assertions trigger.
+* Coverage should be assumed to be working correctly. If the tool says that a line isn't being covered, it almost certainly really isn't, or the tests that cover it are not running as part of your coverage set. If you still do not believe this, add a canary assertion that would fire if that line was covered. You can also use this to try to come up with a test that covers that line - run the pbtsmith crash tests, and see if it can hit that assertion. If it can, it will give you a good starting point for a regression test.
+* If you replace guards that you believe to be genuinely uncoverable with assertions, make sure to run the pbtsmith tests to find out if those assertions trigger.
 
 ## Commit discipline
 

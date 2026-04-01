@@ -1,17 +1,17 @@
-extensions := `uv run python -c "from tools.compile_minithesis import EXTENSIONS; print(' '.join(EXTENSIONS))"`
+extensions := `uv run python -c "from tools.compile_pbtkit import EXTENSIONS; print(' '.join(EXTENSIONS))"`
 
 test:
-    uv run python -m coverage run --source=src/minithesis --branch -m pytest tests/ --ff --maxfail=1 -m 'not hypothesis' --durations=100 --verbose
+    uv run python -m coverage run --source=src/pbtkit --branch -m pytest tests/ --ff --maxfail=1 -m 'not hypothesis' --durations=100 --verbose
     uv run coverage report --show-missing --fail-under=100
 
 test-core:
     for ext in {{extensions}}; do \
         echo "--- Disabling: $ext ---" && \
-        MINITHESIS_DISABLED=$ext uv run pytest tests/ -m 'not hypothesis' --verbose || exit 1; \
+        PBTKIT_DISABLED=$ext uv run pytest tests/ -m 'not hypothesis' --verbose || exit 1; \
     done
 
 compile:
-    uv run python tools/compile_minithesis.py
+    uv run python tools/compile_pbtkit.py
 
 test-features:
     uv run python tools/test_features.py

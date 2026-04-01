@@ -1,4 +1,4 @@
-"""Bytes support for minithesis.
+"""Bytes support for pbtkit.
 
 This module provides BytesChoice, the draw_bytes method, bytes
 serialization, and the bytes shrink pass. It is imported by the
@@ -11,13 +11,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from minithesis.core import (
+from pbtkit.core import (
     ChoiceType,
     TestCase,
     value_shrinker,
 )
-from minithesis.features import needed_for
-from minithesis.shrinking.sequence import shrink_sequence
+from pbtkit.features import needed_for
+from pbtkit.shrinking.sequence import shrink_sequence
 
 # ---------------------------------------------------------------------------
 # BytesChoice
