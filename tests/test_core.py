@@ -1125,5 +1125,6 @@ def test_lower_and_bump_j_past_end_after_shortening():
     assert len(state.result) == 4
     lower_and_bump(state)
     assert state.result is not None
-    # Shrinks to n=1 with one extra value at simplest.
-    assert len(state.result) == 2
+    # Shrinks to n=0 (1 node) since lower_and_bump now tries
+    # decrementing to simplest, not just index-1.
+    assert len(state.result) == 1
