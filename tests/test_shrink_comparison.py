@@ -167,7 +167,7 @@ class ConjectureTestCase:
         self.nodes.append(ChoiceNode(IntegerChoice(0, n), n, True))
         return n
 
-    def any(self, generator: Generator) -> object:
+    def draw(self, generator: Generator) -> object:
         label = calc_label_from_name(repr(generator))
         self.data.start_span(label)
         try:
