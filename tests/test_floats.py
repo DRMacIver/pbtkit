@@ -26,7 +26,7 @@ from minithesis.floats import _MAX_FINITE_INDEX, FloatChoice, _draw_unbounded_fl
 def test_floats_bounded():
     @run_test(database={})
     def _(tc):
-        f = tc.any(gs.floats(0.0, 1.0, allow_nan=False))
+        f = tc.draw(gs.floats(0.0, 1.0, allow_nan=False))
         assert 0.0 <= f <= 1.0
 
 
@@ -36,7 +36,7 @@ def test_floats_unbounded(monkeypatch):
 
     @run_test(database={}, max_examples=200)
     def _(tc):
-        tc.any(gs.floats())
+        tc.draw(gs.floats())
 
 
 def test_floats_shrinks_to_zero(capsys):
@@ -44,12 +44,12 @@ def test_floats_shrinks_to_zero(capsys):
 
         @run_test(database={})
         def _(tc):
-            f = tc.any(gs.floats(allow_nan=False))
+            f = tc.draw(gs.floats(allow_nan=False))
             assert f == 0.0
 
     captured = capsys.readouterr()
     # Should shrink to a small non-zero float
-    assert "any(floats" in captured.out
+    assert "draw(floats" in captured.out
 
 
 def test_floats_bounded_shrinks(capsys):
@@ -57,32 +57,32 @@ def test_floats_bounded_shrinks(capsys):
 
         @run_test(database={})
         def _(tc):
-            f = tc.any(gs.floats(1.0, 10.0, allow_nan=False))
+            f = tc.draw(gs.floats(1.0, 10.0, allow_nan=False))
             assert f < 5.0
 
     captured = capsys.readouterr()
     # Should find some float >= 5.0
-    assert "any(floats(" in captured.out
+    assert "draw(floats(" in captured.out
 
 
 def test_floats_no_nan():
     @run_test(database={}, max_examples=200)
     def _(tc):
-        f = tc.any(gs.floats(allow_nan=False))
+        f = tc.draw(gs.floats(allow_nan=False))
         assert not math.isnan(f)
 
 
 def test_floats_no_infinity():
     @run_test(database={}, max_examples=200)
     def _(tc):
-        f = tc.any(gs.floats(allow_infinity=False, allow_nan=False))
+        f = tc.draw(gs.floats(allow_infinity=False, allow_nan=False))
         assert math.isfinite(f)
 
 
 def test_floats_negative_range():
     @run_test(database={})
     def _(tc):
-        f = tc.any(gs.floats(-10.0, -1.0, allow_nan=False))
+        f = tc.draw(gs.floats(-10.0, -1.0, allow_nan=False))
         assert -10.0 <= f <= -1.0
 
 
@@ -92,11 +92,11 @@ def test_floats_shrinks_negative(capsys):
 
         @run_test(database={})
         def _(tc):
-            f = tc.any(gs.floats(-10.0, -1.0, allow_nan=False))
+            f = tc.draw(gs.floats(-10.0, -1.0, allow_nan=False))
             assert f > -5.0
 
     captured = capsys.readouterr()
-    assert "any(floats(" in captured.out
+    assert "draw(floats(" in captured.out
 
 
 def test_floats_shrinks_truncates(capsys):
@@ -105,12 +105,12 @@ def test_floats_shrinks_truncates(capsys):
 
         @run_test(database={}, max_examples=1000)
         def _(tc):
-            f = tc.any(gs.floats(0.0, 100.0, allow_nan=False))
+            f = tc.draw(gs.floats(0.0, 100.0, allow_nan=False))
             assert f <= 1.0
 
     captured = capsys.readouterr()
     # Should shrink to a simple value (integer float)
-    assert "any(floats(" in captured.out
+    assert "draw(floats(" in captured.out
 
 
 def test_floats_half_bounded():
@@ -119,13 +119,13 @@ def test_floats_half_bounded():
 
     @run_test(database={}, max_examples=200)
     def _(tc):
-        f = tc.any(gs.floats(min_value=0.0, allow_nan=False, allow_infinity=False))
+        f = tc.draw(gs.floats(min_value=0.0, allow_nan=False, allow_infinity=False))
         assert f >= 0.0
         assert math.isfinite(f)
 
     @run_test(database={}, max_examples=200)
     def _(tc):
-        f = tc.any(gs.floats(max_value=0.0, allow_nan=False, allow_infinity=False))
+        f = tc.draw(gs.floats(max_value=0.0, allow_nan=False, allow_infinity=False))
         assert f <= 0.0
         assert math.isfinite(f)
 
@@ -142,7 +142,7 @@ def test_floats_database_round_trip(tmpdir):
             def _(test_case):
                 nonlocal count
                 count += 1
-                f = test_case.any(gs.floats(0.0, 10.0, allow_nan=False))
+                f = test_case.draw(gs.floats(0.0, 10.0, allow_nan=False))
                 assert f < 5.0
 
     run()
@@ -158,7 +158,7 @@ def test_floats_shrinks_large_or_nan():
 
         @run_test(database={}, max_examples=1000)
         def _(tc):
-            f = tc.any(gs.floats())
+            f = tc.draw(gs.floats())
             assert not math.isnan(f) and abs(f) < 1e300
 
 
@@ -168,7 +168,7 @@ def test_floats_shrinks_scientific():
 
         @run_test(database={}, max_examples=1000)
         def _(tc):
-            f = tc.any(gs.floats(allow_nan=False))
+            f = tc.draw(gs.floats(allow_nan=False))
             assert abs(f) < 1e10
 
 
@@ -195,7 +195,7 @@ def test_floats_half_bounded_min():
 
     @run_test(database={}, max_examples=200)
     def _(tc):
-        f = tc.any(gs.floats(min_value=0.0, allow_infinity=False))
+        f = tc.draw(gs.floats(min_value=0.0, allow_infinity=False))
         assert f >= 0.0
         assert math.isfinite(f)
 
@@ -205,7 +205,7 @@ def test_floats_half_bounded_max():
 
     @run_test(database={}, max_examples=200)
     def _(tc):
-        f = tc.any(gs.floats(max_value=0.0, allow_infinity=False))
+        f = tc.draw(gs.floats(max_value=0.0, allow_infinity=False))
         assert f <= 0.0
         assert math.isfinite(f)
 
@@ -217,7 +217,7 @@ def test_floats_half_bounded_with_infinity():
     @run_test(database={}, max_examples=1000)
     def _(tc):
         nonlocal found_inf
-        f = tc.any(gs.floats(min_value=0.0))
+        f = tc.draw(gs.floats(min_value=0.0))
         if math.isinf(f):
             found_inf = True
 
@@ -231,7 +231,7 @@ def test_floats_shrinks_non_canonical():
 
         @run_test(database={}, max_examples=1000)
         def _(tc):
-            f = tc.any(gs.floats(0.0, 10.0, allow_nan=False))
+            f = tc.draw(gs.floats(0.0, 10.0, allow_nan=False))
             # Interesting for any non-zero value; tests that
             # non-canonical floats get cleaned up.
             assert f == 0.0
@@ -549,7 +549,7 @@ def test_float_shrinks_across_exponent_boundary():
     searches couldn't cross the boundary independently."""
 
     def tf(tc):
-        v0 = tc.any(gs.floats(allow_nan=False, allow_infinity=False))
+        v0 = tc.draw(gs.floats(allow_nan=False, allow_infinity=False))
         if v0 < -2.0:
             tc.mark_status(Status.INTERESTING)
 

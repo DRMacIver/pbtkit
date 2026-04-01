@@ -24,12 +24,12 @@ def test_finds_small_list(capsys, seed):
 
         @run_test(database={}, random=Random(seed))
         def _(test_case):
-            ls = test_case.any(gs.lists(gs.integers(0, 10000)))
+            ls = test_case.draw(gs.lists(gs.integers(0, 10000)))
             assert sum(ls) <= 1000
 
     captured = capsys.readouterr()
 
     assert (
         captured.out.strip()
-        == "any(lists(integers(min_value=0, max_value=10000), min_size=0, max_size=inf)): [1001]"
+        == "draw(lists(integers(min_value=0, max_value=10000), min_size=0, max_size=inf)): [1001]"
     )

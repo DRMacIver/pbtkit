@@ -26,7 +26,7 @@ def minimal(
     best = [None]
 
     def test_function(tc: TestCase) -> None:
-        value = tc.any(generator)
+        value = tc.draw(generator)
         if condition(value):
             best[0] = value
             tc.mark_status(Status.INTERESTING)

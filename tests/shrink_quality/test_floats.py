@@ -64,12 +64,12 @@ def test_float_increment_shortens_via_negative():
     Regression for shrink quality found by minismith."""
 
     def tf(tc):
-        v0 = tc.any(gs.booleans())
-        v1 = tc.any(gs.floats(allow_nan=False, allow_infinity=False))
-        tc.any(gs.booleans())
+        v0 = tc.draw(gs.booleans())
+        v1 = tc.draw(gs.floats(allow_nan=False, allow_infinity=False))
+        tc.draw(gs.booleans())
         if v1 < 0.0:
             tc.mark_status(Status.INTERESTING)
-        tc.any(gs.booleans())
+        tc.draw(gs.booleans())
         if v0:
             tc.mark_status(Status.INTERESTING)
 
@@ -85,8 +85,8 @@ def test_lower_and_bump_with_float_source_gaps():
     float source has index gaps (bounded range with interleaved signs)."""
 
     def tf(tc):
-        v0 = tc.any(gs.floats(min_value=1.0, max_value=2.0, allow_nan=False))
-        v1 = tc.any(gs.booleans())
+        v0 = tc.draw(gs.floats(min_value=1.0, max_value=2.0, allow_nan=False))
+        v1 = tc.draw(gs.booleans())
         if v0 > 1.5 and v1:
             tc.mark_status(Status.INTERESTING)
 
@@ -101,8 +101,8 @@ def test_lower_and_bump_with_bounded_float_target():
     float's range doesn't include 1.0 or -1.0."""
 
     def tf(tc):
-        v0 = tc.any(gs.integers(0, 5))
-        v1 = tc.any(gs.floats(min_value=0.0, max_value=0.5, allow_nan=False))
+        v0 = tc.draw(gs.integers(0, 5))
+        v1 = tc.draw(gs.floats(min_value=0.0, max_value=0.5, allow_nan=False))
         if v0 >= 3 and v1 > 0.0:
             tc.mark_status(Status.INTERESTING)
 
@@ -123,7 +123,7 @@ def test_lower_and_bump_negative_zero_decrement_target():
     processed by lower_and_bump (gap=1 requires at least two indexed nodes)."""
 
     def tf(tc):
-        v = tc.any(gs.floats(allow_nan=False, allow_infinity=False))
+        v = tc.draw(gs.floats(allow_nan=False, allow_infinity=False))
         a = tc.draw_integer(0, 10)
         if v > 0.5 and a > 0:
             tc.mark_status(Status.INTERESTING)
@@ -143,22 +143,22 @@ def test_negative_zero_shrinks_to_positive_zero():
 
     @gs.composite
     def pair(tc):
-        a = tc.any(gs.booleans())
-        b = tc.any(gs.booleans())
+        a = tc.draw(gs.booleans())
+        b = tc.draw(gs.booleans())
         return (a, b)
 
     def tf(tc):
-        tc.any(pair())
-        tc.any(pair())
-        v2 = tc.any(
+        tc.draw(pair())
+        tc.draw(pair())
+        v2 = tc.draw(
             gs.one_of(
                 gs.floats(allow_nan=False, allow_infinity=False),
                 gs.floats(allow_nan=False, allow_infinity=False),
                 gs.nothing(),
             )
         )
-        tc.any(gs.booleans())
-        v4 = tc.any(gs.booleans())
+        tc.draw(gs.booleans())
+        v4 = tc.draw(gs.booleans())
         if not (((v4) or (v2 > 0.0)) and (v2 >= 0.0)):
             tc.mark_status(Status.INTERESTING)
 

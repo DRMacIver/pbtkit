@@ -130,7 +130,7 @@ def test_cache_distinguishes_negative_zero_in_lookup():
     for a sequence that used -0.0 (or vice versa)."""
 
     def tf(tc):
-        v = tc.any(gs.floats(allow_nan=False, allow_infinity=False))
+        v = tc.draw(gs.floats(allow_nan=False, allow_infinity=False))
         if v >= 0.0:
             tc.mark_status(Status.INTERESTING)
 
@@ -299,7 +299,7 @@ def test_flat_map_core():
 
     @run_test(database={})
     def _(tc):
-        m, n = tc.any(
+        m, n = tc.draw(
             gs.integers(0, 5).flat_map(
                 lambda m: gs.tuples(gs.just(m), gs.integers(m, m + 10))
             )
@@ -312,7 +312,7 @@ def test_filter_core():
 
     @run_test(database={})
     def _(tc):
-        n = tc.any(gs.integers(0, 10).filter(lambda n: n % 2 == 0))
+        n = tc.draw(gs.integers(0, 10).filter(lambda n: n % 2 == 0))
         assert n % 2 == 0
 
 
@@ -322,7 +322,7 @@ def test_nothing_core():
 
         @run_test(database={})
         def _(tc):
-            tc.any(gs.nothing())
+            tc.draw(gs.nothing())
 
 
 def test_one_of_empty_core():
@@ -331,7 +331,7 @@ def test_one_of_empty_core():
 
         @run_test(database={})
         def _(tc):
-            tc.any(gs.one_of())
+            tc.draw(gs.one_of())
 
 
 def test_one_of_single_core():
@@ -339,7 +339,7 @@ def test_one_of_single_core():
 
     @run_test(database={})
     def _(tc):
-        n = tc.any(gs.one_of(gs.integers(0, 10)))
+        n = tc.draw(gs.one_of(gs.integers(0, 10)))
         assert 0 <= n <= 10
 
 
@@ -348,7 +348,7 @@ def test_sampled_from_core():
 
     @run_test(database={})
     def _(tc):
-        v = tc.any(gs.sampled_from(["a", "b", "c"]))
+        v = tc.draw(gs.sampled_from(["a", "b", "c"]))
         assert v in ("a", "b", "c")
 
 
@@ -358,7 +358,7 @@ def test_sampled_from_empty_core():
 
         @run_test(database={})
         def _(tc):
-            tc.any(gs.sampled_from([]))
+            tc.draw(gs.sampled_from([]))
 
 
 def test_sampled_from_single_core():
@@ -366,7 +366,7 @@ def test_sampled_from_single_core():
 
     @run_test(database={})
     def _(tc):
-        assert tc.any(gs.sampled_from(["only"])) == "only"
+        assert tc.draw(gs.sampled_from(["only"])) == "only"
 
 
 def test_just_core():
@@ -374,7 +374,7 @@ def test_just_core():
 
     @run_test(database={})
     def _(tc):
-        assert tc.any(gs.just(42)) == 42
+        assert tc.draw(gs.just(42)) == 42
 
 
 def test_weighted_forced_true():
@@ -386,6 +386,33 @@ def test_weighted_forced_true():
             if tc.weighted(1.0):
                 tc.choice(1)
                 assert False
+
+
+def test_draw_silent_does_not_print(capsys):
+    """draw_silent returns a value but never prints it, even on the final replay."""
+    with pytest.raises(AssertionError):
+
+        @run_test(database={}, max_examples=1000)
+        def _(tc):
+            n = tc.draw_silent(gs.integers(0, 10))
+            assert n == 0
+
+    captured = capsys.readouterr()
+    assert captured.out.strip() == ""
+
+
+def test_note_prints_on_failing_example(capsys):
+    """note() prints during the final failing replay (print_results=True),
+    and is a no-op during generation runs (print_results=False)."""
+    with pytest.raises(AssertionError):
+
+        @run_test(database={})
+        def _(tc):
+            tc.note("hello from note")
+            assert False
+
+    captured = capsys.readouterr()
+    assert "hello from note" in captured.out
 
 
 @pytest.mark.requires("database")
@@ -415,7 +442,7 @@ def test_map_core():
 
     @run_test(database={})
     def _(tc):
-        n = tc.any(gs.integers(0, 5).map(lambda n: n * 2))
+        n = tc.draw(gs.integers(0, 5).map(lambda n: n * 2))
         assert n % 2 == 0
 
 

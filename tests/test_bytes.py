@@ -22,11 +22,11 @@ def test_finds_short_binary(capsys):
 
         @run_test(database={})
         def _(test_case):
-            b = test_case.any(gs.binary(max_size=10))
+            b = test_case.draw(gs.binary(max_size=10))
             assert len(b) < 1
 
     captured = capsys.readouterr()
-    assert captured.out.strip() == r"any(binary(min_size=0, max_size=10)): b'\x00'"
+    assert captured.out.strip() == r"draw(binary(min_size=0, max_size=10)): b'\x00'"
 
 
 def test_shrinks_bytes_to_minimal(capsys):
@@ -34,17 +34,17 @@ def test_shrinks_bytes_to_minimal(capsys):
 
         @run_test(database={}, max_examples=1000)
         def _(test_case):
-            b = test_case.any(gs.binary(min_size=1, max_size=5))
+            b = test_case.draw(gs.binary(min_size=1, max_size=5))
             assert 0xFF not in b
 
     captured = capsys.readouterr()
-    assert captured.out.strip() == r"any(binary(min_size=1, max_size=5)): b'\xff'"
+    assert captured.out.strip() == r"draw(binary(min_size=1, max_size=5)): b'\xff'"
 
 
 def test_binary_respects_size_bounds():
     @run_test(database={})
     def _(test_case):
-        b = test_case.any(gs.binary(min_size=2, max_size=4))
+        b = test_case.draw(gs.binary(min_size=2, max_size=4))
         assert 2 <= len(b) <= 4
 
 
@@ -56,7 +56,7 @@ def test_shrinks_bytes_with_constraints(capsys):
 
         @run_test(database={}, max_examples=1000)
         def _(test_case):
-            b = test_case.any(gs.binary(min_size=2, max_size=10))
+            b = test_case.draw(gs.binary(min_size=2, max_size=10))
             assert sum(b) <= 10
 
     captured = capsys.readouterr()
@@ -83,7 +83,7 @@ def test_mixed_types_database_round_trip(tmpdir):
             def _(test_case):
                 nonlocal count
                 count += 1
-                b = test_case.any(gs.binary(max_size=10))
+                b = test_case.draw(gs.binary(max_size=10))
                 test_case.weighted(0.5)
                 assert len(b) < 1
 
@@ -101,11 +101,11 @@ def test_shrinks_bytes_to_simplest(capsys):
 
         @run_test(database={})
         def _(test_case):
-            b = test_case.any(gs.binary(max_size=10))
+            b = test_case.draw(gs.binary(max_size=10))
             assert sum(b) > 0
 
     captured = capsys.readouterr()
-    assert captured.out.strip() == "any(binary(min_size=0, max_size=10)): b''"
+    assert captured.out.strip() == "draw(binary(min_size=0, max_size=10)): b''"
 
 
 @pytest.mark.requires("shrinking.index_passes")
@@ -133,7 +133,7 @@ def test_targeting_with_bytes():
     @run_test(database={}, max_examples=200)
     def _(test_case):
         nonlocal max_score
-        test_case.any(gs.binary(max_size=5))
+        test_case.draw(gs.binary(max_size=5))
         n = test_case.choice(100)
         test_case.target(n)
         max_score = max(n, max_score)

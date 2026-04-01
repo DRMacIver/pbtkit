@@ -24,14 +24,14 @@ from minithesis.text import StringChoice
 def test_text_basic():
     @run_test(database={})
     def _(tc):
-        s = tc.any(gs.text(min_size=1, max_size=5))
+        s = tc.draw(gs.text(min_size=1, max_size=5))
         assert 1 <= len(s) <= 5
 
 
 def test_text_ascii():
     @run_test(database={})
     def _(tc):
-        s = tc.any(gs.text(min_codepoint=32, max_codepoint=126))
+        s = tc.draw(gs.text(min_codepoint=32, max_codepoint=126))
         assert all(32 <= ord(c) <= 126 for c in s)
 
 
@@ -40,7 +40,7 @@ def test_text_shrinks_to_short(capsys):
 
         @run_test(database={})
         def _(tc):
-            s = tc.any(gs.text(min_codepoint=ord("a"), max_codepoint=ord("z")))
+            s = tc.draw(gs.text(min_codepoint=ord("a"), max_codepoint=ord("z")))
             assert len(s) < 1
 
     captured = capsys.readouterr()
@@ -54,7 +54,7 @@ def test_text_shrinks_characters(capsys):
 
         @run_test(database={}, max_examples=1000)
         def _(tc):
-            s = tc.any(
+            s = tc.draw(
                 gs.text(
                     min_codepoint=ord("a"),
                     max_codepoint=ord("z"),
@@ -71,7 +71,7 @@ def test_text_shrinks_characters(capsys):
 def test_text_no_surrogates():
     @run_test(database={}, max_examples=200)
     def _(tc):
-        s = tc.any(gs.text(min_codepoint=0xD700, max_codepoint=0xE000))
+        s = tc.draw(gs.text(min_codepoint=0xD700, max_codepoint=0xE000))
         for c in s:
             assert not (0xD800 <= ord(c) <= 0xDFFF)
 
@@ -88,7 +88,7 @@ def test_text_database_round_trip(tmpdir):
             def _(test_case):
                 nonlocal count
                 count += 1
-                s = test_case.any(gs.text(min_size=1, max_size=5))
+                s = test_case.draw(gs.text(min_size=1, max_size=5))
                 assert len(s) < 1
 
     run()
@@ -168,7 +168,7 @@ def test_text_unicode_shrinks(capsys):
 
         @run_test(database={}, max_examples=1000)
         def _(tc):
-            s = tc.any(
+            s = tc.draw(
                 gs.text(min_codepoint=128, max_codepoint=256, min_size=1, max_size=3)
             )
             # Must contain a high character, so the shrinker has to
@@ -198,7 +198,7 @@ def test_text_sorts_characters():
     to swap but fails (the swap makes it not interesting)."""
 
     def tf(tc):
-        s = tc.any(
+        s = tc.draw(
             gs.text(
                 min_codepoint=ord("a"), max_codepoint=ord("z"), min_size=3, max_size=5
             )
@@ -218,7 +218,7 @@ def test_text_shrinks_to_simplest():
     """String shrinker replaces value with simplest when possible."""
 
     def tf(tc):
-        tc.any(gs.text(min_codepoint=ord("a"), max_codepoint=ord("z"), max_size=5))
+        tc.draw(gs.text(min_codepoint=ord("a"), max_codepoint=ord("z"), max_size=5))
         # Always interesting — shrinker replaces string with "" (simplest).
         tc.mark_status(Status.INTERESTING)
 
@@ -233,10 +233,10 @@ def test_text_redistributes_to_empty():
     """String redistribution empties one string when possible."""
 
     def tf(tc):
-        s1 = tc.any(
+        s1 = tc.draw(
             gs.text(min_codepoint=ord("a"), max_codepoint=ord("z"), max_size=10)
         )
-        s2 = tc.any(
+        s2 = tc.draw(
             gs.text(min_codepoint=ord("a"), max_codepoint=ord("z"), max_size=10)
         )
         if len(s1) + len(s2) >= 3:
@@ -257,12 +257,12 @@ def test_text_redistributes_pair():
     transfer content rather than just emptying one."""
 
     def tf(tc):
-        s1 = tc.any(
+        s1 = tc.draw(
             gs.text(
                 min_codepoint=ord("a"), max_codepoint=ord("z"), min_size=1, max_size=10
             )
         )
-        s2 = tc.any(
+        s2 = tc.draw(
             gs.text(
                 min_codepoint=ord("a"), max_codepoint=ord("z"), min_size=1, max_size=10
             )

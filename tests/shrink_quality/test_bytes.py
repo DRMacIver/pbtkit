@@ -19,8 +19,8 @@ def test_redistribute_bytes_between_pairs():
     Regression for shrink quality found by minismith."""
 
     def tf(tc):
-        v0 = tc.any(gs.binary(max_size=20))
-        v1 = tc.any(gs.binary(max_size=20))
+        v0 = tc.draw(gs.binary(max_size=20))
+        v1 = tc.draw(gs.binary(max_size=20))
         if len(v0) + len(v1) >= 20:
             tc.mark_status(Status.INTERESTING)
 
@@ -36,8 +36,8 @@ def test_redistribute_bytes_respects_max_size():
     """redistribute_bytes must skip transfers that exceed max_size."""
 
     def tf(tc):
-        v0 = tc.any(gs.binary(min_size=5, max_size=10))
-        v1 = tc.any(gs.binary(max_size=8))
+        v0 = tc.draw(gs.binary(min_size=5, max_size=10))
+        v1 = tc.draw(gs.binary(max_size=8))
         if len(v0) + len(v1) >= 15:
             tc.mark_status(Status.INTERESTING)
 
@@ -50,7 +50,7 @@ def test_bytes_sorts_when_order_matters():
     """Bytes shrinking should sort bytes when the test depends on order."""
 
     def tf(tc):
-        v0 = tc.any(gs.binary(min_size=3, max_size=3))
+        v0 = tc.draw(gs.binary(min_size=3, max_size=3))
         # Only interesting if the bytes are NOT already sorted but contain 0x01.
         if b"\x01" in v0 and v0 != bytes(sorted(v0)):
             tc.mark_status(Status.INTERESTING)
@@ -70,8 +70,8 @@ def test_bytes_length_redistribution():
     share the same shrinking infrastructure and often have the same bugs."""
 
     def tf(tc):
-        v0 = tc.any(gs.binary(max_size=20))
-        v1 = tc.any(gs.binary(max_size=20))
+        v0 = tc.draw(gs.binary(max_size=20))
+        v1 = tc.draw(gs.binary(max_size=20))
         if len(v0) + len(v1) >= 30:
             tc.mark_status(Status.INTERESTING)
 
@@ -90,8 +90,8 @@ def test_bytes_redistribution_moves_all():
     redistribution to do the work."""
 
     def tf(tc):
-        v0 = tc.any(gs.binary(min_size=3, max_size=10))
-        v1 = tc.any(gs.binary(max_size=20))
+        v0 = tc.draw(gs.binary(min_size=3, max_size=10))
+        v1 = tc.draw(gs.binary(max_size=20))
         if len(v0) + len(v1) >= 10:
             tc.mark_status(Status.INTERESTING)
 
@@ -111,8 +111,8 @@ def test_bytes_increment_shortens_sequence():
     Regression for shrink quality found by minismith."""
 
     def tf(tc):
-        v0 = tc.any(gs.binary(max_size=20))
-        v1 = tc.any(
+        v0 = tc.draw(gs.binary(max_size=20))
+        v1 = tc.draw(
             gs.dictionaries(
                 gs.integers(0, 0),
                 gs.text(min_codepoint=32, max_codepoint=126, max_size=20),
@@ -140,16 +140,16 @@ def test_lower_and_bump_stale_kind_after_replace():
 
     @gs.composite
     def pair(tc):
-        a = tc.any(gs.booleans())
-        b = tc.any(gs.booleans())
+        a = tc.draw(gs.booleans())
+        b = tc.draw(gs.booleans())
         return (a, b)
 
     def tf(tc):
-        v0 = tc.any(gs.lists(gs.booleans(), max_size=10))
-        tc.any(gs.booleans())
-        tc.any(gs.binary(max_size=20))
-        tc.any(pair())
-        tc.any(pair())
+        v0 = tc.draw(gs.lists(gs.booleans(), max_size=10))
+        tc.draw(gs.booleans())
+        tc.draw(gs.binary(max_size=20))
+        tc.draw(pair())
+        tc.draw(pair())
         if len(v0) != 0:
             tc.mark_status(Status.INTERESTING)
 

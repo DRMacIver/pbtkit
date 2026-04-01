@@ -54,11 +54,11 @@ def test_minimize_mixed_list():
 # Mixed flatmap
 @gs.composite
 def bool_or_text_via_flatmap(tc):
-    b = tc.any(gs.booleans())
+    b = tc.draw(gs.booleans())
     if b:
-        return ("bool", tc.any(gs.booleans()))
+        return ("bool", tc.draw(gs.booleans()))
     else:
-        return ("text", tc.any(gs.text()))
+        return ("text", tc.draw(gs.text()))
 
 
 def test_mixed_list_flatmap():

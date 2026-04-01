@@ -23,21 +23,21 @@ class Failure(Exception):
 def test_mapped_possibility():
     @run_test()
     def _(tc):
-        n = tc.any(gs.integers(0, 5).map(lambda n: n * 2))
+        n = tc.draw(gs.integers(0, 5).map(lambda n: n * 2))
         assert n % 2 == 0
 
 
 def test_selected_possibility():
     @run_test()
     def _(tc):
-        n = tc.any(gs.integers(0, 5).filter(lambda n: n % 2 == 0))
+        n = tc.draw(gs.integers(0, 5).filter(lambda n: n % 2 == 0))
         assert n % 2 == 0
 
 
 def test_bound_possibility():
     @run_test()
     def _(tc):
-        m, n = tc.any(
+        m, n = tc.draw(
             gs.integers(0, 5).flat_map(
                 lambda m: gs.tuples(
                     gs.just(m),
@@ -54,7 +54,7 @@ def test_cannot_witness_nothing():
 
         @run_test()
         def _(tc):
-            tc.any(gs.nothing())
+            tc.draw(gs.nothing())
 
 
 def test_cannot_witness_empty_one_of():
@@ -62,20 +62,20 @@ def test_cannot_witness_empty_one_of():
 
         @run_test()
         def _(tc):
-            tc.any(gs.one_of())
+            tc.draw(gs.one_of())
 
 
 def test_one_of_single():
     @run_test()
     def _(tc):
-        n = tc.any(gs.one_of(gs.integers(0, 10)))
+        n = tc.draw(gs.one_of(gs.integers(0, 10)))
         assert 0 <= n <= 10
 
 
 def test_can_draw_mixture():
     @run_test()
     def _(tc):
-        m = tc.any(gs.one_of(gs.integers(-5, 0), gs.integers(2, 5)))
+        m = tc.draw(gs.one_of(gs.integers(-5, 0), gs.integers(2, 5)))
         assert -5 <= m <= 5
         assert m != 1
 
@@ -127,14 +127,14 @@ def test_guaranteed_weighted():
 def test_size_bounds_on_list():
     @run_test(database={})
     def _(tc):
-        ls = tc.any(gs.lists(gs.integers(0, 10), min_size=1, max_size=3))
+        ls = tc.draw(gs.lists(gs.integers(0, 10), min_size=1, max_size=3))
         assert 1 <= len(ls) <= 3
 
 
 def test_fixed_size_list():
     @run_test(database={})
     def _(tc):
-        ls = tc.any(gs.lists(gs.integers(0, 10), min_size=3, max_size=3))
+        ls = tc.draw(gs.lists(gs.integers(0, 10), min_size=3, max_size=3))
         assert len(ls) == 3
 
 
@@ -144,7 +144,7 @@ def test_many_with_small_max():
 
     @run_test(database={}, max_examples=200)
     def _(tc):
-        ls = tc.any(gs.lists(gs.integers(0, 10), max_size=2))
+        ls = tc.draw(gs.lists(gs.integers(0, 10), max_size=2))
         assert len(ls) <= 2
 
 
@@ -184,7 +184,7 @@ def test_many_reject_unsatisfiable():
 def test_sampled_from():
     @run_test(database={})
     def _(tc):
-        v = tc.any(gs.sampled_from(["a", "b", "c"]))
+        v = tc.draw(gs.sampled_from(["a", "b", "c"]))
         assert v in ("a", "b", "c")
 
 
@@ -193,7 +193,7 @@ def test_sampled_from_shrinks_to_first(capsys):
 
         @run_test(database={})
         def _(tc):
-            v = tc.any(gs.sampled_from(["a", "b", "c"]))
+            v = tc.draw(gs.sampled_from(["a", "b", "c"]))
             assert v != "a"
 
     captured = capsys.readouterr()
@@ -203,7 +203,7 @@ def test_sampled_from_shrinks_to_first(capsys):
 def test_sampled_from_single():
     @run_test(database={})
     def _(tc):
-        assert tc.any(gs.sampled_from(["only"])) == "only"
+        assert tc.draw(gs.sampled_from(["only"])) == "only"
 
 
 def test_sampled_from_empty():
@@ -211,37 +211,37 @@ def test_sampled_from_empty():
 
         @run_test()
         def _(tc):
-            tc.any(gs.sampled_from([]))
+            tc.draw(gs.sampled_from([]))
 
 
 def test_booleans():
     @run_test(database={})
     def _(tc):
-        b = tc.any(gs.booleans())
+        b = tc.draw(gs.booleans())
         assert isinstance(b, bool)
 
 
 def test_composite():
     @gs.composite
     def pairs(tc):
-        x = tc.any(gs.integers(0, 10))
-        y = tc.any(gs.integers(x, 10))
+        x = tc.draw(gs.integers(0, 10))
+        y = tc.draw(gs.integers(x, 10))
         return (x, y)
 
     @run_test(database={})
     def _(tc):
-        x, y = tc.any(pairs())
+        x, y = tc.draw(pairs())
         assert x <= y <= 10
 
 
 def test_composite_with_args():
     @gs.composite
     def bounded_int(tc, max_val):
-        return tc.any(gs.integers(0, max_val))
+        return tc.draw(gs.integers(0, max_val))
 
     @run_test(database={})
     def _(tc):
-        n = tc.any(bounded_int(5))
+        n = tc.draw(bounded_int(5))
         assert 0 <= n <= 5
 
 
@@ -249,15 +249,15 @@ def test_composite_with_args():
 def test_composite_shrinks(capsys):
     @gs.composite
     def pairs(tc):
-        x = tc.any(gs.integers(0, 100))
-        y = tc.any(gs.integers(0, 100))
+        x = tc.draw(gs.integers(0, 100))
+        y = tc.draw(gs.integers(0, 100))
         return (x, y)
 
     with pytest.raises(AssertionError):
 
         @run_test(database={})
         def _(tc):
-            x, y = tc.any(pairs())
+            x, y = tc.draw(pairs())
             assert x + y < 100
 
     captured = capsys.readouterr()
@@ -267,7 +267,7 @@ def test_composite_shrinks(capsys):
 def test_unique_lists():
     @run_test(database={})
     def _(tc):
-        ls = tc.any(gs.lists(gs.integers(0, 10), unique=True, max_size=5))
+        ls = tc.draw(gs.lists(gs.integers(0, 10), unique=True, max_size=5))
         assert len(ls) == len(set(ls))
 
 
@@ -276,7 +276,7 @@ def test_unique_lists_shrinks(capsys):
 
         @run_test(database={}, max_examples=1000)
         def _(tc):
-            ls = tc.any(gs.lists(gs.integers(0, 100), unique=True))
+            ls = tc.draw(gs.lists(gs.integers(0, 100), unique=True))
             assert len(ls) < 3
 
     captured = capsys.readouterr()
@@ -286,7 +286,7 @@ def test_unique_lists_shrinks(capsys):
 def test_unique_by():
     @run_test(database={})
     def _(tc):
-        ls = tc.any(
+        ls = tc.draw(
             gs.lists(gs.integers(0, 100), unique_by=lambda x: x % 10, max_size=5)
         )
         keys = [x % 10 for x in ls]
@@ -296,7 +296,9 @@ def test_unique_by():
 def test_dictionaries():
     @run_test(database={})
     def _(tc):
-        d = tc.any(gs.dictionaries(gs.integers(0, 10), gs.integers(0, 100), max_size=5))
+        d = tc.draw(
+            gs.dictionaries(gs.integers(0, 10), gs.integers(0, 100), max_size=5)
+        )
         assert isinstance(d, dict)
         assert len(d) <= 5
         for k, v in d.items():
@@ -309,7 +311,7 @@ def test_dictionaries_shrinks(capsys):
 
         @run_test(database={}, max_examples=1000)
         def _(tc):
-            d = tc.any(gs.dictionaries(gs.integers(0, 10), gs.integers(0, 100)))
+            d = tc.draw(gs.dictionaries(gs.integers(0, 10), gs.integers(0, 100)))
             assert sum(d.values()) <= 100
 
     captured = capsys.readouterr()
@@ -319,7 +321,7 @@ def test_dictionaries_shrinks(capsys):
 def test_dictionaries_size_bounds():
     @run_test(database={})
     def _(tc):
-        d = tc.any(
+        d = tc.draw(
             gs.dictionaries(
                 gs.integers(0, 10), gs.integers(0, 100), min_size=1, max_size=3
             )

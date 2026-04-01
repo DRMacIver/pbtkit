@@ -112,7 +112,7 @@ def lists(
             seen: set = set()
             elems = many(test_case, min_size=min_size, max_size=max_size)
             while elems.more():
-                value = test_case.any(elements)
+                value = test_case.draw(elements)
                 key = key_fn(value)
                 if key in seen:
                     elems.reject()
@@ -127,7 +127,7 @@ def lists(
             result: list[U] = []
             elems = many(test_case, min_size=min_size, max_size=max_size)
             while elems.more():
-                result.append(test_case.any(elements))
+                result.append(test_case.draw(elements))
             return result
 
     return Generator[list[U]](
@@ -142,7 +142,7 @@ def just(value: U) -> Generator[U]:
 
 
 def nothing() -> Generator[NoReturn]:
-    """No possible values. Any call to ``any`` will reject the test case."""
+    """No possible values. Any call to ``draw`` will reject the test case."""
 
     def produce(tc: TestCase) -> NoReturn:
         tc.reject()
@@ -178,7 +178,7 @@ def one_of(*generators: Generator[T]) -> Generator[T]:
     if len(generators) == 1:
         return generators[0]
     return Generator(
-        lambda tc: tc.any(generators[tc.choice(len(generators) - 1)]),
+        lambda tc: tc.draw(generators[tc.choice(len(generators) - 1)]),
         name=f"one_of({', '.join(g.name for g in generators)})",
     )
 
@@ -200,8 +200,8 @@ def dictionaries(
         result: dict[U, V] = {}
         elems = many(test_case, min_size=min_size, max_size=max_size)
         while elems.more():
-            k = test_case.any(keys)
-            v = test_case.any(values)
+            k = test_case.draw(keys)
+            v = test_case.draw(values)
             if k in result:
                 elems.reject()
             else:
@@ -218,7 +218,7 @@ def tuples(*generators: Generator[Any]) -> Generator[Any]:
     """Generates a tuple of length len(generators) where element i
     is drawn from generators[i]."""
     return Generator(
-        lambda tc: tuple(tc.any(g) for g in generators),
+        lambda tc: tuple(tc.draw(g) for g in generators),
         name=f"tuples({', '.join(g.name for g in generators)})",
     )
 
@@ -235,13 +235,13 @@ def composite(
 
         @composite
         def pairs(tc):
-            x = tc.any(integers(0, 10))
-            y = tc.any(integers(x, 10))
+            x = tc.draw(integers(0, 10))
+            y = tc.draw(integers(x, 10))
             return (x, y)
 
         @run_test()
         def _(tc):
-            x, y = tc.any(pairs())
+            x, y = tc.draw(pairs())
             assert x <= y
     """
 

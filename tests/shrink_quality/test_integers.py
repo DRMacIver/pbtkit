@@ -50,7 +50,7 @@ def test_minimize_multiple_elements_in_silly_large_int_range():
 def test_minimize_multiple_elements_min_is_not_dupe():
     @gs.composite
     def bounded_int_list(tc):
-        return tc.any(gs.lists(gs.integers(0, 2**62)))
+        return tc.draw(gs.lists(gs.integers(0, 2**62)))
 
     target = list(range(20))
     result = minimal(

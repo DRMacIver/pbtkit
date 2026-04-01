@@ -450,8 +450,8 @@ class TestCase:
         """Set a score to maximize. Stub — import minithesis to enable."""
         raise NotImplementedError("import minithesis.targeting to use target")
 
-    def any(self, generator: Generator[U]) -> U:
-        """Return a value from ``generator``."""
+    def draw(self, generator: Generator[U]) -> U:
+        """Return a value from ``generator``, printing it if this is a failing example."""
         try:
             self.depth += 1
             result = generator.produce(self)
@@ -459,8 +459,22 @@ class TestCase:
             self.depth -= 1
 
         if self._should_print():
-            print(f"any({generator}): {result}")
+            print(f"draw({generator}): {result}")
         return result
+
+    def draw_silent(self, generator: Generator[U]) -> U:
+        """Return a value from ``generator`` without printing it."""
+        try:
+            self.depth += 1
+            result = generator.produce(self)
+        finally:
+            self.depth -= 1
+        return result
+
+    def note(self, message: str) -> None:
+        """Print ``message`` when this is the final failing example."""
+        if self.print_results:
+            print(message)
 
     def mark_status(self, status: Status) -> NoReturn:
         """Set the status and raise StopTest."""
@@ -535,7 +549,7 @@ class Generator(Generic[T]):
         """Returns a ``Generator`` where values come from
         applying ``f`` to some possible value for ``self``."""
         return Generator(
-            lambda test_case: f(test_case.any(self)),
+            lambda test_case: f(test_case.draw(self)),
             name=f"{self.name}.map({f.__name__})",
         )
 
@@ -545,7 +559,7 @@ class Generator(Generic[T]):
         get a new ``Generator``, then drawing from that."""
 
         def produce(test_case: TestCase) -> S:
-            return test_case.any(f(test_case.any(self)))
+            return test_case.draw(f(test_case.draw(self)))
 
         return Generator[S](
             produce,
@@ -559,7 +573,7 @@ class Generator(Generic[T]):
 
         def produce(test_case: TestCase) -> T:
             for _ in range(3):
-                candidate = test_case.any(self)
+                candidate = test_case.draw(self)
                 if f(candidate):
                     return candidate
             test_case.reject()

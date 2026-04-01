@@ -35,7 +35,7 @@ def test_string_sorts_characters_when_possible():
     Sorting '0e0' produces '00e' (smaller codepoints first)."""
 
     def tf(tc):
-        v0 = tc.any(gs.text(min_codepoint=32, max_codepoint=126, max_size=20))
+        v0 = tc.draw(gs.text(min_codepoint=32, max_codepoint=126, max_size=20))
         if len(v0) >= 3 and "e" in v0:
             tc.mark_status(Status.INTERESTING)
 
@@ -73,8 +73,8 @@ def test_string_length_redistribution():
     Regression for shrink quality found by minismith."""
 
     def tf(tc):
-        v0 = tc.any(gs.text(min_codepoint=32, max_codepoint=126, max_size=20))
-        v1 = tc.any(gs.text(min_codepoint=32, max_codepoint=126, max_size=20))
+        v0 = tc.draw(gs.text(min_codepoint=32, max_codepoint=126, max_size=20))
+        v1 = tc.draw(gs.text(min_codepoint=32, max_codepoint=126, max_size=20))
         if len(v0) + len(v1) >= 30:
             tc.mark_status(Status.INTERESTING)
 

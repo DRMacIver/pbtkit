@@ -354,7 +354,7 @@ def test_minithesis_shrinks_at_least_as_well_as_hypothesis(
 
     if sort_key(minithesis_result) > sort_key(worst_hypothesis):
         # Replay both results through the test body, capturing the
-        # top-level values returned by tc.any() calls.
+        # top-level values returned by tc.draw() calls.
         def _replay(nodes):
             tc = TestCase.for_choices([n.value for n in nodes], prefix_nodes=nodes)
             draws: list[tuple[str, object]] = []

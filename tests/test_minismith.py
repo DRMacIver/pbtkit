@@ -729,7 +729,7 @@ def gen_draw(draw: st.DrawFn, env: Env) -> tuple[str, str]:
     """Generate a simple draw statement. Returns (type, code_line)."""
     typ, expr, lo, hi = draw(gen_generator_expr())
     var = env.fresh_var()
-    code = f"{var} = tc.any({expr})"
+    code = f"{var} = tc.draw({expr})"
     env.add(var, typ, lo, hi)
     return (typ, code)
 
@@ -750,20 +750,20 @@ def gen_dependent_draw(draw: st.DrawFn, env: Env) -> str:
     if choice == 0:
         # Integer with dependent bounds: integers(src, src + delta)
         delta = draw(st.integers(1, 50))
-        code = f"{var} = tc.any(integers({src}, {src} + {delta}))"
+        code = f"{var} = tc.draw(integers({src}, {src} + {delta}))"
         env.add(var, "int")
     elif choice == 1:
         # Integer with dependent bounds: integers(-abs(src), abs(src))
-        code = f"{var} = tc.any(integers(-abs({src}) - 1, abs({src}) + 1))"
+        code = f"{var} = tc.draw(integers(-abs({src}) - 1, abs({src}) + 1))"
         env.add(var, "int")
     elif choice == 2:
         # List with dependent max_size
-        code = f"{var} = tc.any(lists(booleans(), max_size=abs({src}) % 10 + 1))"
+        code = f"{var} = tc.draw(lists(booleans(), max_size=abs({src}) % 10 + 1))"
         env.add(var, "list_bool")
     else:
         # Text with dependent max_size
         code = (
-            f"{var} = tc.any(text(min_codepoint=32, max_codepoint=126, "
+            f"{var} = tc.draw(text(min_codepoint=32, max_codepoint=126, "
             f"max_size=abs({src}) % 20 + 1))"
         )
         env.add(var, "str")
@@ -950,7 +950,7 @@ def gen_composite_function(draw: st.DrawFn) -> tuple[str, str, str]:
     for i in range(n_draws):
         arg = f"_{name}_v{i}"
         _, expr, _, _ = draw(gen_base_generator_expr())
-        body_lines.append(f"    {arg} = tc.any({expr})")
+        body_lines.append(f"    {arg} = tc.draw({expr})")
         return_names.append(arg)
 
     body = "\n".join(body_lines)
@@ -995,7 +995,7 @@ def program(draw: st.DrawFn) -> str:
         if composite_names and draw(st.integers(0, 3)) == 0:
             cname = draw(st.sampled_from(composite_names))
             var = env.fresh_var()
-            lines.append(f"{indent}{var} = tc.any({cname}())")
+            lines.append(f"{indent}{var} = tc.draw({cname}())")
             env.add(var, "tuple")
         else:
             code = draw(gen_draw_or_dependent(env))
@@ -1082,7 +1082,7 @@ def test_regression_1():
 
         @run_test(max_examples=1, database={}, quiet=True, random=Random(0))
         def _(tc):
-            v0 = tc.any(integers(-1, -1))
+            v0 = tc.draw(integers(-1, -1))
             if not (v0 > 0):
                 raise Failure("v0 > 0")
     except Failure:
@@ -1094,8 +1094,8 @@ def test_regression_2():
 
         @run_test(max_examples=1, database={}, quiet=True, random=Random(0))
         def _(tc):
-            v0 = tc.any(lists(booleans(), max_size=10))
-            v1 = tc.any(lists(integers(0, 0), max_size=10))
+            v0 = tc.draw(lists(booleans(), max_size=10))
+            v1 = tc.draw(lists(integers(0, 0), max_size=10))
             if not (len(v0) == len(v1)):
                 raise Failure("len(v0) == len(v1)")
     except (Unsatisfiable, Failure):

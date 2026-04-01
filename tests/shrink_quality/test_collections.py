@@ -42,8 +42,8 @@ def test_minimize_sets_sampled_from():
 
 @gs.composite
 def list_and_int(tc):
-    v = tc.any(gs.lists(gs.integers(0, 100)))
-    i = tc.any(gs.integers(0, 100))
+    v = tc.draw(gs.lists(gs.integers(0, 100)))
+    i = tc.draw(gs.integers(0, 100))
     return (v, i)
 
 
@@ -268,8 +268,8 @@ def test_sorting_pass_survives_type_changes_from_lists():
 
         @run_test(max_examples=1, database={}, quiet=True, random=Random(0))
         def _(tc):
-            v0 = tc.any(gs.lists(gs.booleans(), max_size=10))
-            v1 = tc.any(gs.lists(gs.integers(0, 0), max_size=10))
+            v0 = tc.draw(gs.lists(gs.booleans(), max_size=10))
+            v1 = tc.draw(gs.lists(gs.integers(0, 0), max_size=10))
             assert len(v0) == len(v1)
 
 
@@ -282,8 +282,8 @@ def test_sorting_full_sort_survives_stale_indices():
 
         @run_test(max_examples=1, database={}, quiet=True, random=Random(1))
         def _(tc):
-            v0 = tc.any(gs.lists(gs.integers(0, 12), max_size=10))
-            tc.any(gs.booleans())
+            v0 = tc.draw(gs.lists(gs.integers(0, 12), max_size=10))
+            tc.draw(gs.booleans())
             if not (len(v0) == 0 or v0[0] > 0):
                 raise AssertionError
             if len(v0) > 2:
@@ -300,16 +300,16 @@ def test_sorting_stale_filter_with_punning():
 
     @gs.composite
     def pair(tc):
-        a = tc.any(gs.booleans())
-        b = tc.any(gs.booleans())
+        a = tc.draw(gs.booleans())
+        b = tc.draw(gs.booleans())
         return (a, b)
 
     def tf(tc):
-        v0 = tc.any(gs.lists(gs.integers(0, 0), max_size=10))
-        v1 = tc.any(
+        v0 = tc.draw(gs.lists(gs.integers(0, 0), max_size=10))
+        v1 = tc.draw(
             gs.integers(0, 0).flat_map(lambda _: gs.lists(gs.booleans(), max_size=1))
         )
-        tc.any(pair())
+        tc.draw(pair())
         if len(v0) != len(v1):
             tc.mark_status(Status.INTERESTING)
 
@@ -324,7 +324,7 @@ def test_unique_list_shrinks_using_negative_values():
     Regression for shrink quality found by minismith."""
 
     def tf(tc):
-        v0 = tc.any(gs.lists(gs.integers(-10, 10), max_size=5, unique=True))
+        v0 = tc.draw(gs.lists(gs.integers(-10, 10), max_size=5, unique=True))
         if len(v0) >= 5:
             tc.mark_status(Status.INTERESTING)
 
@@ -342,11 +342,11 @@ def test_redistribute_stale_indices_after_type_change():
     become BooleanChoice. Regression for AssertionError found by minismith."""
 
     def tf(tc):
-        v0 = tc.any(gs.booleans())
-        tc.any(gs.booleans().map(lambda x: int(x)))
-        tc.any(gs.integers(1, 7).filter(lambda x: x % 2 == 0))
-        tc.any(gs.booleans())
-        tc.any(gs.one_of(gs.integers(0, 0), gs.booleans()))
+        v0 = tc.draw(gs.booleans())
+        tc.draw(gs.booleans().map(lambda x: int(x)))
+        tc.draw(gs.integers(1, 7).filter(lambda x: x % 2 == 0))
+        tc.draw(gs.booleans())
+        tc.draw(gs.one_of(gs.integers(0, 0), gs.booleans()))
         if v0:
             tc.mark_status(Status.INTERESTING)
 
@@ -363,17 +363,17 @@ def test_sort_insertion_stale_indices():
     Regression for IndexError in sorting.py found by minismith."""
 
     def tf(tc):
-        v0 = tc.any(gs.lists(gs.integers(0, 20), max_size=10, unique=True))
-        tc.any(
+        v0 = tc.draw(gs.lists(gs.integers(0, 20), max_size=10, unique=True))
+        tc.draw(
             gs.dictionaries(
                 gs.text(min_codepoint=32, max_codepoint=126, max_size=5),
                 gs.booleans(),
                 max_size=5,
             )
         )
-        v2 = tc.any(gs.lists(gs.booleans(), max_size=10))
-        v3 = tc.any(gs.binary(max_size=20))
-        tc.any(gs.booleans())
+        v2 = tc.draw(gs.lists(gs.booleans(), max_size=10))
+        v3 = tc.draw(gs.binary(max_size=20))
+        tc.draw(gs.booleans())
         if len(v0) != 0:
             tc.mark_status(Status.INTERESTING)
         if len(v2) != len(v3):
@@ -421,8 +421,8 @@ def test_sort_stale_indices_after_punning():
     via value punning (e.g. one_of branch switch)."""
 
     def tf(tc):
-        v0 = tc.any(gs.one_of(gs.integers(0, 10), gs.integers(0, 10)))
-        v1 = tc.any(gs.one_of(gs.integers(0, 10), gs.integers(0, 10)))
+        v0 = tc.draw(gs.one_of(gs.integers(0, 10), gs.integers(0, 10)))
+        v1 = tc.draw(gs.one_of(gs.integers(0, 10), gs.integers(0, 10)))
         if v0 + v1 > 10:
             tc.mark_status(Status.INTERESTING)
 

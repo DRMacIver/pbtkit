@@ -19,8 +19,8 @@ from .conftest import minimal
 
 @gs.composite
 def int_pair(tc, lo, hi):
-    a = tc.any(gs.integers(lo, hi))
-    b = tc.any(gs.integers(lo, hi))
+    a = tc.draw(gs.integers(lo, hi))
+    b = tc.draw(gs.integers(lo, hi))
     return (a, b)
 
 
@@ -37,11 +37,11 @@ def test_negative_sum_of_pair():
 @pytest.mark.requires("text")
 @gs.composite
 def separated_sum(tc):
-    n1 = tc.any(gs.integers(0, 1000))
-    tc.any(gs.text())
-    tc.any(gs.booleans())
-    tc.any(gs.integers(-(2**63), 2**63 - 1))
-    n2 = tc.any(gs.integers(0, 1000))
+    n1 = tc.draw(gs.integers(0, 1000))
+    tc.draw(gs.text())
+    tc.draw(gs.booleans())
+    tc.draw(gs.integers(-(2**63), 2**63 - 1))
+    n2 = tc.draw(gs.integers(0, 1000))
     return (n1, n2)
 
 
@@ -59,8 +59,8 @@ def test_minimize_dict_of_booleans():
 
 @gs.composite
 def int_struct(tc):
-    a = tc.any(gs.integers(-(2**63), 2**63 - 1))
-    b = tc.any(gs.integers(-(2**63), 2**63 - 1))
+    a = tc.draw(gs.integers(-(2**63), 2**63 - 1))
+    b = tc.draw(gs.integers(-(2**63), 2**63 - 1))
     return (a, b)
 
 
@@ -77,19 +77,19 @@ def test_earlier_exit_produces_shorter_sequence():
 
     @gs.composite
     def pair_of_bools(tc):
-        a = tc.any(gs.booleans())
-        b = tc.any(gs.booleans())
+        a = tc.draw(gs.booleans())
+        b = tc.draw(gs.booleans())
         return (a, b)
 
     def tf(tc):
-        v0 = tc.any(gs.booleans())
-        v1 = tc.any(pair_of_bools())
-        tc.any(pair_of_bools())
+        v0 = tc.draw(gs.booleans())
+        v1 = tc.draw(pair_of_bools())
+        tc.draw(pair_of_bools())
         # First exit: when v0=True (5 choices used)
         if v0:
             tc.mark_status(Status.INTERESTING)
         # More draws only reached when v0=False
-        tc.any(gs.booleans())
+        tc.draw(gs.booleans())
         # Second exit: len(v1) is always 2, so this always fires (6 choices)
         if len(v1) != 0:
             tc.mark_status(Status.INTERESTING)
@@ -129,9 +129,9 @@ def test_early_exit_via_flag_with_preceding_draws():
 
     @gs.composite
     def test_data(tc):
-        v0 = tc.any(gs.booleans())
-        v1 = tc.any(gs.binary(max_size=20))
-        v2 = tc.any(gs.lists(gs.integers(0, 0), max_size=10))
+        v0 = tc.draw(gs.booleans())
+        v1 = tc.draw(gs.binary(max_size=20))
+        v2 = tc.draw(gs.lists(gs.integers(0, 0), max_size=10))
         return (v0, v1, v2)
 
     result = minimal(
@@ -155,16 +155,16 @@ def test_one_of_branch_switch_with_trailing_draws():
 
     @gs.composite
     def gen_pair(tc):
-        a = tc.any(gs.booleans())
-        b = tc.any(gs.booleans())
+        a = tc.draw(gs.booleans())
+        b = tc.draw(gs.booleans())
         return (a, b)
 
     @gs.composite
     def test_data(tc):
-        v0 = tc.any(
+        v0 = tc.draw(
             gs.one_of(gs.booleans(), gs.floats(allow_nan=False, allow_infinity=False))
         )
-        tc.any(gen_pair())
+        tc.draw(gen_pair())
         return v0
 
     result = minimal(test_data(), lambda v: bool(v))
@@ -180,15 +180,15 @@ def test_shorter_path_via_later_assertion():
 
     @gs.composite
     def pair(tc):
-        a = tc.any(gs.booleans())
-        b = tc.any(gs.floats(allow_nan=False, allow_infinity=False))
+        a = tc.draw(gs.booleans())
+        b = tc.draw(gs.floats(allow_nan=False, allow_infinity=False))
         return (a, b)
 
     @gs.composite
     def test_data(tc):
-        v0 = tc.any(pair())
-        v1 = tc.any(gs.lists(gs.integers(0, 20), max_size=10, unique=True))
-        tc.any(pair())
+        v0 = tc.draw(pair())
+        v1 = tc.draw(gs.lists(gs.integers(0, 20), max_size=10, unique=True))
+        tc.draw(pair())
         return (v0, v1)
 
     result = minimal(
@@ -236,8 +236,8 @@ def test_switch_failure_mode_for_simpler_sort_key():
 
     @gs.composite
     def test_data(tc):
-        v1 = tc.any(gs.floats(allow_nan=False, allow_infinity=False))
-        v4 = tc.any(gs.sampled_from([1, 0]))
+        v1 = tc.draw(gs.floats(allow_nan=False, allow_infinity=False))
+        v4 = tc.draw(gs.sampled_from([1, 0]))
         return (v1, v4)
 
     result = minimal(
@@ -260,9 +260,9 @@ def test_shorter_path_when_guard_precedes_expensive_draw():
 
     @gs.composite
     def test_data(tc):
-        v0 = tc.any(gs.integers(0, 10))
-        v1 = tc.any(gs.booleans())
-        v2 = tc.any(gs.lists(gs.integers(0, 100), max_size=10))
+        v0 = tc.draw(gs.integers(0, 10))
+        v1 = tc.draw(gs.booleans())
+        v2 = tc.draw(gs.lists(gs.integers(0, 100), max_size=10))
         return (v0, v1, v2)
 
     result = minimal(
@@ -303,12 +303,12 @@ def test_finds_small_list_even_with_bad_lists(capsys, seed):
 
         @run_test(database={}, random=Random(seed))
         def _(test_case):
-            ls = test_case.any(bad_list)
+            ls = test_case.draw(bad_list)
             assert sum(ls) <= 1000
 
     captured = capsys.readouterr()
 
-    assert captured.out.strip() == "any(bad_list): [1001]"
+    assert captured.out.strip() == "draw(bad_list): [1001]"
 
 
 def test_shrinking_mixed_choice_types_no_sort_crash():
@@ -366,7 +366,7 @@ def test_lower_and_bump_with_type_change():
             # Branch 0 draws a boolean, branch 1 draws an integer.
             # Lower-and-bump will decrement the branch index and
             # find a BooleanChoice at the next position.
-            value = tc.any(gs.one_of(gs.booleans(), gs.integers(0, 100)))
+            value = tc.draw(gs.one_of(gs.booleans(), gs.integers(0, 100)))
             assert isinstance(value, bool) or value <= 50
 
 
@@ -379,10 +379,10 @@ def test_lower_and_bump_explores_new_range():
     Regression for shrink quality found by minismith."""
 
     def tf(tc):
-        v0 = tc.any(gs.sampled_from([32, 46]))
-        tc.any(gs.sampled_from([32, 46]))
-        v2 = tc.any(gs.integers(-abs(v0) - 1, abs(v0) + 1))
-        tc.any(gs.integers(-abs(v2) - 1, abs(v2) + 1))
+        v0 = tc.draw(gs.sampled_from([32, 46]))
+        tc.draw(gs.sampled_from([32, 46]))
+        v2 = tc.draw(gs.integers(-abs(v0) - 1, abs(v0) + 1))
+        tc.draw(gs.integers(-abs(v2) - 1, abs(v2) + 1))
         if v2 == v0:
             tc.mark_status(Status.INTERESTING)
 
@@ -402,17 +402,17 @@ def test_lower_and_bump_tries_negative_values():
 
     @gs.composite
     def pair(tc):
-        a = tc.any(gs.booleans())
-        b = tc.any(gs.booleans())
+        a = tc.draw(gs.booleans())
+        b = tc.draw(gs.booleans())
         return (a, b)
 
     def tf(tc):
-        v0 = tc.any(pair())
-        tc.any(pair())
-        v2 = tc.any(gs.one_of(gs.integers(0, 0), gs.booleans()))
+        v0 = tc.draw(pair())
+        tc.draw(pair())
+        v2 = tc.draw(gs.one_of(gs.integers(0, 0), gs.booleans()))
         if len(v0) <= 0:
             tc.mark_status(Status.INTERESTING)
-        v3 = tc.any(gs.integers(-1, 1))
+        v3 = tc.draw(gs.integers(-1, 1))
         if v2:
             tc.mark_status(Status.INTERESTING)
         if not v2 and v3 < 0:
@@ -436,10 +436,10 @@ def test_increment_to_max_shortens_via_sampled_from():
     Regression for shrink quality found by minismith."""
 
     def tf(tc):
-        v0 = tc.any(gs.sampled_from([1, 1, 0]))
+        v0 = tc.draw(gs.sampled_from([1, 1, 0]))
         if v0 <= 0:
             tc.mark_status(Status.INTERESTING)
-        v1 = tc.any(gs.booleans())
+        v1 = tc.draw(gs.booleans())
         if v1:
             tc.mark_status(Status.INTERESTING)
 
@@ -457,8 +457,8 @@ def test_lower_and_bump_targets_booleans():
     Regression for shrink quality found by minismith."""
 
     def tf(tc):
-        v0 = tc.any(gs.integers(0, 1))
-        v1 = tc.any(gs.booleans())
+        v0 = tc.draw(gs.integers(0, 1))
+        v1 = tc.draw(gs.booleans())
         if v0 >= 1:
             tc.mark_status(Status.INTERESTING)
         if v1:
@@ -482,14 +482,14 @@ def test_increment_with_dependent_continuation():
     Regression for shrink quality found by minismith."""
 
     def tf(tc):
-        v0 = tc.any(gs.integers(0, 0))
-        v1 = tc.any(gs.booleans())
-        tc.any(gs.integers(0, 0))
-        v3 = tc.any(gs.lists(gs.integers(-21, -1), max_size=10, unique=True))
+        v0 = tc.draw(gs.integers(0, 0))
+        v1 = tc.draw(gs.booleans())
+        tc.draw(gs.integers(0, 0))
+        v3 = tc.draw(gs.lists(gs.integers(-21, -1), max_size=10, unique=True))
         if len(v3) != 0:
             tc.mark_status(Status.INTERESTING)
         if v1:
-            v4 = tc.any(gs.integers(v0, v0 + 1))
+            v4 = tc.draw(gs.integers(v0, v0 + 1))
             if v0 + v4 <= 0:
                 tc.mark_status(Status.INTERESTING)
 
@@ -511,8 +511,8 @@ def test_lower_and_bump_with_float_target():
     float non-zero can produce a simpler overall result."""
 
     def tf(tc):
-        v0 = tc.any(gs.text(min_codepoint=32, max_codepoint=126, max_size=20))
-        v1 = tc.any(gs.floats(allow_nan=False, allow_infinity=False))
+        v0 = tc.draw(gs.text(min_codepoint=32, max_codepoint=126, max_size=20))
+        v1 = tc.draw(gs.floats(allow_nan=False, allow_infinity=False))
         if len(v0) >= 4:
             tc.mark_status(Status.INTERESTING)
         if v1 != 0.0:
@@ -533,14 +533,14 @@ def test_redistribute_stale_indices_with_one_of():
     Regression for AssertionError in redistribute found by minismith."""
 
     def tf(tc):
-        v0 = tc.any(
+        v0 = tc.draw(
             gs.one_of(
                 gs.booleans(),
                 gs.integers(0, 0),
                 gs.integers(2, 2).filter(lambda x: x > 0),
             )
         )
-        tc.any(gs.integers(0, 0))
+        tc.draw(gs.integers(0, 0))
         if v0:
             tc.mark_status(Status.INTERESTING)
 
@@ -557,11 +557,11 @@ def test_lower_and_bump_stale_j_after_replace():
     Regression for AssertionError in lower_and_bump found by minismith."""
 
     def tf(tc):
-        v0 = tc.any(gs.booleans())
-        tc.any(gs.booleans())
-        tc.any(gs.booleans())
-        tc.any(gs.lists(gs.integers(0, 0), max_size=10).filter(lambda x: len(x) > 0))
-        tc.any(
+        v0 = tc.draw(gs.booleans())
+        tc.draw(gs.booleans())
+        tc.draw(gs.booleans())
+        tc.draw(gs.lists(gs.integers(0, 0), max_size=10).filter(lambda x: len(x) > 0))
+        tc.draw(
             gs.integers(-54, -32).flat_map(
                 lambda n: gs.lists(
                     gs.integers(0, 100),
@@ -583,8 +583,8 @@ def test_mutation_with_single_value_adjacent():
     from_index(1) returns None."""
 
     def tf(tc):
-        v0 = tc.any(gs.booleans())
-        tc.any(gs.integers(5, 5))  # single-value, from_index(1) = None
+        v0 = tc.draw(gs.booleans())
+        tc.draw(gs.integers(5, 5))  # single-value, from_index(1) = None
         if v0:
             tc.mark_status(Status.INTERESTING)
 
@@ -674,7 +674,7 @@ def test_one_of_switches_to_shorter_branch():
     Regression for shrink quality found by minismith."""
 
     def tf(tc):
-        v0 = tc.any(
+        v0 = tc.draw(
             gs.one_of(
                 gs.lists(gs.integers(0, 0), max_size=10),
                 gs.one_of(gs.integers(0, 0), gs.booleans()),
