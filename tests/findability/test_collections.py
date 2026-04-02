@@ -21,7 +21,6 @@ def list_and_int(tc):
     return (v, i)
 
 
-@pytest.mark.xfail(reason="unbounded containment too hard to find randomly")
 @pytest.mark.parametrize("n", [0, 1, 10, 100, 1000])
 def test_containment(n):
     """Engine can find (list, int) where int >= n and int is in the list,

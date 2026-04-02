@@ -266,7 +266,7 @@ def test_sorting_pass_survives_type_changes_from_lists():
 
     with pytest.raises(AssertionError):
 
-        @run_test(max_examples=1, database={}, quiet=True, random=Random(0))
+        @run_test(max_examples=100, database={}, quiet=True, random=Random(0))
         def _(tc):
             v0 = tc.draw(gs.lists(gs.booleans(), max_size=10))
             v1 = tc.draw(gs.lists(gs.integers(0, 0), max_size=10))

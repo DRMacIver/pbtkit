@@ -16,7 +16,6 @@ class Failure(Exception):
     pass
 
 
-@pytest.mark.xfail(reason="integers(0, 8191) rarely draws 0 — needs boundary boosting")
 def test_zero_from_wide_integer_range():
     """Draw an integer from [0, 8191], assert it's positive. Counterexample: 0.
 

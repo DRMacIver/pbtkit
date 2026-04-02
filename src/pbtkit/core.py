@@ -244,6 +244,11 @@ class ChoiceNode(Generic[U]):
 # by effectively rejecting test cases that use too many choices.
 BUFFER_SIZE = 8 * 1024
 
+# Probability of drawing a boundary value (min, max, or 0) per draw.
+# With k special values and n draws, P(all drawn at least once) =
+# (1 - (1-p)^n)^k. At p=0.01, n=1000, k=3: > 0.9999.
+_BOUNDARY_PROBABILITY = 0.01
+
 
 def run_test(
     max_examples: int = 100,
@@ -376,9 +381,20 @@ class TestCase:
         n = max_value - min_value
         if n.bit_length() > 64 or n < 0:
             raise ValueError(f"Invalid range [{min_value}, {max_value}]")
+        # Boost boundary values: min, max, and 0 (if in range).
+        # Each gets ~1% probability per draw. See floats.py for the math.
+        nasty = [min_value, max_value]
+        if min_value <= 0 <= max_value and min_value != 0 and max_value != 0:
+            nasty.append(0)
+
+        def generate() -> int:
+            if self.random.random() < len(nasty) * _BOUNDARY_PROBABILITY:
+                return self.random.choice(nasty)
+            return self.random.randint(min_value, max_value)
+
         return self._make_choice(
             IntegerChoice(min_value, max_value),
-            lambda: self.random.randint(min_value, max_value),
+            generate,
         )
 
     # draw_float, draw_bytes, draw_string are added by pbtkit.__init__

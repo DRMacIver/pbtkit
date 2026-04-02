@@ -108,6 +108,18 @@ def test_targeting_when_most_do_not_benefit(capsys):
     ]
 
 
+def test_targeting_adjust_avoids_negative_values():
+    """Targeting adjust must handle choices near zero — attempting
+    step=-1 on value 0 should not produce a negative choice."""
+
+    @run_test(database={}, max_examples=200, random=Random(0))
+    def _(test_case):
+        # First choice will often be 0 (boundary boost). Targeting
+        # tries step=-1, which would make it negative — must be skipped.
+        n = test_case.choice(10)
+        test_case.target(n)
+
+
 def test_can_target_a_score_downwards(capsys):
     with pytest.raises(AssertionError):
 
