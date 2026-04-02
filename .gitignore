@@ -14,5 +14,3 @@ hegel-rust/
 .claude/settings.local.json
 build/
 scratch
-book/book/
-book/src/*.md

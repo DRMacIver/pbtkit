@@ -26,8 +26,4 @@ format:
     uv run ruff format src/ tests/
     uv run ruff check --fix src/ tests/
 
-build-book:
-    uv run python tools/build_book.py
-    mdbook build book/
-
 check: typecheck test

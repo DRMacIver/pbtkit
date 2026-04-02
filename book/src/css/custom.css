@@ -1,8 +1,0 @@
-/* AI-written prose is rendered in Comic Sans to clearly distinguish it
-   from human-written content.  Wrap AI text in <div class="ai"> blocks. */
-.ai {
-    font-family: 'Comic Sans MS', 'Comic Sans', cursive;
-    border-left: 3px solid #b0b0b0;
-    padding-left: 1em;
-    margin: 1em 0;
-}
