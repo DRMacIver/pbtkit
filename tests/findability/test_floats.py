@@ -43,13 +43,13 @@ def test_can_find_nan_in_list():
             assert not any(math.isnan(x) for x in xs)
 
 
-@pytest.mark.xfail(reason="unbounded floats rarely generate infinity")
+@pytest.mark.requires("edge_case_boosting")
 def test_can_find_positive_infinity():
     """Engine can find a positive infinite float."""
     finds(gs.floats(), lambda x: x > 0 and math.isinf(x))
 
 
-@pytest.mark.xfail(reason="unbounded floats rarely generate infinity")
+@pytest.mark.requires("edge_case_boosting")
 def test_can_find_negative_infinity():
     """Engine can find a negative infinite float."""
     finds(gs.floats(), lambda x: x < 0 and math.isinf(x))
@@ -134,7 +134,6 @@ def test_negation_is_self_inverse():
         assert -y == x
 
 
-@pytest.mark.xfail(reason="pbtkit bounded floats can produce infinity")
 def test_largest_range_has_no_infinities():
     """Floats bounded by float_info.max contain no infinities."""
 

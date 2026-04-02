@@ -298,6 +298,10 @@ def _draw_float(
     # comparable to numeric bounds.
     if min_value != -math.inf or max_value != math.inf:
         allow_nan = False
+    # Disallow infinity when both bounds are finite — infinity is outside
+    # any finite range.
+    if math.isfinite(min_value) and math.isfinite(max_value):
+        allow_infinity = False
     kind = FloatChoice(min_value, max_value, allow_nan, allow_infinity)
 
     bounded = math.isfinite(min_value) and math.isfinite(max_value)
@@ -308,7 +312,10 @@ def _draw_float(
     if bounded:
 
         def _base_generate() -> float:
-            return self.random.uniform(min_value, max_value)
+            result = self.random.uniform(min_value, max_value)
+            # random.uniform can overflow to inf for extreme ranges
+            # (e.g. -float_info.max to float_info.max). Clamp to bounds.
+            return max(min_value, min(max_value, result))
 
     elif half_bounded:
 
@@ -337,14 +344,23 @@ def _draw_float(
     if feature_enabled("edge_case_boosting"):  # needed_for("edge_case_boosting")
         from pbtkit.edge_case_boosting import BOUNDARY_PROBABILITY
 
-        nasty_floats: list[float] = []
-        if math.isfinite(min_value):
-            nasty_floats.append(min_value)
-        if math.isfinite(max_value):
-            nasty_floats.append(max_value)
-        if min_value <= 0.0 <= max_value:
-            nasty_floats.append(0.0)
-            nasty_floats.append(-0.0)
+        # Candidates: boundaries, zero, infinities, NaN, small integers.
+        # Filter to only those valid for this choice type.
+        candidates = [
+            min_value,
+            max_value,
+            0.0,
+            -0.0,
+            1.0,
+            -1.0,
+            math.inf,
+            -math.inf,
+            float("nan"),
+            sys.float_info.min,
+            sys.float_info.max,
+            -sys.float_info.max,
+        ]
+        nasty_floats: list[float] = [v for v in candidates if kind.validate(v)]
         threshold = len(nasty_floats) * BOUNDARY_PROBABILITY
 
         def _boosted_generate() -> float:
