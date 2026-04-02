@@ -16,6 +16,7 @@ class Failure(Exception):
     pass
 
 
+@pytest.mark.requires("edge_case_boosting")
 def test_zero_from_wide_integer_range():
     """Draw an integer from [0, 8191], assert it's positive. Counterexample: 0.
 
@@ -31,9 +32,8 @@ def test_zero_from_wide_integer_range():
 
 
 @pytest.mark.requires("collections")
-@pytest.mark.xfail(
-    reason="compound duplication requires subtree copying that pbtkit lacks"
-)
+@pytest.mark.requires("edge_case_boosting")
+@pytest.mark.xfail(reason="compound duplication is unreliable without subtree copying")
 def test_duplicate_tuples_in_list():
     """Find a list of (int, int) tuples containing a duplicate.
 
@@ -50,6 +50,7 @@ def test_duplicate_tuples_in_list():
 
 
 @pytest.mark.requires("floats")
+@pytest.mark.requires("edge_case_boosting")
 def test_non_negative_float_is_not_always_positive():
     """Draw a non-negative float, assert it's positive. The counterexample is 0.0.
 

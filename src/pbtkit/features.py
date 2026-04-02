@@ -72,4 +72,14 @@ def needed_for(feature: str) -> Any:
     return decorator
 
 
+def feature_enabled(feature: str) -> bool:
+    """Return True if *feature* is not disabled.
+
+    At runtime this always returns True for non-disabled features.
+    In compiled single-file output, ``if feature_enabled("X"):``
+    blocks (with a ``# needed_for("X")`` comment) are stripped
+    entirely when X is disabled."""
+    return feature not in DISABLED_MODULES
+
+
 disable_modules(DISABLED_MODULES)

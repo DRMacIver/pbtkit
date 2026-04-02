@@ -2,6 +2,7 @@ extensions := `uv run python -c "from tools.compile_pbtkit import EXTENSIONS; pr
 
 test:
     uv run python -m coverage run --source=src/pbtkit --branch -m pytest tests/ --ff --maxfail=1 -m 'not hypothesis' --durations=100 --verbose
+    PBTKIT_DISABLED=edge_case_boosting uv run python -m coverage run --append --source=src/pbtkit --branch -m pytest tests/ -m 'not hypothesis' -q --no-header
     uv run coverage report --show-missing --fail-under=100
 
 test-core:
