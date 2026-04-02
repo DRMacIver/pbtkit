@@ -367,11 +367,10 @@ class TestCase:
         self._draw_counter = 0
         self.targeting_score: int | None = None
         self.prefix_nodes = prefix_nodes
-        # Span tracking — (label, start, stop) regions over nodes.
-        # Always initialised (empty) so code can read tc.spans safely;
-        # populated when pbtkit.spans is imported.
-        self.spans: list[tuple[str, int, int]] = []
-        self._span_stack: list[tuple[str, int]] = []
+        if feature_enabled("spans"):  # needed_for("spans")
+            # Span tracking — (label, start, stop) regions over nodes.
+            self.spans: list[tuple[str, int, int]] = []
+            self._span_stack: list[tuple[str, int]] = []
         # Named-draw tracking, used by pbtkit.draw_names when imported.
         self._named_draw_used: set[str] = set()
         self._named_draw_flags: dict[str, bool] = {}
@@ -641,6 +640,7 @@ SHRINK_PASSES: list[Callable[["PbtkitState"], None]] = []
 # shrinker functions (kind, value, try_replace) -> None.
 VALUE_SHRINKERS: dict[type, list[Callable]] = defaultdict(list)
 GENERATION_TYPES: list[Callable[["PbtkitState"], None]] = []
+GENERATION_HOOKS: list[Callable[["PbtkitState", "TestCase"], None]] = []
 TEST_FUNCTION_HOOKS: list[Callable[["PbtkitState", "TestCase"], None]] = []
 RUN_PHASES: list[Callable[["PbtkitState"], None]] = []
 SETUP_HOOKS: list[Callable[["PbtkitState"], None]] = []
@@ -663,6 +663,18 @@ def generation_type(
     return fn
 
 
+def generation_hook(
+    fn: Callable[["PbtkitState", "TestCase"], None],
+) -> Callable[["PbtkitState", "TestCase"], None]:
+    """Decorator that registers a hook run after each test case during generation.
+
+    Unlike test_function_hooks, generation hooks only run during the
+    generation phase and receive the just-evaluated test case.  They
+    may call state.test_function() to evaluate mutations."""
+    GENERATION_HOOKS.append(fn)
+    return fn
+
+
 RANDOM_GENERATION_BATCH = 10
 
 
@@ -672,9 +684,13 @@ def random_generation(state: "PbtkitState") -> None:
     for _ in range(RANDOM_GENERATION_BATCH):
         if not state.should_keep_generating():
             return
-        state.test_function(
-            TestCase(prefix=(), random=state.random, max_size=BUFFER_SIZE)
-        )
+        tc = TestCase(prefix=(), random=state.random, max_size=BUFFER_SIZE)
+        state.test_function(tc)
+        # Run generation hooks (e.g. span mutation) on each generated test case.
+        for hook in GENERATION_HOOKS:
+            if not state.should_keep_generating():
+                return
+            hook(state, tc)
 
 
 def test_function_hook(

@@ -35,7 +35,7 @@ def test_containment(n):
     assert i in ls
 
 
-@pytest.mark.xfail(reason="unbounded duplicate containment too hard to find randomly")
+@pytest.mark.requires("span_mutation")
 def test_duplicate_containment():
     """Engine can find (list, int) where int appears more than once in the list,
     using unbounded integers."""

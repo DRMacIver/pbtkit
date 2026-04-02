@@ -32,11 +32,7 @@ def test_zero_from_wide_integer_range():
 
 
 @pytest.mark.requires("collections")
-@pytest.mark.requires("edge_case_boosting")
 @pytest.mark.requires("span_mutation")
-@pytest.mark.xfail(
-    reason="span mutation improves but doesn't reliably find compound duplicates"
-)
 def test_duplicate_tuples_in_list():
     """Find a list of (int, int) tuples containing a duplicate.
 

@@ -66,8 +66,7 @@ def test_list_draw_has_spans():
 @pytest.mark.requires("span_mutation")
 def test_span_mutation_finds_duplicate():
     """Span mutation can find duplicate compound elements in a list."""
-    # Use a small range so mutation is effective
-    gen = gs.lists(gs.tuples(gs.integers(0, 3), gs.integers(0, 3)), max_size=10)
+    gen = gs.lists(gs.tuples(gs.integers(0, 100), gs.integers(0, 100)), max_size=10)
 
     best = [None]
 
@@ -77,7 +76,7 @@ def test_span_mutation_finds_duplicate():
             best[0] = ls
             tc.mark_status(Status.INTERESTING)
 
-    state = PbtkitState(Random(0), test_fn, 2000)
+    state = PbtkitState(Random(0), test_fn, 1000)
     state.run()
     assert state.result is not None
     assert best[0] is not None
@@ -85,20 +84,20 @@ def test_span_mutation_finds_duplicate():
 
 @pytest.mark.requires("span_mutation")
 def test_span_mutation_noop_without_spans():
-    """Span mutation returns early when base case has no spans."""
-    from pbtkit.span_mutation import span_mutation
+    """Span mutation hook does nothing when test case has no spans."""
+    from pbtkit.span_mutation import _span_mutation_hook
 
-    # A test that draws nothing produces no spans.
     state = PbtkitState(Random(0), lambda tc: None, 100)
-    span_mutation(state)
+    tc = TestCase.for_choices([0])
+    state.test_function(tc)
+    _span_mutation_hook(state, tc)  # no spans → returns early
 
 
 @pytest.mark.requires("span_mutation")
 def test_span_mutation_exercises_swaps():
-    """Span mutation generates a test case and tries span swaps."""
-    from pbtkit.span_mutation import span_mutation
+    """Span mutation hook tries span swaps on a test case with spans."""
+    from pbtkit.span_mutation import _span_mutation_hook
 
-    # Use min_size=2 to guarantee at least 2 tuple elements → multiple spans
     gen = gs.lists(
         gs.tuples(gs.integers(0, 3), gs.integers(0, 3)), min_size=2, max_size=5
     )
@@ -108,11 +107,14 @@ def test_span_mutation_exercises_swaps():
         calls[0] += 1
         tc.draw(gen)
 
-    # Try multiple seeds until we get one that produces multi-span output
     for seed in range(20):
         calls[0] = 0
         state = PbtkitState(Random(seed), test_fn, 10000)
-        span_mutation(state)
-        if calls[0] > 1:
+        # Generate a base case with spans, then run the hook.
+        base = TestCase(prefix=(), random=state.random, max_size=10000)
+        state.test_function(base)
+        base_calls = calls[0]
+        _span_mutation_hook(state, base)
+        if calls[0] > base_calls:
             return
     assert False, "no seed produced span mutation swaps"
