@@ -2,7 +2,7 @@
 
 This module adds score-based targeting (hill climbing) to the core
 engine. When imported, it patches TestCase with a target() method
-and registers the targeting phase and test-function hook.
+and registers a targeting generation type and test-function hook.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from pbtkit.core import (
     PbtkitState,
     Status,
     TestCase,
-    run_phase,
+    generation_type,
     test_function_hook,
 )
 
@@ -51,10 +51,15 @@ def _targeting_hook(state: PbtkitState, test_case: TestCase) -> None:
                     state.best_scoring = relevant_info
 
 
-@run_phase
-def _targeting_phase(state: PbtkitState) -> None:
-    """If any test cases have had ``target()`` called on them, do a simple
-    hill climbing algorithm to attempt to optimise that target score."""
+TARGETING_BATCH = 10
+
+
+@generation_type
+def _targeting_generation(state: PbtkitState) -> None:
+    """Hill climbing as a generation type.
+
+    Each invocation picks a random index and tries to improve the
+    score by adjusting it, running up to TARGETING_BATCH probes."""
     if state.result is not None or state.best_scoring is None:
         return
 
@@ -78,7 +83,10 @@ def _targeting_phase(state: PbtkitState) -> None:
             and test_case.targeting_score > score
         )
 
-    while state.should_keep_generating():
+    for _ in range(TARGETING_BATCH):
+        if not state.should_keep_generating():
+            return
+        assert state.best_scoring is not None
         i = state.random.randrange(0, len(state.best_scoring[1]))
         sign = 0
         for k in [1, -1]:

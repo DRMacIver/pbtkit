@@ -367,6 +367,11 @@ class TestCase:
         self._draw_counter = 0
         self.targeting_score: int | None = None
         self.prefix_nodes = prefix_nodes
+        # Span tracking — (label, start, stop) regions over nodes.
+        # Always initialised (empty) so code can read tc.spans safely;
+        # populated when pbtkit.spans is imported.
+        self.spans: list[tuple[str, int, int]] = []
+        self._span_stack: list[tuple[str, int]] = []
         # Named-draw tracking, used by pbtkit.draw_names when imported.
         self._named_draw_used: set[str] = set()
         self._named_draw_flags: dict[str, bool] = {}
@@ -480,17 +485,29 @@ class TestCase:
         """Set a score to maximize. Stub — import pbtkit to enable."""
         raise NotImplementedError("import pbtkit.targeting to use target")
 
+    def start_span(self, label: str) -> None:
+        """Begin a labelled region. Stub — import pbtkit.spans to enable."""
+        raise NotImplementedError("import pbtkit.spans to use start_span")
+
+    def stop_span(self) -> None:
+        """End the most recent span. Stub — import pbtkit.spans to enable."""
+        raise NotImplementedError("import pbtkit.spans to use stop_span")
+
     def draw_named(self, generator: "Generator[U]", name: str, repeatable: bool) -> U:
         """Draw with an explicit name for output. Stub — import pbtkit.draw_names to enable."""
         raise NotImplementedError("import pbtkit.draw_names to use draw_named")
 
     def draw(self, generator: Generator[U]) -> U:
         """Return a value from ``generator``, printing it if this is a failing example."""
+        if feature_enabled("spans"):  # needed_for("spans")
+            self.start_span(repr(generator))
         try:
             self.depth += 1
             result = generator.produce(self)
         finally:
             self.depth -= 1
+            if feature_enabled("spans"):  # needed_for("spans")
+                self.stop_span()
 
         if self._should_print():
             self._draw_counter += 1
@@ -623,6 +640,7 @@ SHRINK_PASSES: list[Callable[["PbtkitState"], None]] = []
 # Value shrinker registry. Maps choice type to list of value
 # shrinker functions (kind, value, try_replace) -> None.
 VALUE_SHRINKERS: dict[type, list[Callable]] = defaultdict(list)
+GENERATION_TYPES: list[Callable[["PbtkitState"], None]] = []
 TEST_FUNCTION_HOOKS: list[Callable[["PbtkitState", "TestCase"], None]] = []
 RUN_PHASES: list[Callable[["PbtkitState"], None]] = []
 SETUP_HOOKS: list[Callable[["PbtkitState"], None]] = []
@@ -635,6 +653,28 @@ def shrink_pass(
     """Decorator that registers a function as a shrink pass."""
     SHRINK_PASSES.append(fn)
     return fn
+
+
+def generation_type(
+    fn: Callable[["PbtkitState"], None],
+) -> Callable[["PbtkitState"], None]:
+    """Decorator that registers a function as a generation type."""
+    GENERATION_TYPES.append(fn)
+    return fn
+
+
+RANDOM_GENERATION_BATCH = 10
+
+
+@generation_type
+def random_generation(state: "PbtkitState") -> None:
+    """Standard random generation: run a batch of random test cases."""
+    for _ in range(RANDOM_GENERATION_BATCH):
+        if not state.should_keep_generating():
+            return
+        state.test_function(
+            TestCase(prefix=(), random=state.random, max_size=BUFFER_SIZE)
+        )
 
 
 def test_function_hook(
@@ -785,15 +825,13 @@ class PbtkitState:
         )
 
     def generate(self) -> None:
-        """Run random generation until either we have found an interesting
+        """Run generation types until either we have found an interesting
         test case or hit the limit of how many test cases we should
-        evaluate."""
-        while self.should_keep_generating() and (
-            self.best_scoring is None or self.valid_test_cases <= self.max_examples // 2
-        ):
-            self.test_function(
-                TestCase(prefix=(), random=self.random, max_size=BUFFER_SIZE)
-            )
+        evaluate.  Each generation type runs a small batch then returns,
+        and we pick one at random each iteration."""
+        while self.should_keep_generating():
+            gen = self.random.choice(GENERATION_TYPES)
+            gen(self)
 
     def shrink(self) -> None:
         """If we have found an interesting example, try shrinking it

@@ -99,6 +99,8 @@ import pbtkit.shrinking.advanced_integer_passes
 import pbtkit.shrinking.bind_deletion
 import pbtkit.shrinking.duplication_passes
 import pbtkit.shrinking.sorting
+import pbtkit.span_mutation
+import pbtkit.spans
 import pbtkit.targeting
 import pbtkit.text
 

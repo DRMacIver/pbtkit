@@ -32,3 +32,8 @@ exclude_also = [
     "assert False,",
     "case _:",
 ]
+# feature_enabled() guards are compile-time only — the false branch
+# is only reachable in compiled variants with the feature disabled.
+partial_branches = [
+    "if feature_enabled\\(",
+]
