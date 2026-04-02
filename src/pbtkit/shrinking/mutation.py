@@ -68,9 +68,12 @@ def mutate_and_shrink(state: PbtkitState) -> None:
                 state.test_function(tc)
             # Also try setting each of the next few positions to
             # unit (from_index(1)), with random continuation.
-            for j_offset in range(1, min(3, len(state.result) - i)):
+            # Re-check len(state.result) each iteration since mutations
+            # above may have shortened it.
+            j_offset = 1
+            while j_offset < 3 and i + j_offset < len(state.result):
                 j = i + j_offset
-                assert j < len(state.result)
+                j_offset += 1
                 kind_j = state.result[j].kind
                 assert kind_j.supports_index
                 unit_val = kind_j.from_index(1)

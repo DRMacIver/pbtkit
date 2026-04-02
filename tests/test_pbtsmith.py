@@ -1411,3 +1411,35 @@ def test_regression_2():
                 raise Failure("len(v0) == len(v1)")
     except (Unsatisfiable, Failure):
         pass
+
+
+def test_regression_3():
+    """Mutation pass stale index after result shortens during shrinking.
+
+    The mutation pass computed j = i + j_offset based on the result length,
+    then called state.test_function() which could shorten state.result.
+    The subsequent access to state.result[j] would then crash."""
+    try:
+
+        @run_test(max_examples=100, database={}, quiet=True, random=Random(0))
+        def _(tc):
+            tc.draw(
+                one_of(
+                    lists(integers(0, 20), max_size=10, unique=True),
+                    just(0),
+                    just(0),
+                    booleans(),
+                )
+            )
+            v1 = tc.draw(
+                one_of(
+                    lists(integers(0, 20), max_size=10, unique=True),
+                    just(1),
+                    booleans(),
+                    booleans(),
+                )
+            )
+            if not (not v1):
+                raise Failure("not v1")
+    except (Unsatisfiable, Failure):
+        pass
