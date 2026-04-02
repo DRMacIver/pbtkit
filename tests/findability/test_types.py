@@ -46,7 +46,6 @@ def test_float_is_not_always_an_endpoint():
             assert x in {1.0, 2.0}
 
 
-@pytest.mark.xfail(reason="text generation doesn't find duplicates in 200 examples")
 @pytest.mark.requires("text")
 def test_can_find_string_with_duplicate_characters():
     """Engine can find a string where not all characters are unique."""

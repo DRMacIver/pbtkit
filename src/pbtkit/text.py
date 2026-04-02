@@ -227,17 +227,32 @@ def _draw_string(
         raise ValueError(f"Invalid codepoint range [{min_codepoint}, {max_codepoint}]")
     kind = StringChoice(min_codepoint, max_codepoint, min_size, max_size)
 
+    def _random_codepoint() -> int:
+        """Draw a single valid codepoint, rejection-sampling surrogates."""
+        while True:
+            cp = self.random.randint(min_codepoint, max_codepoint)
+            if not (0xD800 <= cp <= 0xDFFF):
+                return cp
+
     def generate() -> str:
+        # Build a small alphabet, then draw characters from it.
+        # This massively boosts the chance of duplicate characters
+        # (important for findability) while still covering the full
+        # codepoint range.  Each alphabet entry has a 20% chance of
+        # being ASCII (if ASCII is in range), otherwise uniform.
+        ascii_lo = max(min_codepoint, 0)
+        ascii_hi = min(max_codepoint, 127)
+        has_ascii = ascii_lo <= ascii_hi
+        alpha_size = self.random.randint(1, 10)
+        alphabet: list[int] = []
+        for _ in range(alpha_size):
+            if has_ascii and self.random.random() < 0.2:
+                alphabet.append(self.random.randint(ascii_lo, ascii_hi))
+            else:
+                alphabet.append(_random_codepoint())
+
         length = self.random.randint(min_size, max_size)
-        chars: list[str] = []
-        for _ in range(length):
-            # Rejection-sample to avoid surrogates (0xD800-0xDFFF).
-            while True:
-                cp = self.random.randint(min_codepoint, max_codepoint)
-                if not (0xD800 <= cp <= 0xDFFF):
-                    break
-            chars.append(chr(cp))
-        return "".join(chars)
+        return "".join(chr(self.random.choice(alphabet)) for _ in range(length))
 
     return self._make_choice(kind, generate)
 
