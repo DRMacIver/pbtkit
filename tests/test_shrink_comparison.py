@@ -79,7 +79,7 @@ class ConjectureTestCase:
 
     Each draw method delegates to the corresponding ConjectureData primitive
     and records a ChoiceNode for later comparison under pbtkit sort_key.
-    The any() method wraps generator calls in start_span/stop_span."""
+    The draw() method wraps generator calls in start_span/stop_span."""
 
     def __init__(self, data: ConjectureData):
         self.data = data
@@ -330,6 +330,43 @@ pytestmark = [
 
 @given(program())
 @settings(
+    max_examples=20000,
+    deadline=None,
+    suppress_health_check=[HealthCheck.too_slow],
+)
+def test_pbtkit_shrink_results_are_stable_across_seeds(
+    pbtkit_program: str,
+) -> None:
+    """Running pbtkit twice with different seeds should produce
+    similarly-sized results: the larger should be at most 2x the smaller."""
+    note(pbtkit_program)
+
+    test_body = _extract_test_body(pbtkit_program)
+
+    result_a = _run_pbtkit(test_body, seed=0)
+    result_b = _run_pbtkit(test_body, seed=1)
+    assume(result_a is not None and result_b is not None)
+
+    size_a = len(result_a)
+    size_b = len(result_b)
+    smaller = min(size_a, size_b)
+    larger = max(size_a, size_b)
+
+    if larger > 2 * smaller:
+        values_a = [n.value for n in result_a]
+        values_b = [n.value for n in result_b]
+        note(f"\nSeed 0: {size_a} choices, values={values_a}")
+        note(f"Seed 1: {size_b} choices, values={values_b}")
+
+    assert larger <= 2 * smaller, (
+        f"Shrink results differ too much: sizes {size_a} vs {size_b} "
+        f"(ratio {larger / smaller:.1f}x), "
+        f"values: {[n.value for n in result_a]} vs {[n.value for n in result_b]}"
+    )
+
+
+@given(program())
+@settings(
     max_examples=200,
     deadline=None,
     suppress_health_check=[HealthCheck.too_slow],
@@ -365,15 +402,15 @@ def test_pbtkit_shrinks_at_least_as_well_as_hypothesis(
         def _replay(nodes):
             tc = TestCase.for_choices([n.value for n in nodes], prefix_nodes=nodes)
             draws: list[tuple[str, object]] = []
-            original_any = tc.any
+            original_draw = tc.draw
 
-            def capturing_any(gen):
-                result = original_any(gen)
+            def capturing_draw(gen):
+                result = original_draw(gen)
                 if tc.depth == 0:
                     draws.append((gen.name, result))
                 return result
 
-            tc.any = capturing_any  # type: ignore[assignment]
+            tc.draw = capturing_draw  # type: ignore[assignment]
             try:
                 test_body(tc)
             except (Failure, StopTest, Exception):
