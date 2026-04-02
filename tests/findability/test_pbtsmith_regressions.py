@@ -17,9 +17,6 @@ class Failure(Exception):
 
 
 @pytest.mark.requires("floats")
-@pytest.mark.xfail(
-    reason="pbtkit float generation filtered to >= 0 rarely produces 0.0"
-)
 def test_non_negative_float_is_not_always_positive():
     """Draw a non-negative float, assert it's positive. The counterexample is 0.0.
 

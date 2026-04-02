@@ -28,6 +28,15 @@ from pbtkit.features import needed_for
 
 NAN_DRAW_PROBABILITY = 0.01
 
+# Probability of drawing an exact boundary value (min or max) when
+# generating bounded floats. Without this, random.uniform almost never
+# produces the exact boundary — but boundary values are common
+# counterexamples (e.g., 0.0 for "x > 0" predicates).
+#
+# With 2 boundaries and 1000 draws, p=0.01 per boundary gives
+# P(both drawn at least once) = (1 - 0.99^1000)^2 > 0.99998.
+BOUNDARY_DRAW_PROBABILITY = 0.01
+
 
 # ---------------------------------------------------------------------------
 # Float helpers
@@ -305,16 +314,29 @@ def _draw_float(
         math.isfinite(min_value) or math.isfinite(max_value)
     )
 
+    # Collect special values to boost: boundaries and zero (with both
+    # signs). Each value gets ~BOUNDARY_DRAW_PROBABILITY chance per draw.
+    nasty_floats: list[float] = []
+    if math.isfinite(min_value):
+        nasty_floats.append(min_value)
+    if math.isfinite(max_value):
+        nasty_floats.append(max_value)
+    if min_value <= 0.0 <= max_value:
+        nasty_floats.append(0.0)
+        nasty_floats.append(-0.0)
+
     if bounded:
 
         def generate() -> float:
+            if self.random.random() < len(nasty_floats) * BOUNDARY_DRAW_PROBABILITY:
+                return self.random.choice(nasty_floats)
             return self.random.uniform(min_value, max_value)
 
     elif half_bounded:
-        # One bound is finite, the other is +-inf. Generate a
-        # non-negative float and add/subtract from the bound.
 
         def generate() -> float:
+            if self.random.random() < len(nasty_floats) * BOUNDARY_DRAW_PROBABILITY:
+                return self.random.choice(nasty_floats)
             if allow_infinity and self.random.random() < 0.05:
                 return math.inf if max_value == math.inf else -math.inf
             magnitude = abs(_draw_unbounded_float(self.random))
@@ -329,11 +351,15 @@ def _draw_float(
         def generate() -> float:
             if self.random.random() < NAN_DRAW_PROBABILITY:
                 return _draw_nan(self.random)
+            if self.random.random() < len(nasty_floats) * BOUNDARY_DRAW_PROBABILITY:
+                return self.random.choice(nasty_floats)
             return _draw_unbounded_float(self.random)
 
     else:
         # Fully unbounded, no NaN.
         def generate() -> float:
+            if self.random.random() < len(nasty_floats) * BOUNDARY_DRAW_PROBABILITY:
+                return self.random.choice(nasty_floats)
             return _draw_unbounded_float(self.random)
 
     return self._make_choice(kind, generate)

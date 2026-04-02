@@ -105,7 +105,6 @@ def test_can_find_float_that_does_not_round_trip_through_repr():
             assert float(repr(x)) == x
 
 
-@pytest.mark.xfail(reason="half-bounded floats don't find zero in 1000 examples")
 def test_half_bounded_generates_zero():
     """Engine can find zero from half-bounded float ranges."""
     finds(gs.floats(-1.0, allow_nan=False), lambda x: x == 0.0)
