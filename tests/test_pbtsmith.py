@@ -56,7 +56,16 @@ class Failure(Exception):
 # Python type tags and environment tracking
 # ---------------------------------------------------------------------------
 
-TYPE_NAMES = ["bool", "int", "float", "str", "bytes", "list_int", "list_bool"]
+TYPE_NAMES = [
+    "bool",
+    "int",
+    "float",
+    "str",
+    "bytes",
+    "list_int",
+    "list_bool",
+    "list_tuple",
+]
 
 
 class VarInfo:
@@ -113,7 +122,9 @@ class Env:
         return self.of_type("bytes")
 
     def collection_vars(self) -> list[VarInfo]:
-        return self.of_type("list_int", "list_bool", "bytes", "dict", "tuple")
+        return self.of_type(
+            "list_int", "list_bool", "list_tuple", "bytes", "dict", "tuple"
+        )
 
     def has_vars(self) -> bool:
         return len(self.vars) > 0
@@ -152,6 +163,10 @@ def gen_expr_code(typ: str, int_lo: int, int_hi: int, *, wide: bool = False) -> 
         return f"lists(integers({int_lo}, {int_hi}), max_size=10)"
     elif typ == "list_bool":
         return "lists(booleans(), max_size=10)"
+    elif typ == "list_tuple":
+        if wide:
+            return f"lists(tuples(integers({int_lo}, {int_hi}), integers({int_lo}, {int_hi})), max_size=10)"
+        return f"lists(tuples(integers({int_lo}, {int_hi}), integers({int_lo}, {int_hi})), max_size=10)"
     else:
         raise ValueError(f"Unknown type: {typ}")
 
@@ -263,9 +278,10 @@ def gen_bytes_predicate(draw: st.DrawFn, name: str) -> str:
 
 
 @st.composite
-def gen_collection_predicate(draw: st.DrawFn, name: str) -> str:
+def gen_collection_predicate(draw: st.DrawFn, var: VarInfo) -> str:
     """Falsifiable predicates for list/bytes variables."""
-    choice = draw(st.integers(0, 4))
+    name = var.name
+    choice = draw(st.integers(0, 5))
     if choice == 0:
         return f"len({name}) == 0"
     elif choice == 1:
@@ -276,9 +292,16 @@ def gen_collection_predicate(draw: st.DrawFn, name: str) -> str:
     elif choice == 3:
         t = draw(st.integers(1, 5))
         return f"len({name}) > {t}"
-    else:
+    elif choice == 4:
         t = draw(st.integers(0, 5))
         return f"len({name}) == {t}"
+    elif var.typ in ("list_int", "list_bool", "list_tuple"):
+        # No duplicate elements — requires finding two identical compound values.
+        # For list_tuple this is hard: must independently generate the same
+        # tuple twice.
+        return f"len({name}) == len(set({name}))"
+    else:
+        return f"len({name}) > 0"
 
 
 @st.composite
@@ -294,8 +317,8 @@ def gen_predicate_for_var(draw: st.DrawFn, var: VarInfo) -> str:
         return draw(gen_string_predicate(var.name))
     elif var.typ == "bytes":
         return draw(gen_bytes_predicate(var.name))
-    elif var.typ in ("list_int", "list_bool", "dict", "tuple"):
-        return draw(gen_collection_predicate(var.name))
+    elif var.typ in ("list_int", "list_bool", "list_tuple", "dict", "tuple"):
+        return draw(gen_collection_predicate(var))
     else:
         raise ValueError(f"Unknown type: {var.typ}")
 

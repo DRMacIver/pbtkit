@@ -9,7 +9,7 @@ can, it's added here as a concrete regression test.
 import pytest
 
 from pbtkit import run_test
-from pbtkit.generators import floats, integers
+from pbtkit.generators import floats, integers, lists, tuples
 
 
 class Failure(Exception):
@@ -28,6 +28,25 @@ def test_zero_from_wide_integer_range():
             v0 = tc.draw(integers(0, 8191))
             if not (v0 > 0):
                 raise Failure("v0 > 0")
+
+
+@pytest.mark.requires("collections")
+@pytest.mark.xfail(
+    reason="compound duplication requires subtree copying that pbtkit lacks"
+)
+def test_duplicate_tuples_in_list():
+    """Find a list of (int, int) tuples containing a duplicate.
+
+    Range is (0, 184) × (0, 184) = ~34K possible tuples. With ≤10 elements
+    per list, a birthday collision is ~0.15% per test case. Hypothesis finds
+    this through its duplication pass; pbtkit must get lucky."""
+    with pytest.raises(Failure):
+
+        @run_test(database={}, max_examples=1000)
+        def _(tc):
+            v0 = tc.draw(lists(tuples(integers(0, 184), integers(0, 184)), max_size=10))
+            if not (len(v0) == len(set(v0))):
+                raise Failure("duplicate tuple")
 
 
 @pytest.mark.requires("floats")
