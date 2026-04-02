@@ -84,6 +84,15 @@ def tree_labels(node):  # noqa: F401
     return result
 
 
+def tree_nodes(node):  # noqa: F401
+    """Return a list of all nodes in a tree (branches and leaves), pre-order."""
+    result = [node]
+    if isinstance(node, tuple) and len(node) > 0:
+        for child in node[1:]:
+            result.extend(tree_nodes(child))
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Python type tags and environment tracking
 # ---------------------------------------------------------------------------
@@ -155,7 +164,13 @@ class Env:
 
     def collection_vars(self) -> list[VarInfo]:
         return self.of_type(
-            "list_int", "list_bool", "list_tuple", "bytes", "dict", "tuple"
+            "list_int",
+            "list_bool",
+            "list_tuple",
+            "list_tree_nodes",
+            "bytes",
+            "dict",
+            "tuple",
         )
 
     def tree_vars(self) -> list[VarInfo]:
@@ -330,10 +345,8 @@ def gen_collection_predicate(draw: st.DrawFn, var: VarInfo) -> str:
     elif choice == 4:
         t = draw(st.integers(0, 5))
         return f"len({name}) == {t}"
-    elif var.typ in ("list_int", "list_bool", "list_tuple"):
+    elif var.typ in ("list_int", "list_bool", "list_tuple", "list_tree_nodes"):
         # No duplicate elements — requires finding two identical compound values.
-        # For list_tuple this is hard: must independently generate the same
-        # tuple twice.
         return f"len({name}) == len(set({name}))"
     else:
         return f"len({name}) > 0"
@@ -356,6 +369,8 @@ def gen_predicate_for_var(draw: st.DrawFn, var: VarInfo) -> str:
         return draw(gen_collection_predicate(var))
     elif var.typ == "tree":
         return draw(gen_tree_predicate(var.name))
+    elif var.typ == "list_tree_nodes":
+        return draw(gen_tree_nodes_predicate(var.name))
     else:
         raise ValueError(f"Unknown type: {var.typ}")
 
@@ -1203,6 +1218,41 @@ def gen_tree_predicate(draw: st.DrawFn, name: str) -> str:
         return f"len(tree_labels({name})) < {n}"
 
 
+@st.composite
+def gen_tree_nodes_predicate(draw: st.DrawFn, name: str) -> str:
+    """Falsifiable predicates over the flattened node list of a tree."""
+    choice = draw(st.integers(0, 7))
+    if choice == 0:
+        # All nodes are leaves
+        return f"all(not isinstance(n, tuple) for n in {name})"
+    elif choice == 1:
+        # All nodes are branches
+        return f"all(isinstance(n, tuple) for n in {name})"
+    elif choice == 2:
+        # No node is deeply nested
+        d = draw(st.integers(1, 3))
+        return f"all(not isinstance(n, tuple) or tree_depth(n) < {d} for n in {name})"
+    elif choice == 3:
+        # All branch nodes have the same label
+        return f"len(set(n[0] for n in {name} if isinstance(n, tuple))) <= 1"
+    elif choice == 4:
+        # Node count bound
+        n = draw(st.integers(2, 8))
+        return f"len({name}) < {n}"
+    elif choice == 5:
+        # Every leaf is zero
+        return f"all(n == 0 for n in {name} if not isinstance(n, tuple))"
+    elif choice == 6:
+        # No two adjacent nodes in the list are both leaves
+        return (
+            f"all(isinstance({name}[i], tuple) or isinstance({name}[i+1], tuple)"
+            f" for i in range(len({name}) - 1))"
+        )
+    else:
+        # At least one branch node exists
+        return f"any(isinstance(n, tuple) for n in {name})"
+
+
 # ---------------------------------------------------------------------------
 # Full program generation
 # ---------------------------------------------------------------------------
@@ -1254,6 +1304,10 @@ def program(draw: st.DrawFn) -> str:
             var = env.fresh_var()
             lines.append(f"{indent}{var} = tc.draw({tname}())")
             env.add(var, "tree")
+            # Also expose the flattened node list for sampling/assertions.
+            nodes_var = f"_nodes_{var}"
+            lines.append(f"{indent}{nodes_var} = tree_nodes({var})")
+            env.add(nodes_var, "list_tree_nodes")
         else:
             code = draw(gen_draw_or_dependent(env))
             lines.append(f"{indent}{code}")

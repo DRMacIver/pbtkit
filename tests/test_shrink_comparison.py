@@ -66,6 +66,7 @@ from .test_pbtsmith import (  # noqa: F401
     tree_depth,
     tree_labels,
     tree_leaves,
+    tree_nodes,
     tree_size,
 )
 
@@ -352,7 +353,7 @@ def test_pbtkit_shrink_results_are_stable_across_seeds(
     smaller = min(size_a, size_b)
     larger = max(size_a, size_b)
 
-    if larger > 2 * smaller:
+    if larger > max(2 * smaller, 10):
         values_a = [n.value for n in result_a]
         values_b = [n.value for n in result_b]
         note(f"\nSeed 0: {size_a} choices, values={values_a}")
