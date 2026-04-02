@@ -9,11 +9,26 @@ can, it's added here as a concrete regression test.
 import pytest
 
 from pbtkit import run_test
-from pbtkit.generators import floats
+from pbtkit.generators import floats, integers
 
 
 class Failure(Exception):
     pass
+
+
+@pytest.mark.xfail(reason="integers(0, 8191) rarely draws 0 — needs boundary boosting")
+def test_zero_from_wide_integer_range():
+    """Draw an integer from [0, 8191], assert it's positive. Counterexample: 0.
+
+    With uniform generation, P(0 in 1000 draws) ≈ 11.5%. Hypothesis finds this
+    easily because it special-cases boundary values."""
+    with pytest.raises(Failure):
+
+        @run_test(database={}, max_examples=1000)
+        def _(tc):
+            v0 = tc.draw(integers(0, 8191))
+            if not (v0 > 0):
+                raise Failure("v0 > 0")
 
 
 @pytest.mark.requires("floats")

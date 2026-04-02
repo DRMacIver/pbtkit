@@ -17,6 +17,7 @@ The generated programs exercise pbtkit's full API:
 
 from __future__ import annotations
 
+import math  # noqa: F401  (used by exec'd generated programs)
 from random import Random
 
 import pytest
@@ -123,19 +124,31 @@ class Env:
 # ---------------------------------------------------------------------------
 
 
-def gen_expr_code(typ: str, int_lo: int, int_hi: int) -> str:
-    """Return source code for a pbtkit generator expression."""
+def gen_expr_code(typ: str, int_lo: int, int_hi: int, *, wide: bool = False) -> str:
+    """Return source code for a pbtkit generator expression.
+
+    When *wide* is True, use broader ranges: floats allow infinity,
+    text covers full Unicode, and integers use a much larger range.
+    """
     if typ == "bool":
         return "booleans()"
     elif typ == "int":
+        if wide:
+            return f"integers({int_lo}, {int_hi})"
         return f"integers({int_lo}, {int_hi})"
     elif typ == "float":
+        if wide:
+            return "floats()"
         return "floats(allow_nan=False, allow_infinity=False)"
     elif typ == "str":
+        if wide:
+            return "text(max_size=20)"
         return "text(min_codepoint=32, max_codepoint=126, max_size=20)"
     elif typ == "bytes":
         return "binary(max_size=20)"
     elif typ == "list_int":
+        if wide:
+            return f"lists(integers({int_lo}, {int_hi}), max_size=10)"
         return f"lists(integers({int_lo}, {int_hi}), max_size=10)"
     elif typ == "list_bool":
         return "lists(booleans(), max_size=10)"
@@ -177,7 +190,7 @@ def gen_int_predicate(draw: st.DrawFn, name: str) -> str:
 @st.composite
 def gen_float_predicate(draw: st.DrawFn, name: str) -> str:
     """Falsifiable predicates for float variables."""
-    choice = draw(st.integers(0, 3))
+    choice = draw(st.integers(0, 6))
     if choice == 0:
         return f"{name} > 0.0"
     elif choice == 1:
@@ -185,8 +198,17 @@ def gen_float_predicate(draw: st.DrawFn, name: str) -> str:
         return f"{name} < {t}"
     elif choice == 2:
         return f"abs({name}) < 1.0"
-    else:
+    elif choice == 3:
         return f"{name} >= 0.0"
+    elif choice == 4:
+        # Exercises infinity detection
+        return f"not math.isinf({name})"
+    elif choice == 5:
+        # Exercises NaN detection
+        return f"not math.isnan({name})"
+    else:
+        # Exercises finiteness
+        return f"math.isfinite({name})"
 
 
 @st.composite
@@ -201,7 +223,7 @@ def gen_bool_predicate(draw: st.DrawFn, name: str) -> str:
 @st.composite
 def gen_string_predicate(draw: st.DrawFn, name: str) -> str:
     """Falsifiable predicates for str variables."""
-    choice = draw(st.integers(0, 5))
+    choice = draw(st.integers(0, 7))
     if choice == 0:
         return f"len({name}) == 0"
     elif choice == 1:
@@ -212,6 +234,12 @@ def gen_string_predicate(draw: st.DrawFn, name: str) -> str:
     elif choice == 3:
         c = draw(st.sampled_from(["a", "e", " ", "0", "A"]))
         return f"'{c}' in {name}"
+    elif choice == 6:
+        # All unique characters — exercises duplicate finding
+        return f"len(set({name})) == len({name})"
+    elif choice == 7:
+        # ASCII-encodable — exercises non-ASCII finding
+        return f"{name}.isascii()"
     elif choice == 4:
         return f"{name}.isascii()"
     else:
@@ -342,11 +370,19 @@ def gen_multi_value_predicate(draw: st.DrawFn, env: Env) -> str:
         else:
             return f"len({a.name}) + len({b.name}) < 20"
 
-    # Fallback: cross-type (int and collection)
+    # Cross-type: int and collection — containment, count, etc.
     if int_vars and col_vars:
         iv = draw(st.sampled_from(int_vars))
         cv = draw(st.sampled_from(col_vars))
-        return f"abs({iv.name}) < len({cv.name}) + 1"
+        choice = draw(st.integers(0, 3))
+        if choice == 0:
+            return f"abs({iv.name}) < len({cv.name}) + 1"
+        elif choice == 1 and cv.typ == "list_int":
+            return f"{iv.name} in {cv.name}"
+        elif choice == 2 and cv.typ == "list_int":
+            return f"{cv.name}.count({iv.name}) > 1"
+        else:
+            return f"abs({iv.name}) < len({cv.name}) + 1"
 
     # Ultimate fallback: single-variable predicate
     var = draw(st.sampled_from(env.vars))
@@ -489,9 +525,15 @@ def gen_rich_assertion(draw: st.DrawFn, env: Env) -> str:
 def gen_base_generator_expr(draw: st.DrawFn) -> tuple[str, str, int, int]:
     """Generate a (typ, expr, lo, hi) for a base generator."""
     typ = draw(st.sampled_from(TYPE_NAMES))
-    int_lo = draw(st.integers(-100, 100))
-    int_hi = draw(st.integers(int_lo, int_lo + 200))
-    return (typ, gen_expr_code(typ, int_lo, int_hi), int_lo, int_hi)
+    wide = draw(st.integers(0, 4)) == 0  # 20% chance of wide mode
+    if wide and typ == "int":
+        # Sometimes use much larger integer ranges
+        int_lo = draw(st.integers(-(2**63), 0))
+        int_hi = draw(st.integers(0, 2**63 - 1))
+    else:
+        int_lo = draw(st.integers(-100, 100))
+        int_hi = draw(st.integers(int_lo, int_lo + 200))
+    return (typ, gen_expr_code(typ, int_lo, int_hi, wide=wide), int_lo, int_hi)
 
 
 @st.composite
@@ -754,7 +796,7 @@ def gen_dependent_draw(draw: st.DrawFn, env: Env) -> str:
         env.add(var, "int")
     elif choice == 1:
         # Integer with dependent bounds: integers(-abs(src), abs(src))
-        code = f"{var} = tc.draw(integers(-abs({src}) - 1, abs({src}) + 1))"
+        code = f"{var} = tc.draw(integers(max(-abs({src}) - 1, -(2**63)), min(abs({src}) + 1, 2**63 - 1)))"
         env.add(var, "int")
     elif choice == 2:
         # List with dependent max_size
