@@ -52,6 +52,38 @@ class Failure(Exception):
     pass
 
 
+# Tree-walking helpers available to exec'd programs via globals().
+def tree_depth(node):  # noqa: F401
+    """Return the depth of a tree node (tuple = branch, else = leaf)."""
+    if not isinstance(node, tuple) or len(node) == 0:
+        return 0
+    return 1 + max(tree_depth(child) for child in node[1:])
+
+
+def tree_size(node):  # noqa: F401
+    """Return the number of nodes in a tree."""
+    if not isinstance(node, tuple) or len(node) == 0:
+        return 1
+    return 1 + sum(tree_size(child) for child in node[1:])
+
+
+def tree_leaves(node):  # noqa: F401
+    """Return the number of leaf nodes in a tree."""
+    if not isinstance(node, tuple) or len(node) == 0:
+        return 1
+    return sum(tree_leaves(child) for child in node[1:])
+
+
+def tree_labels(node):  # noqa: F401
+    """Return the set of operator labels used in a tree."""
+    if not isinstance(node, tuple) or len(node) == 0:
+        return set()
+    result = {node[0]}
+    for child in node[1:]:
+        result |= tree_labels(child)
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Python type tags and environment tracking
 # ---------------------------------------------------------------------------
@@ -125,6 +157,9 @@ class Env:
         return self.of_type(
             "list_int", "list_bool", "list_tuple", "bytes", "dict", "tuple"
         )
+
+    def tree_vars(self) -> list[VarInfo]:
+        return self.of_type("tree")
 
     def has_vars(self) -> bool:
         return len(self.vars) > 0
@@ -319,6 +354,8 @@ def gen_predicate_for_var(draw: st.DrawFn, var: VarInfo) -> str:
         return draw(gen_bytes_predicate(var.name))
     elif var.typ in ("list_int", "list_bool", "list_tuple", "dict", "tuple"):
         return draw(gen_collection_predicate(var))
+    elif var.typ == "tree":
+        return draw(gen_tree_predicate(var.name))
     else:
         raise ValueError(f"Unknown type: {var.typ}")
 
@@ -512,6 +549,27 @@ def gen_computed_predicate(draw: st.DrawFn, env: Env) -> str:
             return f"len({n}.upper()) >= len({n})"
         else:
             return f"len({n}.strip()) <= len({n})"
+
+    tree_vars = env.tree_vars()
+    if tree_vars:
+        var = draw(st.sampled_from(tree_vars))
+        n = var.name
+        choice = draw(st.integers(0, 3))
+        if choice == 0:
+            # depth vs size relationship
+            return f"tree_depth({n}) <= tree_size({n})"
+        elif choice == 1:
+            # leaves vs size
+            return f"tree_leaves({n}) <= tree_size({n})"
+        elif choice == 2:
+            # depth of left vs right subtree (if binary)
+            return (
+                f"not isinstance({n}, tuple) or len({n}) != 3"
+                f" or abs(tree_depth({n}[1]) - tree_depth({n}[2])) < 3"
+            )
+        else:
+            # tree has at least some structure
+            return f"tree_depth({n}) > 0 or tree_size({n}) == 1"
 
     # Fallback
     var = draw(st.sampled_from(env.vars))
@@ -1025,6 +1083,127 @@ def gen_composite_function(draw: st.DrawFn) -> tuple[str, str, str]:
 
 
 # ---------------------------------------------------------------------------
+# Recursive tree composite generation
+# ---------------------------------------------------------------------------
+
+# Unary operators take one child, binary take two.
+_UNARY_OPS = ["neg", "not", "abs", "double"]
+_BINARY_OPS = ["add", "sub", "mul", "eq", "lt", "and", "or", "max", "min"]
+
+
+@st.composite
+def gen_recursive_tree_function(draw: st.DrawFn) -> tuple[str, str]:
+    """Generate a recursive tree composite function.
+
+    Returns (entry_point_name, full_source_code) where entry_point_name
+    is a callable that returns a Generator producing tree values.
+
+    The generated code defines:
+    - _tree_leaf(tc): produces a leaf value (integer or boolean)
+    - _tree_node(tc, depth): produces a node at the given depth
+    - _tree(tc): entry point, draws a depth then calls _tree_node
+
+    Trees are nested tuples: leaves are plain values (int/bool),
+    branches are ("op_name", child, ...) tuples.
+    """
+    global _composite_counter
+    _composite_counter += 1
+    tag = _composite_counter
+
+    # Pick which operators this tree type uses
+    n_unary = draw(st.integers(1, len(_UNARY_OPS)))
+    n_binary = draw(st.integers(1, len(_BINARY_OPS)))
+    unary_ops = draw(
+        st.lists(
+            st.sampled_from(_UNARY_OPS), min_size=n_unary, max_size=n_unary, unique=True
+        )
+    )
+    binary_ops = draw(
+        st.lists(
+            st.sampled_from(_BINARY_OPS),
+            min_size=n_binary,
+            max_size=n_binary,
+            unique=True,
+        )
+    )
+    all_ops = unary_ops + binary_ops
+    max_depth = draw(st.integers(2, 5))
+
+    # Build the op dispatch: for each op, generate the branch code
+    op_branches = []
+    for op in unary_ops:
+        op_branches.append(
+            f"    if op == {len(op_branches)}:\n"
+            f"        child = tc.draw(_tree_node_{tag}(depth - 1))\n"
+            f'        return ("{op}", child)'
+        )
+    for op in binary_ops:
+        op_branches.append(
+            f"    if op == {len(op_branches)}:\n"
+            f"        left = tc.draw(_tree_node_{tag}(depth - 1))\n"
+            f"        right = tc.draw(_tree_node_{tag}(depth - 1))\n"
+            f'        return ("{op}", left, right)'
+        )
+
+    op_dispatch = "\n".join(op_branches)
+
+    leaf_choice = draw(st.sampled_from(["int", "bool", "mixed"]))
+    if leaf_choice == "int":
+        leaf_expr = "tc.draw(integers(0, 10))"
+    elif leaf_choice == "bool":
+        leaf_expr = "tc.draw(booleans())"
+    else:
+        leaf_expr = (
+            "tc.draw(integers(0, 10)) if tc.draw(booleans()) else tc.draw(booleans())"
+        )
+
+    entry = f"_tree_{tag}"
+
+    code = f"""\
+@composite
+def _tree_node_{tag}(tc, depth):
+    if depth <= 0 or not tc.weighted(0.9):
+        return {leaf_expr}
+    op = tc.choice({len(all_ops) - 1})
+{op_dispatch}
+
+def {entry}():
+    return integers(0, {max_depth}).flat_map(lambda d: _tree_node_{tag}(d))
+"""
+    return (entry, code)
+
+
+@st.composite
+def gen_tree_predicate(draw: st.DrawFn, name: str) -> str:
+    """Falsifiable predicates for tree variables."""
+    choice = draw(st.integers(0, 8))
+    if choice == 0:
+        d = draw(st.integers(1, 4))
+        return f"tree_depth({name}) < {d}"
+    elif choice == 1:
+        d = draw(st.integers(2, 6))
+        return f"tree_depth({name}) > {d}"
+    elif choice == 2:
+        n = draw(st.integers(2, 10))
+        return f"tree_size({name}) < {n}"
+    elif choice == 3:
+        n = draw(st.integers(3, 15))
+        return f"tree_size({name}) > {n}"
+    elif choice == 4:
+        n = draw(st.integers(1, 5))
+        return f"tree_leaves({name}) < {n}"
+    elif choice == 5:
+        return f"tree_depth({name}) == 0"
+    elif choice == 6:
+        return f"isinstance({name}, tuple)"
+    elif choice == 7:
+        return f"not isinstance({name}, tuple)"
+    else:
+        n = draw(st.integers(1, 4))
+        return f"len(tree_labels({name})) < {n}"
+
+
+# ---------------------------------------------------------------------------
 # Full program generation
 # ---------------------------------------------------------------------------
 
@@ -1045,23 +1224,36 @@ def program(draw: st.DrawFn) -> str:
     preamble_lines: list[str] = []
     indent = "        "
 
-    # Phase 0: optional composite functions
+    # Phase 0: optional composite and recursive tree functions
     composite_names: list[str] = []
+    tree_entry_names: list[str] = []
     if draw(st.booleans()):
         n_composites = draw(st.integers(1, 2))
         for _ in range(n_composites):
             name, func_code, out_typ = draw(gen_composite_function())
             preamble_lines.append(func_code)
             composite_names.append(name)
+    if draw(st.booleans()):
+        n_trees = draw(st.integers(1, 2))
+        for _ in range(n_trees):
+            entry_name, tree_code = draw(gen_recursive_tree_function())
+            preamble_lines.append(tree_code)
+            tree_entry_names.append(entry_name)
 
-    # Phase 1: initial draws (sometimes from composites)
+    # Phase 1: initial draws (sometimes from composites or trees)
     num_draws = draw(st.integers(1, 5))
     for _ in range(num_draws):
-        if composite_names and draw(st.integers(0, 3)) == 0:
+        r = draw(st.integers(0, 9))
+        if composite_names and r == 0:
             cname = draw(st.sampled_from(composite_names))
             var = env.fresh_var()
             lines.append(f"{indent}{var} = tc.draw({cname}())")
             env.add(var, "tuple")
+        elif tree_entry_names and r <= 2:
+            tname = draw(st.sampled_from(tree_entry_names))
+            var = env.fresh_var()
+            lines.append(f"{indent}{var} = tc.draw({tname}())")
+            env.add(var, "tree")
         else:
             code = draw(gen_draw_or_dependent(env))
             lines.append(f"{indent}{code}")

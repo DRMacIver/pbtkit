@@ -60,7 +60,14 @@ except (ImportError, NotImplementedError):
     pytest.skip("requires all generator types", allow_module_level=True)
 from pbtkit.text import StringChoice
 
-from .test_pbtsmith import Failure, program
+from .test_pbtsmith import (  # noqa: F401
+    Failure,
+    program,
+    tree_depth,
+    tree_labels,
+    tree_leaves,
+    tree_size,
+)
 
 # ---------------------------------------------------------------------------
 # ConjectureTestCase adapter
