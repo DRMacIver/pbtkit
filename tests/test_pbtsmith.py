@@ -1540,6 +1540,26 @@ def program(draw: st.DrawFn) -> str:
             code = draw(gen_draw_or_dependent(env))
             lines.append(f"{indent}{code}")
 
+    # Phase 1.5: optional flat_map using tree properties as bounds.
+    tree_vars = env.tree_vars()
+    if tree_vars and draw(st.booleans()):
+        src = draw(st.sampled_from(tree_vars))
+        var = env.fresh_var()
+        choice = draw(st.integers(0, 1))
+        if choice == 0:
+            # List whose size depends on tree depth
+            lines.append(
+                f"{indent}{var} = tc.draw("
+                f"lists(booleans(), max_size=max(1, tree_depth({src.name}))))"
+            )
+            env.add(var, "list_bool")
+        else:
+            # Integer whose range depends on tree size
+            lines.append(
+                f"{indent}{var} = tc.draw(integers(0, max(1, tree_size({src.name}))))"
+            )
+            env.add(var, "int")
+
     # Phase 2: assertion blocks
     num_blocks = draw(st.integers(1, 3))
     for i in range(num_blocks):
