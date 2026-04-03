@@ -922,6 +922,34 @@ def _flat_map_for_type(draw: st.DrawFn, typ: str) -> tuple[str, str] | None:
 
 
 @st.composite
+def gen_tree_dependent_draw(draw: st.DrawFn, env: Env) -> str:
+    """Generate a draw whose bounds depend on an existing tree variable."""
+    tree_vars = env.tree_vars()
+    if not tree_vars:
+        _, code = draw(gen_draw(env))
+        return code
+
+    source = draw(st.sampled_from(tree_vars))
+    var = env.fresh_var()
+    src = source.name
+
+    choice = draw(st.integers(0, 2))
+    if choice == 0:
+        # Integer bounded by tree depth
+        code = f"{var} = tc.draw(integers(0, tree_depth({src}) + 1))"
+        env.add(var, "int")
+    elif choice == 1:
+        # Integer bounded by tree size
+        code = f"{var} = tc.draw(integers(0, tree_size({src})))"
+        env.add(var, "int")
+    else:
+        # List bounded by tree leaf count
+        code = f"{var} = tc.draw(lists(booleans(), max_size=tree_leaves({src}) + 1))"
+        env.add(var, "list_bool")
+    return code
+
+
+@st.composite
 def gen_draw(draw: st.DrawFn, env: Env) -> tuple[str, str]:
     """Generate a simple draw statement. Returns (type, code_line)."""
     typ, expr, lo, hi = draw(gen_generator_expr())
@@ -970,9 +998,13 @@ def gen_dependent_draw(draw: st.DrawFn, env: Env) -> str:
 @st.composite
 def gen_draw_or_dependent(draw: st.DrawFn, env: Env) -> str:
     """Generate a draw, possibly dependent on an existing variable."""
+    r = draw(st.integers(0, 9))
     int_vars = env.int_vars()
-    if int_vars and draw(st.integers(0, 9)) >= 6:
+    tree_vars = env.tree_vars()
+    if int_vars and r >= 6:
         return draw(gen_dependent_draw(env))
+    if tree_vars and r >= 4:
+        return draw(gen_tree_dependent_draw(env))
     _, code = draw(gen_draw(env))
     return code
 
