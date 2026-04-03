@@ -108,13 +108,34 @@ def shrink_bytes(
 
 def _draw_bytes(self: TestCase, min_size: int, max_size: int) -> bytes:
     """Returns a random byte string with length in [min_size, max_size]."""
-    return self._make_choice(
-        BytesChoice(min_size, max_size),
-        lambda: bytes(
+    from pbtkit.features import feature_enabled
+
+    def _random_bytes() -> bytes:
+        return bytes(
             self.random.randint(0, 255)
             for _ in range(self.random.randint(min_size, max_size))
-        ),
-    )
+        )
+
+    generate = _random_bytes
+    if feature_enabled("edge_case_boosting"):  # needed_for("edge_case_boosting")
+        from pbtkit.edge_case_boosting import BOUNDARY_PROBABILITY
+
+        nasty_bytes = [b"\x00" * min_size]
+        if min_size == 0:
+            nasty_bytes.append(b"")
+        if max_size >= 1 and min_size <= 1:
+            nasty_bytes.append(b"\x00")
+            nasty_bytes.append(b"\xff")
+        threshold = len(nasty_bytes) * BOUNDARY_PROBABILITY
+
+        def _boosted_bytes() -> bytes:
+            if self.random.random() < threshold:
+                return self.random.choice(nasty_bytes)
+            return _random_bytes()
+
+        generate = _boosted_bytes
+
+    return self._make_choice(BytesChoice(min_size, max_size), generate)
 
 
 # Attach draw_bytes to TestCase.

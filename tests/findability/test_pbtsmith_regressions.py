@@ -9,7 +9,7 @@ can, it's added here as a concrete regression test.
 import pytest
 
 from pbtkit import run_test
-from pbtkit.generators import floats, integers, lists, tuples
+from pbtkit.generators import binary, booleans, floats, integers, just, lists, tuples
 
 
 class Failure(Exception):
@@ -64,3 +64,26 @@ def test_non_negative_float_is_not_always_positive():
             )
             if not (v0 > 0.0):
                 raise Failure("v0 > 0.0")
+
+
+@pytest.mark.requires("bytes")
+@pytest.mark.requires("edge_case_boosting")
+def test_empty_bytes_with_dependent_condition():
+    """Find failure requiring empty bytes AND zero from mapped booleans.
+
+    Needs binary(max_size=20) to produce b"" so the else branch runs,
+    then booleans().map(int) to produce 0 and integers(0, 2) to produce 0."""
+    with pytest.raises(Failure):
+
+        @run_test(database={}, max_examples=1000)
+        def _(tc):
+            tc.draw(just(False))
+            v1 = tc.draw(binary(max_size=20))
+            tc.draw(binary(max_size=20))
+            v3 = tc.draw(booleans().map(lambda x: int(x)))
+            v4 = tc.draw(integers(v3, v3 + 2))
+            if len(v1) > 0:
+                tc.draw(booleans())
+            else:
+                if not (v3 + v4 > 0):
+                    raise Failure("v3 + v4 > 0")

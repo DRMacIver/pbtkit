@@ -23,6 +23,7 @@ select = ["PLC0415", "I001", "F403"]
 [tool.ruff.lint.per-file-ignores]
 # Conditional imports inside feature_enabled() guards are intentional —
 # the single-file compiler strips these blocks when the feature is disabled.
+"src/pbtkit/bytes.py" = ["PLC0415"]
 "src/pbtkit/core.py" = ["PLC0415"]
 "src/pbtkit/floats.py" = ["PLC0415"]
 
