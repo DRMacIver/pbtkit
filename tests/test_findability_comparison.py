@@ -50,7 +50,7 @@ pytestmark = [
 ]
 
 
-def _pbtkit_finds(test_body, max_examples: int = 1000) -> bool:
+def _pbtkit_finds(test_body, max_examples: int = 5000) -> bool:
     """Return True if pbtkit finds an interesting example."""
 
     def test_fn(tc):

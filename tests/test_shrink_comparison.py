@@ -368,7 +368,7 @@ def test_pbtkit_shrink_results_are_stable_across_seeds(
 
 @given(program())
 @settings(
-    max_examples=200,
+    max_examples=2000,
     deadline=None,
     suppress_health_check=[HealthCheck.too_slow],
 )

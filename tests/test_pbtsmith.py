@@ -1447,7 +1447,7 @@ pytestmark = [
 
 @given(program())
 @settings(
-    max_examples=1000,
+    max_examples=2000,
     deadline=None,
     suppress_health_check=[HealthCheck.too_slow],
 )

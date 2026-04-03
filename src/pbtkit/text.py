@@ -16,7 +16,7 @@ from pbtkit.core import (
     TestCase,
     value_shrinker,
 )
-from pbtkit.features import needed_for
+from pbtkit.features import feature_enabled, needed_for
 from pbtkit.shrinking.sequence import shrink_sequence
 
 
@@ -258,6 +258,33 @@ def _draw_string(
         length = self.random.randint(min_size, max_size)
         return "".join(chr(self.random.choice(alphabet)) for _ in range(length))
 
+    base_generate = generate
+    if feature_enabled("edge_case_boosting"):  # needed_for("edge_case_boosting")
+        from pbtkit.edge_case_boosting import BOUNDARY_PROBABILITY
+
+        # Simplest codepoint in range under the _codepoint_key ordering.
+        simplest_cp = min(
+            range(min_codepoint, min(max_codepoint + 1, 128)),
+            key=_codepoint_key,
+            default=min_codepoint,
+        )
+        sc = chr(simplest_cp)
+        nasty_strings = [sc * min_size]  # simplest string
+        if min_size == 0:
+            nasty_strings.append("")
+        if min_size <= 1 <= max_size:
+            nasty_strings.append(sc)
+        if min_size <= 2 <= max_size:
+            nasty_strings.append(sc * 2)  # duplicate chars — common counterexample
+        threshold = len(nasty_strings) * BOUNDARY_PROBABILITY
+
+        def _boosted_generate() -> str:
+            if self.random.random() < threshold:
+                return self.random.choice(nasty_strings)
+            return base_generate()
+
+        generate = _boosted_generate
+
     return self._make_choice(kind, generate)
 
 
@@ -280,8 +307,19 @@ def shrink_string(
     value: str,
     try_replace: Callable[[str], bool],
 ) -> None:
-    """Shrink a string choice: shorten, remove chars, reduce
-    codepoints toward '0' using the mapped codepoint ordering."""
+    """Shrink a string choice: try simplest, then shorten, remove
+    chars, reduce codepoints toward '0' using the mapped codepoint ordering."""
+    # Try simplest first (e.g., "0" * min_size).
+    try_replace(kind.simplest)
+    # Try simple repeated-character strings at the current length.
+    simplest_cp = min(
+        range(kind.min_codepoint, min(kind.max_codepoint + 1, 128)),
+        key=_codepoint_key,
+        default=kind.min_codepoint,
+    )
+    simple = chr(simplest_cp) * len(value)
+    try_replace(simple)
+
     shrink_sequence(
         value,
         kind.min_size,

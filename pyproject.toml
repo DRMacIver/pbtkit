@@ -26,6 +26,7 @@ select = ["PLC0415", "I001", "F403"]
 "src/pbtkit/bytes.py" = ["PLC0415"]
 "src/pbtkit/core.py" = ["PLC0415"]
 "src/pbtkit/floats.py" = ["PLC0415"]
+"src/pbtkit/text.py" = ["PLC0415"]
 
 [tool.coverage.report]
 exclude_also = [
