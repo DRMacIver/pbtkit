@@ -35,7 +35,8 @@ def bind_deletion(state: PbtkitState) -> None:
 
         shrinkers = VALUE_SHRINKERS.get(type(node.kind), [])
         for shrinker in shrinkers:
-            assert i < len(state.result), "BUG: index past result after shrinker"
+            if i >= len(state.result):
+                assert False, "index past result after shrinker in bind deletion"
             node = state.result[i]
             shrinker(
                 node.kind,

@@ -74,7 +74,8 @@ def shrink_duplicates(state: PbtkitState) -> None:
                     a = valid[j]
                     b = valid[(j + 1) % n]
                     pair = _valid_indices(state, [a, b], choice_type)
-                    assert len(pair) >= 2, "BUG: pair invalidated mid-loop"
+                    if len(pair) < 2:
+                        assert False, "pair invalidated mid-loop in duplication pass"
                     node = state.result[a]
                     shrinker(
                         node.kind,
