@@ -530,31 +530,74 @@ def test_sort_key_type_mismatch():
     assert FloatChoice(-1.0, 1.0, False, False).sort_key("hello") == (0, 0)
 
 
-def test_shrink_passes_handle_stale_indices():
-    """Shrink passes must handle result changes between iterations.
+def test_shrink_duplicates_with_stale_indices():
+    """Regression: duplication pass crashed with AttributeError:
+    'BooleanChoice' object has no attribute 'max_value'.
 
-    When a shrink pass modifies state.result, subsequent iterations
-    may find stale indices. This exercises the guard code in
-    duplication_passes and bind_deletion."""
-    from pbtkit.core import PbtkitState, Status
+    Exact program from pbtsmith that triggered the crash."""
+    from pbtkit.generators import (
+        booleans,
+        integers,
+        just,
+        lists,
+        sampled_from,
+    )
 
-    # A test where the result type at each position depends on earlier values.
-    # When shrinking changes an early value, later positions may shift type.
-    def test_fn(tc):
-        n = tc.choice(2)
-        if n == 0:
-            # Short path: just a boolean
-            tc.weighted(0.5)
-            tc.mark_status(Status.INTERESTING)
-        else:
-            # Longer path: multiple integers
-            tc.choice(10)
-            tc.choice(10)
-            tc.choice(10)
-            tc.mark_status(Status.INTERESTING)
+    @gs.composite
+    def _tree_node(tc, depth):
+        if depth <= 0 or not tc.weighted(0.9):
+            return tc.draw(booleans())
+        op = tc.choice(3)
+        if op == 0:
+            child = tc.draw(_tree_node(depth - 1))
+            return ("neg", child)
+        if op == 1:
+            left = tc.draw(_tree_node(depth - 1))
+            right = tc.draw(_tree_node(depth - 1))
+            return ("add", left, right)
+        if op == 2:
+            left = tc.draw(_tree_node(depth - 1))
+            right = tc.draw(_tree_node(depth - 1))
+            return ("sub", left, right)
+        left = tc.draw(_tree_node(depth - 1))
+        right = tc.draw(_tree_node(depth - 1))
+        return ("mul", left, right)
 
-    state = PbtkitState(Random(1), test_fn, 100)
-    state.run()
-    # Just verify it doesn't crash — the exact result depends on
-    # which shrink path is taken.
-    assert state.result is not None
+    def _tree():
+        return integers(0, 2).flat_map(lambda d: _tree_node(d))
+
+    def tree_size(node):
+        if not isinstance(node, tuple) or len(node) == 0:
+            return 1
+        return 1 + sum(tree_size(child) for child in node[1:])
+
+    def tree_nodes(node):
+        result = [node]
+        if isinstance(node, tuple) and len(node) > 0:
+            for child in node[1:]:
+                result.extend(tree_nodes(child))
+        return result
+
+    def tree_leaves(node):
+        if not isinstance(node, tuple) or len(node) == 0:
+            return 1
+        return sum(tree_leaves(child) for child in node[1:])
+
+    class Failure(Exception):
+        pass
+
+    try:
+
+        @run_test(max_examples=1, database={}, quiet=True, random=Random(0))
+        def _(tc):
+            v0 = tc.draw(_tree().filter(lambda t: isinstance(t, tuple)))
+            _nodes_v0 = tree_nodes(v0)
+            tc.draw(_tree().filter(lambda t: isinstance(t, tuple)))
+            tc.draw(lists(booleans(), max_size=tree_leaves(v0) + 1))
+            if not (tree_size(v0) < 5):
+                raise Failure("tree_size(v0) < 5")
+            v3 = tc.draw(sampled_from(_nodes_v0) if _nodes_v0 else just(0))
+            if not isinstance(v3, tuple):
+                raise Failure("isinstance(v3, tuple)")
+    except (Unsatisfiable, Failure):
+        pass

@@ -57,7 +57,7 @@ def shrink_duplicates(state: PbtkitState) -> None:
         for shrinker in shrinkers:
             # Re-validate: result may have changed since groups were computed.
             valid = _valid_indices(state, indices, choice_type)
-            if len(valid) < 2:  # defensive: stale index
+            if len(valid) < 2:
                 break
             node = state.result[valid[0]]
             # Try all at once.
@@ -74,8 +74,7 @@ def shrink_duplicates(state: PbtkitState) -> None:
                     a = valid[j]
                     b = valid[(j + 1) % n]
                     pair = _valid_indices(state, [a, b], choice_type)
-                    if len(pair) < 2:  # defensive: stale index
-                        continue
+                    assert len(pair) >= 2, "BUG: pair invalidated mid-loop"
                     node = state.result[a]
                     shrinker(
                         node.kind,

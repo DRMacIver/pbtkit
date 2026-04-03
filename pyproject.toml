@@ -33,7 +33,6 @@ exclude_also = [
     "raise NotImplementedError",
     "assert False,",
     "case _:",
-    "# defensive: stale index",
 ]
 # feature_enabled() guards are compile-time only — the false branch
 # is only reachable in compiled variants with the feature disabled.

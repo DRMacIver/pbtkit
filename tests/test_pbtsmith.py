@@ -1656,26 +1656,45 @@ def test_regression_4():
 def test_regression_5():
     """Stale indices in duplication pass after result type changes.
 
-    The duplication pass found duplicate IntegerChoice groups, then
-    shrinking could change state.result's length or types at those
-    positions, causing AttributeError on BooleanChoice.max_value."""
+    Exact program from pbtsmith that crashed with:
+    AttributeError: 'BooleanChoice' object has no attribute 'max_value'
+    in binary_search_integer_towards_zero during shrink_duplicates."""
 
     @composite
     def _tree_node_reg5(tc, depth):
         if depth <= 0 or not tc.weighted(0.9):
             return tc.draw(booleans())
+        op = tc.choice(3)
+        if op == 0:
+            child = tc.draw(_tree_node_reg5(depth - 1))
+            return ("neg", child)
+        if op == 1:
+            left = tc.draw(_tree_node_reg5(depth - 1))
+            right = tc.draw(_tree_node_reg5(depth - 1))
+            return ("add", left, right)
+        if op == 2:
+            left = tc.draw(_tree_node_reg5(depth - 1))
+            right = tc.draw(_tree_node_reg5(depth - 1))
+            return ("sub", left, right)
         left = tc.draw(_tree_node_reg5(depth - 1))
         right = tc.draw(_tree_node_reg5(depth - 1))
-        return ("add", left, right)
+        return ("mul", left, right)
+
+    def _tree_reg5():
+        return integers(0, 2).flat_map(lambda d: _tree_node_reg5(d))
 
     try:
 
         @run_test(max_examples=100, database={}, quiet=True, random=Random(0))
         def _(tc):
-            v0 = tc.draw(integers(0, 2).flat_map(lambda d: _tree_node_reg5(d)))
-            v1 = tc.draw(integers(0, 2).flat_map(lambda d: _tree_node_reg5(d)))
-            if isinstance(v0, tuple) and isinstance(v1, tuple):
-                if tree_size(v0) + tree_size(v1) >= 5:
-                    raise Failure("big trees")
+            v0 = tc.draw(_tree_reg5().filter(lambda t: isinstance(t, tuple)))
+            _nodes_v0 = tree_nodes(v0)
+            tc.draw(_tree_reg5().filter(lambda t: isinstance(t, tuple)))
+            tc.draw(lists(booleans(), max_size=tree_leaves(v0) + 1))
+            if not (tree_size(v0) < 5):
+                raise Failure("tree_size(v0) < 5")
+            v3 = tc.draw(sampled_from(_nodes_v0) if _nodes_v0 else just(0))
+            if not isinstance(v3, tuple):
+                raise Failure("isinstance(v3, tuple)")
     except (Unsatisfiable, Failure):
         pass
