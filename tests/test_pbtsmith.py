@@ -445,6 +445,27 @@ def gen_multi_value_predicate(draw: st.DrawFn, env: Env) -> str:
         else:
             return f"len({a.name}) + len({b.name}) < 20"
 
+    tree_vars = env.tree_vars()
+    if len(tree_vars) >= 2:
+        a = draw(st.sampled_from(tree_vars))
+        b = draw(st.sampled_from([v for v in tree_vars if v.name != a.name]))
+        choice = draw(st.integers(0, 2))
+        if choice == 0:
+            return f"tree_depth({a.name}) == tree_depth({b.name})"
+        elif choice == 1:
+            return f"tree_size({a.name}) < tree_size({b.name})"
+        else:
+            return f"tree_labels({a.name}) == tree_labels({b.name})"
+
+    if tree_vars and int_vars:
+        t = draw(st.sampled_from(tree_vars))
+        iv = draw(st.sampled_from(int_vars))
+        choice = draw(st.integers(0, 1))
+        if choice == 0:
+            return f"tree_depth({t.name}) < abs({iv.name}) + 1"
+        else:
+            return f"tree_size({t.name}) < abs({iv.name}) + 1"
+
     # Cross-type: int and collection — containment, count, etc.
     if int_vars and col_vars:
         iv = draw(st.sampled_from(int_vars))
@@ -1441,5 +1462,35 @@ def test_regression_3():
             )
             if not (not v1):
                 raise Failure("not v1")
+    except (Unsatisfiable, Failure):
+        pass
+
+
+def test_regression_4():
+    """Shrink stability: flat_map branch choice + list length failure mode switching.
+
+    Two failure paths exist:
+    - Short: v0 non-empty via flat_map True branch (5 choices)
+    - Long: v4 has 3+ tuples (13 choices)
+    The shrinker must be able to find the short path from either starting point."""
+    try:
+
+        @run_test(max_examples=100, database={}, quiet=True, random=Random(0))
+        def _(tc):
+            v0 = tc.draw(
+                booleans().flat_map(
+                    lambda x: (
+                        text(min_codepoint=32, max_codepoint=126, max_size=5)
+                        if x
+                        else just("")
+                    )
+                )
+            )
+            tc.draw(just(False))
+            tc.draw(booleans())
+            v3 = tc.draw(floats(allow_nan=False, allow_infinity=False))
+            v4 = tc.draw(lists(tuples(integers(0, 0), integers(0, 0)), max_size=10))
+            if not (((len(v0) == 0) and (len(v4) < 3)) or (v3 > 0.0)):
+                raise Failure("compound condition")
     except (Unsatisfiable, Failure):
         pass
