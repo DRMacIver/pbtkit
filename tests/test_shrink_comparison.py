@@ -64,6 +64,7 @@ from .test_pbtsmith import (  # noqa: F401
     Failure,
     program,
     tree_depth,
+    tree_int_eval,
     tree_labels,
     tree_leaf_values,
     tree_leaves,

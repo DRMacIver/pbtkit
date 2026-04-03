@@ -94,6 +94,36 @@ def tree_leaf_values(node):  # noqa: F401
     return result
 
 
+def tree_int_eval(node):  # noqa: F401
+    """Evaluate a tree as an integer expression. Leaves are integers,
+    branches apply their operator. Unknown ops or bool leaves return 0."""
+    if isinstance(node, bool):
+        return int(node)
+    if isinstance(node, int):
+        return node
+    if not isinstance(node, tuple) or len(node) == 0:
+        return 0
+    op = node[0]
+    children = [tree_int_eval(c) for c in node[1:]]
+    if op == "neg" and len(children) == 1:
+        return -children[0]
+    if op == "abs" and len(children) == 1:
+        return abs(children[0])
+    if op == "double" and len(children) == 1:
+        return children[0] * 2
+    if op == "add" and len(children) == 2:
+        return children[0] + children[1]
+    if op == "sub" and len(children) == 2:
+        return children[0] - children[1]
+    if op == "mul" and len(children) == 2:
+        return children[0] * children[1]
+    if op == "max" and len(children) == 2:
+        return max(children[0], children[1])
+    if op == "min" and len(children) == 2:
+        return min(children[0], children[1])
+    return 0
+
+
 def tree_nodes(node):  # noqa: F401
     """Return a list of all nodes in a tree (branches and leaves), pre-order."""
     result = [node]
@@ -471,11 +501,27 @@ def gen_multi_value_predicate(draw: st.DrawFn, env: Env) -> str:
     if tree_vars and int_vars:
         t = draw(st.sampled_from(tree_vars))
         iv = draw(st.sampled_from(int_vars))
-        choice = draw(st.integers(0, 1))
+        choice = draw(st.integers(0, 3))
         if choice == 0:
             return f"tree_depth({t.name}) < abs({iv.name}) + 1"
-        else:
+        elif choice == 1:
             return f"tree_size({t.name}) < abs({iv.name}) + 1"
+        elif choice == 2:
+            return (
+                f"sum(v for v in tree_leaf_values({t.name})"
+                f" if isinstance(v, int)) < abs({iv.name}) + 10"
+            )
+        else:
+            return f"tree_leaves({t.name}) != abs({iv.name})"
+
+    if tree_vars and col_vars:
+        t = draw(st.sampled_from(tree_vars))
+        cv = draw(st.sampled_from(col_vars))
+        choice = draw(st.integers(0, 1))
+        if choice == 0:
+            return f"tree_size({t.name}) < len({cv.name}) + 1"
+        else:
+            return f"tree_depth({t.name}) + len({cv.name}) < 10"
 
     # Cross-type: int and collection — containment, count, etc.
     if int_vars and col_vars:
@@ -1448,7 +1494,7 @@ def program(draw: st.DrawFn) -> str:
         elif tree_entry_names and r <= 2:
             tname = draw(st.sampled_from(tree_entry_names))
             var = env.fresh_var()
-            tree_draw_kind = draw(st.integers(0, 2))
+            tree_draw_kind = draw(st.integers(0, 3))
             if tree_draw_kind == 0:
                 # Single tree
                 lines.append(f"{indent}{var} = tc.draw({tname}())")
@@ -1460,6 +1506,14 @@ def program(draw: st.DrawFn) -> str:
                     f"{indent}{var} = tc.draw(lists({tname}(), max_size={max_sz}))"
                 )
                 env.add(var, "list_tree")
+            elif tree_draw_kind == 2:
+                # one_of(tree, scalar) — mixes types, exercises type switching
+                lines.append(
+                    f"{indent}{var} = tc.draw("
+                    f"one_of({tname}(), just(0), integers(0, 10)))"
+                )
+                # Could be tree or int — use "bool" type for safe predicates
+                env.add(var, "bool")
             else:
                 # Filtered tree (non-leaf)
                 lines.append(
