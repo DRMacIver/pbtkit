@@ -1651,3 +1651,31 @@ def test_regression_4():
                 raise Failure("compound condition")
     except (Unsatisfiable, Failure):
         pass
+
+
+def test_regression_5():
+    """Stale indices in duplication pass after result type changes.
+
+    The duplication pass found duplicate IntegerChoice groups, then
+    shrinking could change state.result's length or types at those
+    positions, causing AttributeError on BooleanChoice.max_value."""
+
+    @composite
+    def _tree_node_reg5(tc, depth):
+        if depth <= 0 or not tc.weighted(0.9):
+            return tc.draw(booleans())
+        left = tc.draw(_tree_node_reg5(depth - 1))
+        right = tc.draw(_tree_node_reg5(depth - 1))
+        return ("add", left, right)
+
+    try:
+
+        @run_test(max_examples=100, database={}, quiet=True, random=Random(0))
+        def _(tc):
+            v0 = tc.draw(integers(0, 2).flat_map(lambda d: _tree_node_reg5(d)))
+            v1 = tc.draw(integers(0, 2).flat_map(lambda d: _tree_node_reg5(d)))
+            if isinstance(v0, tuple) and isinstance(v1, tuple):
+                if tree_size(v0) + tree_size(v1) >= 5:
+                    raise Failure("big trees")
+    except (Unsatisfiable, Failure):
+        pass

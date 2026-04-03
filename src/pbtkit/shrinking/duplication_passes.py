@@ -34,6 +34,18 @@ def _find_duplicate_groups(
     ]
 
 
+def _valid_indices(
+    state: PbtkitState, indices: list[int], choice_type: type
+) -> list[int]:
+    """Filter indices to those still valid and matching the choice type."""
+    assert state.result is not None
+    return [
+        i
+        for i in indices
+        if i < len(state.result) and isinstance(state.result[i].kind, choice_type)
+    ]
+
+
 @shrink_pass
 def shrink_duplicates(state: PbtkitState) -> None:
     """Find duplicate (type, value) pairs and try shrinking them
@@ -43,19 +55,27 @@ def shrink_duplicates(state: PbtkitState) -> None:
     for choice_type, indices in _find_duplicate_groups(state):
         shrinkers = VALUE_SHRINKERS.get(choice_type, [])
         for shrinker in shrinkers:
-            node = state.result[indices[0]]
+            # Re-validate: result may have changed since groups were computed.
+            valid = _valid_indices(state, indices, choice_type)
+            if len(valid) < 2:  # defensive: stale index
+                break
+            node = state.result[valid[0]]
             # Try all at once.
             shrinker(
                 node.kind,
                 node.value,
-                lambda v: state.replace({i: v for i in indices}),
+                lambda v: state.replace({i: v for i in valid}),
             )
             # Try adjacent pairs (wrapping) if there are more than two.
-            if len(indices) > 2:
-                n = len(indices)
+            valid = _valid_indices(state, indices, choice_type)
+            if len(valid) > 2:
+                n = len(valid)
                 for j in range(n):
-                    a = indices[j]
-                    b = indices[(j + 1) % n]
+                    a = valid[j]
+                    b = valid[(j + 1) % n]
+                    pair = _valid_indices(state, [a, b], choice_type)
+                    if len(pair) < 2:  # defensive: stale index
+                        continue
                     node = state.result[a]
                     shrinker(
                         node.kind,

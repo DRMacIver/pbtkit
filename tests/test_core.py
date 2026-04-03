@@ -528,3 +528,33 @@ def test_sort_key_type_mismatch():
     assert StringChoice(0, 127, 0, 10).sort_key(42) == (0, ())
     assert BytesChoice(0, 10).sort_key(42) == (0, b"")
     assert FloatChoice(-1.0, 1.0, False, False).sort_key("hello") == (0, 0)
+
+
+def test_shrink_passes_handle_stale_indices():
+    """Shrink passes must handle result changes between iterations.
+
+    When a shrink pass modifies state.result, subsequent iterations
+    may find stale indices. This exercises the guard code in
+    duplication_passes and bind_deletion."""
+    from pbtkit.core import PbtkitState, Status
+
+    # A test where the result type at each position depends on earlier values.
+    # When shrinking changes an early value, later positions may shift type.
+    def test_fn(tc):
+        n = tc.choice(2)
+        if n == 0:
+            # Short path: just a boolean
+            tc.weighted(0.5)
+            tc.mark_status(Status.INTERESTING)
+        else:
+            # Longer path: multiple integers
+            tc.choice(10)
+            tc.choice(10)
+            tc.choice(10)
+            tc.mark_status(Status.INTERESTING)
+
+    state = PbtkitState(Random(1), test_fn, 100)
+    state.run()
+    # Just verify it doesn't crash — the exact result depends on
+    # which shrink path is taken.
+    assert state.result is not None
