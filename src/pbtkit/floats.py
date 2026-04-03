@@ -218,6 +218,8 @@ class FloatChoice(ChoiceType[float]):
         - Subnormals are most complex.
         - Within same exponent, smaller mantissa is simpler.
         - Within same exponent and mantissa, positive is simpler."""
+        if not isinstance(value, float):
+            return (0, 0)
         if math.isnan(value):
             return (1, 2)
         if math.isinf(value):

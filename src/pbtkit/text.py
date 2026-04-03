@@ -97,6 +97,10 @@ class StringChoice(ChoiceType[str]):
     def sort_key(self, value: str) -> Any:
         """Shortlex ordering: shorter is simpler, then by mapped
         codepoint key (where '0' is simplest)."""
+        if not isinstance(value, str):
+            # During shrinking, type changes can cause a non-string
+            # value to land at a StringChoice position.
+            return (0, ())
         return (len(value), tuple(_codepoint_key(ord(c)) for c in value))
 
     @needed_for("shrinking.index_passes")

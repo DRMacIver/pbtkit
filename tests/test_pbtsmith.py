@@ -1347,6 +1347,20 @@ def program(draw: st.DrawFn) -> str:
             assertion = draw(gen_rich_assertion(env))
             lines.append(f"{indent}{assertion}")
 
+    # Phase 2.5: optional sampling from node lists to make subtree assertions
+    node_list_vars = env.of_type("list_tree_nodes")
+    if node_list_vars and draw(st.booleans()):
+        nlv = draw(st.sampled_from(node_list_vars))
+        sampled_var = env.fresh_var()
+        lines.append(
+            f"{indent}{sampled_var} = tc.draw("
+            f"sampled_from({nlv.name}) if {nlv.name} else just(0))"
+        )
+        env.add(sampled_var, "tree")
+        # Assert something about the sampled node
+        pred = draw(gen_tree_predicate(sampled_var))
+        lines.append(f"{indent}if not ({pred}): raise Failure({pred!r})")
+
     # Phase 3: optional if block
     if draw(st.booleans()) and env.has_vars():
         if_lines = draw(gen_if_block(env, indent))

@@ -46,6 +46,8 @@ class BytesChoice(ChoiceType[bytes]):
 
     def sort_key(self, value: bytes) -> Any:
         """Shortlex ordering: shorter is simpler, then lexicographic."""
+        if not isinstance(value, bytes):
+            return (0, b"")
         return (len(value), value)
 
     @needed_for("shrinking.index_passes")

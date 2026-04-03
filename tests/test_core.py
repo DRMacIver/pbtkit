@@ -514,3 +514,17 @@ def test_bin_search_down_lo_satisfies():
     state.run()
     assert state.result is not None
     assert state.result[0].value == 5
+
+
+def test_sort_key_type_mismatch():
+    """sort_key methods handle wrong-type values gracefully.
+
+    During shrinking, type changes in the choice sequence can cause a
+    ChoiceNode to have a value that doesn't match its kind."""
+    from pbtkit.bytes import BytesChoice
+    from pbtkit.floats import FloatChoice
+    from pbtkit.text import StringChoice
+
+    assert StringChoice(0, 127, 0, 10).sort_key(42) == (0, ())
+    assert BytesChoice(0, 10).sort_key(42) == (0, b"")
+    assert FloatChoice(-1.0, 1.0, False, False).sort_key("hello") == (0, 0)
