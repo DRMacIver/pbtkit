@@ -979,7 +979,7 @@ def gen_tree_dependent_draw(draw: st.DrawFn, env: Env) -> str:
     var = env.fresh_var()
     src = source.name
 
-    choice = draw(st.integers(0, 2))
+    choice = draw(st.integers(0, 3))
     if choice == 0:
         # Integer bounded by tree depth
         code = f"{var} = tc.draw(integers(0, tree_depth({src}) + 1))"
@@ -988,10 +988,16 @@ def gen_tree_dependent_draw(draw: st.DrawFn, env: Env) -> str:
         # Integer bounded by tree size
         code = f"{var} = tc.draw(integers(0, tree_size({src})))"
         env.add(var, "int")
-    else:
+    elif choice == 2:
         # List bounded by tree leaf count
         code = f"{var} = tc.draw(lists(booleans(), max_size=tree_leaves({src}) + 1))"
         env.add(var, "list_bool")
+    else:
+        # Integer bounded by tree evaluation (clamped to safe range)
+        code = (
+            f"{var} = tc.draw(integers(0, max(1, min(abs(tree_int_eval({src})), 100))))"
+        )
+        env.add(var, "int")
     return code
 
 
