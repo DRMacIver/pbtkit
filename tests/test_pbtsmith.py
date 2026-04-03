@@ -1378,7 +1378,7 @@ def {entry}():
 @st.composite
 def gen_tree_predicate(draw: st.DrawFn, name: str) -> str:
     """Falsifiable predicates for tree variables."""
-    choice = draw(st.integers(0, 8))
+    choice = draw(st.integers(0, 11))
     if choice == 0:
         d = draw(st.integers(1, 4))
         return f"tree_depth({name}) < {d}"
@@ -1400,9 +1400,19 @@ def gen_tree_predicate(draw: st.DrawFn, name: str) -> str:
         return f"isinstance({name}, tuple)"
     elif choice == 7:
         return f"not isinstance({name}, tuple)"
-    else:
+    elif choice == 8:
         n = draw(st.integers(1, 4))
         return f"len(tree_labels({name})) < {n}"
+    elif choice == 9:
+        # Evaluate as integer expression
+        t = draw(st.integers(5, 50))
+        return f"abs(tree_int_eval({name})) < {t}"
+    elif choice == 10:
+        # Evaluation equals zero
+        return f"tree_int_eval({name}) == 0"
+    else:
+        # Evaluation is positive
+        return f"tree_int_eval({name}) > 0"
 
 
 @st.composite
