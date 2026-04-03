@@ -84,6 +84,16 @@ def tree_labels(node):  # noqa: F401
     return result
 
 
+def tree_leaf_values(node):  # noqa: F401
+    """Return a list of all leaf values in a tree."""
+    if not isinstance(node, tuple) or len(node) == 0:
+        return [node]
+    result = []
+    for child in node[1:]:
+        result.extend(tree_leaf_values(child))
+    return result
+
+
 def tree_nodes(node):  # noqa: F401
     """Return a list of all nodes in a tree (branches and leaves), pre-order."""
     result = [node]
@@ -603,7 +613,7 @@ def gen_computed_predicate(draw: st.DrawFn, env: Env) -> str:
     if tree_vars:
         var = draw(st.sampled_from(tree_vars))
         n = var.name
-        choice = draw(st.integers(0, 3))
+        choice = draw(st.integers(0, 6))
         if choice == 0:
             # depth vs size relationship
             return f"tree_depth({n}) <= tree_size({n})"
@@ -616,9 +626,24 @@ def gen_computed_predicate(draw: st.DrawFn, env: Env) -> str:
                 f"not isinstance({n}, tuple) or len({n}) != 3"
                 f" or abs(tree_depth({n}[1]) - tree_depth({n}[2])) < 3"
             )
-        else:
+        elif choice == 3:
             # tree has at least some structure
             return f"tree_depth({n}) > 0 or tree_size({n}) == 1"
+        elif choice == 4:
+            # sum of integer leaf values
+            t = draw(st.integers(5, 30))
+            return f"sum(v for v in tree_leaf_values({n}) if isinstance(v, int)) < {t}"
+        elif choice == 5:
+            # all leaves are the same value
+            return (
+                f"len(set(v for v in tree_leaf_values({n}) if isinstance(v, int))) <= 1"
+            )
+        else:
+            # max leaf value
+            return (
+                f"max((v for v in tree_leaf_values({n})"
+                f" if isinstance(v, int)), default=0) < 5"
+            )
 
     # Fallback
     var = draw(st.sampled_from(env.vars))
