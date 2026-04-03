@@ -1118,6 +1118,36 @@ def gen_composite_function(draw: st.DrawFn) -> tuple[str, str, str]:
     return (name, func_code, "tuple")
 
 
+@st.composite
+def gen_nested_composite(
+    draw: st.DrawFn, tree_entry_names: list[str]
+) -> tuple[str, str, str]:
+    """Generate a @composite that draws from trees and base generators.
+
+    Returns (func_name, func_code, output_type)."""
+    global _composite_counter
+    _composite_counter += 1
+    name = f"_gen{_composite_counter}"
+
+    n_draws = draw(st.integers(2, 4))
+    body_lines = []
+    return_names = []
+    for i in range(n_draws):
+        arg = f"_{name}_v{i}"
+        if tree_entry_names and draw(st.integers(0, 2)) == 0:
+            tname = draw(st.sampled_from(tree_entry_names))
+            body_lines.append(f"    {arg} = tc.draw({tname}())")
+        else:
+            _, expr, _, _ = draw(gen_base_generator_expr())
+            body_lines.append(f"    {arg} = tc.draw({expr})")
+        return_names.append(arg)
+
+    body = "\n".join(body_lines)
+    ret = ", ".join(return_names)
+    func_code = f"@composite\ndef {name}(tc):\n{body}\n    return ({ret},)\n"
+    return (name, func_code, "tuple")
+
+
 # ---------------------------------------------------------------------------
 # Recursive tree composite generation
 # ---------------------------------------------------------------------------
@@ -1310,6 +1340,11 @@ def program(draw: st.DrawFn) -> str:
             entry_name, tree_code = draw(gen_recursive_tree_function())
             preamble_lines.append(tree_code)
             tree_entry_names.append(entry_name)
+    # Nested composites that draw from trees (if trees are defined)
+    if tree_entry_names and draw(st.booleans()):
+        name, func_code, out_typ = draw(gen_nested_composite(tree_entry_names))
+        preamble_lines.append(func_code)
+        composite_names.append(name)
 
     # Phase 1: initial draws (sometimes from composites or trees)
     num_draws = draw(st.integers(1, 5))
