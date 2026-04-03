@@ -1021,6 +1021,8 @@ def gen_assume(draw: st.DrawFn, env: Env) -> str:
     col_vars = env.collection_vars()
     str_vars = env.str_vars()
 
+    tree_vars = env.tree_vars()
+
     options: list[str] = []
     if int_vars:
         options.append("int")
@@ -1028,6 +1030,8 @@ def gen_assume(draw: st.DrawFn, env: Env) -> str:
         options.append("col")
     if str_vars:
         options.append("str")
+    if tree_vars:
+        options.append("tree")
 
     if not options:
         return "tc.assume(True)"
@@ -1039,6 +1043,17 @@ def gen_assume(draw: st.DrawFn, env: Env) -> str:
     elif which == "col":
         var = draw(st.sampled_from(col_vars))
         return f"tc.assume(len({var.name}) < 100)"
+    elif which == "tree":
+        var = draw(st.sampled_from(tree_vars))
+        choice = draw(st.integers(0, 2))
+        if choice == 0:
+            d = draw(st.integers(1, 3))
+            return f"tc.assume(tree_depth({var.name}) >= {d})"
+        elif choice == 1:
+            return f"tc.assume(isinstance({var.name}, tuple))"
+        else:
+            n = draw(st.integers(2, 5))
+            return f"tc.assume(tree_size({var.name}) >= {n})"
     else:
         var = draw(st.sampled_from(str_vars))
         return f"tc.assume(len({var.name}) < 100)"
@@ -1073,6 +1088,11 @@ def gen_if_condition(draw: st.DrawFn, env: Env) -> str:
         if cvars:
             var = draw(st.sampled_from(cvars))
             return f"len({var.name}) > 0"
+    elif choice == 4:
+        tvars = env.tree_vars()
+        if tvars:
+            var = draw(st.sampled_from(tvars))
+            return f"isinstance({var.name}, tuple)"
 
     # Fallback: any variable predicate
     var = draw(st.sampled_from(env.vars))
