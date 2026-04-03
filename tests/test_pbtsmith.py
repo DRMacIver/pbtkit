@@ -167,6 +167,7 @@ class Env:
             "list_int",
             "list_bool",
             "list_tuple",
+            "list_tree",
             "list_tree_nodes",
             "bytes",
             "dict",
@@ -369,7 +370,7 @@ def gen_predicate_for_var(draw: st.DrawFn, var: VarInfo) -> str:
         return draw(gen_collection_predicate(var))
     elif var.typ == "tree":
         return draw(gen_tree_predicate(var.name))
-    elif var.typ == "list_tree_nodes":
+    elif var.typ in ("list_tree_nodes", "list_tree"):
         return draw(gen_tree_nodes_predicate(var.name))
     else:
         raise ValueError(f"Unknown type: {var.typ}")
@@ -585,6 +586,18 @@ def gen_computed_predicate(draw: st.DrawFn, env: Env) -> str:
             return f"len({n}.upper()) >= len({n})"
         else:
             return f"len({n}.strip()) <= len({n})"
+
+    list_tree_vars = env.of_type("list_tree")
+    if list_tree_vars:
+        var = draw(st.sampled_from(list_tree_vars))
+        n = var.name
+        choice = draw(st.integers(0, 2))
+        if choice == 0:
+            return f"all(tree_depth(t) < 3 for t in {n})"
+        elif choice == 1:
+            return f"sum(tree_size(t) for t in {n}) < 20"
+        else:
+            return f"len(set(tuple(tree_labels(t)) for t in {n})) <= 1"
 
     tree_vars = env.tree_vars()
     if tree_vars:
@@ -1358,12 +1371,30 @@ def program(draw: st.DrawFn) -> str:
         elif tree_entry_names and r <= 2:
             tname = draw(st.sampled_from(tree_entry_names))
             var = env.fresh_var()
-            lines.append(f"{indent}{var} = tc.draw({tname}())")
-            env.add(var, "tree")
-            # Also expose the flattened node list for sampling/assertions.
-            nodes_var = f"_nodes_{var}"
-            lines.append(f"{indent}{nodes_var} = tree_nodes({var})")
-            env.add(nodes_var, "list_tree_nodes")
+            tree_draw_kind = draw(st.integers(0, 2))
+            if tree_draw_kind == 0:
+                # Single tree
+                lines.append(f"{indent}{var} = tc.draw({tname}())")
+                env.add(var, "tree")
+            elif tree_draw_kind == 1:
+                # List of trees
+                max_sz = draw(st.integers(2, 5))
+                lines.append(
+                    f"{indent}{var} = tc.draw(lists({tname}(), max_size={max_sz}))"
+                )
+                env.add(var, "list_tree")
+            else:
+                # Filtered tree (non-leaf)
+                lines.append(
+                    f"{indent}{var} = tc.draw("
+                    f"{tname}().filter(lambda t: isinstance(t, tuple)))"
+                )
+                env.add(var, "tree")
+            # Expose flattened node list for trees (not lists of trees).
+            if env.vars[-1].typ == "tree":
+                nodes_var = f"_nodes_{var}"
+                lines.append(f"{indent}{nodes_var} = tree_nodes({var})")
+                env.add(nodes_var, "list_tree_nodes")
         else:
             code = draw(gen_draw_or_dependent(env))
             lines.append(f"{indent}{code}")
