@@ -10,8 +10,8 @@ from __future__ import annotations
 from random import Random
 
 import pytest
-
 from hypothesis import HealthCheck, assume, given, note, settings
+
 from pbtkit.core import (  # noqa: F401
     PbtkitState,
     Status,

@@ -12,6 +12,7 @@ import math
 from random import Random
 
 import pytest
+from hypothesis import HealthCheck, assume, given, note, settings
 from hypothesis.internal.conjecture.data import (
     ConjectureData,
     calc_label_from_name,
@@ -22,7 +23,6 @@ from hypothesis.internal.conjecture.data import (
 from hypothesis.internal.conjecture.engine import ConjectureRunner
 from hypothesis.internal.intervalsets import IntervalSet
 
-from hypothesis import HealthCheck, assume, given, note, settings
 from pbtkit.bytes import BytesChoice
 from pbtkit.core import (  # noqa: F401
     BooleanChoice,

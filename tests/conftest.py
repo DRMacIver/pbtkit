@@ -1,7 +1,6 @@
 import os
 
 import pytest
-
 from hypothesis import HealthCheck, settings
 
 settings.register_profile(

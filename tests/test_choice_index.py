@@ -4,9 +4,9 @@ import math
 import struct
 
 import pytest
-
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
+
 from pbtkit.bytes import BytesChoice
 from pbtkit.core import BooleanChoice, IntegerChoice
 from pbtkit.floats import FloatChoice

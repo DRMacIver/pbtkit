@@ -9,9 +9,9 @@ catches crashes in individual shrink passes under unusual conditions.
 from random import Random
 
 import pytest
-
 from hypothesis import given, note, reject
 from hypothesis import strategies as st
+
 from pbtkit.core import SHRINK_PASSES, PbtkitState, Status, TestCase
 
 from .test_pbtsmith import Failure

@@ -21,9 +21,9 @@ import math  # noqa: F401  (used by exec'd generated programs)
 from random import Random
 
 import pytest
-
 from hypothesis import HealthCheck, given, note, settings
 from hypothesis import strategies as st
+
 from pbtkit.core import Unsatisfiable, run_test
 
 # Bare names needed by exec'd generated programs (exec uses globals()).

@@ -11,9 +11,9 @@ from collections import defaultdict
 from random import Random
 
 import pytest
-
 from hypothesis import HealthCheck, given, note, reject, settings
 from hypothesis import strategies as st
+
 from pbtkit import Generator, Unsatisfiable, run_test
 from pbtkit.core import Status
 
