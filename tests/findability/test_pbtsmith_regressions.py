@@ -9,7 +9,22 @@ can, it's added here as a concrete regression test.
 import pytest
 
 from pbtkit import run_test
-from pbtkit.generators import binary, booleans, floats, integers, just, lists, tuples
+from pbtkit.generators import booleans, integers, just
+
+try:
+    from pbtkit.generators import binary
+except ImportError:
+    pass
+
+try:
+    from pbtkit.generators import floats
+except ImportError:
+    pass
+
+try:
+    from pbtkit.generators import lists, tuples
+except ImportError:
+    pass
 
 
 class Failure(Exception):

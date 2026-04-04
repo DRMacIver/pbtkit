@@ -37,6 +37,7 @@ def test_containment(n):
 
 @pytest.mark.requires("span_mutation")
 @pytest.mark.requires("edge_case_boosting")
+@pytest.mark.requires("targeting")
 def test_duplicate_containment():
     """Engine can find (list, int) where int appears more than once in the list,
     using unbounded integers."""
