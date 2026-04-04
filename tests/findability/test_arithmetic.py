@@ -31,8 +31,8 @@ def test_float_addition_does_not_cancel():
 
         @run_test(database={}, max_examples=2000)
         def _(tc):
-            x = tc.draw(gs.floats())
-            y = tc.draw(gs.floats())
+            x = tc.draw(gs.floats(min_value=-1e100, max_value=1e100))
+            y = tc.draw(gs.floats(min_value=-1e100, max_value=1e100))
             assert x + (y - x) == y
 
 
