@@ -67,6 +67,7 @@ def test_non_negative_float_is_not_always_positive():
 
 
 @pytest.mark.requires("bytes")
+@pytest.mark.requires("collections")
 @pytest.mark.requires("edge_case_boosting")
 @pytest.mark.xfail(reason="conjunction of empty bytes + zero is hard to find reliably")
 def test_empty_bytes_with_wide_dependent_range():
@@ -89,6 +90,7 @@ def test_empty_bytes_with_wide_dependent_range():
 
 
 @pytest.mark.requires("bytes")
+@pytest.mark.requires("collections")
 @pytest.mark.requires("edge_case_boosting")
 def test_empty_bytes_with_dependent_condition():
     """Find failure requiring empty bytes AND zero from mapped booleans.

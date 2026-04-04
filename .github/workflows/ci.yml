@@ -9,15 +9,20 @@ on:
 jobs:
   format:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
       - run: uv sync
-      - run: uv run ruff format --check src/ tests/
-      - run: uv run ruff check src/ tests/
+      - name: Check formatting
+        run: |
+          uv run ruff format src/ tests/
+          uv run ruff check --fix src/ tests/
+          git diff --exit-code
 
   typecheck:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
@@ -26,19 +31,21 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
       - run: uv sync
       - name: Run tests with 100% branch coverage
         run: |
-          uv run python -m coverage run --source=src/pbtkit --branch -m pytest tests/ -m 'not hypothesis' --verbose
+          uv run python -m coverage run --source=src/pbtkit --branch -m pytest tests/ -m 'not hypothesis' --verbose --timeout=300
           uv run coverage report --show-missing --fail-under=100
 
   test-core:
+    needs: [format, typecheck, test]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     strategy:
-      fail-fast: false
       matrix:
         extension:
           - bytes
@@ -65,10 +72,12 @@ jobs:
       - uses: astral-sh/setup-uv@v4
       - run: uv sync
       - name: "Test with ${{ matrix.extension }} disabled"
-        run: PBTKIT_DISABLED=${{ matrix.extension }} uv run pytest tests/ -m 'not hypothesis' --verbose
+        run: PBTKIT_DISABLED=${{ matrix.extension }} uv run pytest tests/ -m 'not hypothesis' --verbose --timeout=300
 
   compiled-full:
+    needs: [format, typecheck, test]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
@@ -77,11 +86,13 @@ jobs:
       - run: uv run pyright build/pkg/pbtkit/core.py
       - name: Test compiled (full)
         run: |
-          uv run python -m coverage run --source=build/pkg/pbtkit --branch -m pytest tests/ -m 'not hypothesis' --override-ini='pythonpath=build/pkg' -q
+          uv run python -m coverage run --source=build/pkg/pbtkit --branch -m pytest tests/ -m 'not hypothesis' --override-ini='pythonpath=build/pkg' -q --timeout=300
           uv run coverage report --show-missing --include='build/pkg/pbtkit/core.py' --fail-under=100
 
   compiled-minimal:
+    needs: [format, typecheck, test]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
@@ -91,13 +102,14 @@ jobs:
       - name: Test compiled (minimal)
         run: |
           disabled=$(uv run python -c "from tools.compile_pbtkit import EXTENSIONS; print(','.join(EXTENSIONS))")
-          PBTKIT_DISABLED=$disabled uv run python -m coverage run --source=build/pkg/pbtkit --branch -m pytest tests/ -m 'not hypothesis' --override-ini='pythonpath=build/pkg' -q
+          PBTKIT_DISABLED=$disabled uv run python -m coverage run --source=build/pkg/pbtkit --branch -m pytest tests/ -m 'not hypothesis' --override-ini='pythonpath=build/pkg' -q --timeout=300
           uv run coverage report --show-missing --include='build/pkg/pbtkit/core.py' --fail-under=100
 
   compiled-one-enabled:
+    needs: [format, typecheck, test]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     strategy:
-      fail-fast: false
       matrix:
         extension:
           - bytes
@@ -132,13 +144,14 @@ jobs:
           from tools.compile_pbtkit import EXTENSIONS, expand_disabled
           print(','.join(sorted(expand_disabled(frozenset(set(EXTENSIONS) - {'${{ matrix.extension }}'})))))
           ")
-          PBTKIT_DISABLED=$disabled uv run python -m coverage run --source=build/pkg/pbtkit --branch -m pytest tests/ -m 'not hypothesis' --override-ini='pythonpath=build/pkg' -q
+          PBTKIT_DISABLED=$disabled uv run python -m coverage run --source=build/pkg/pbtkit --branch -m pytest tests/ -m 'not hypothesis' --override-ini='pythonpath=build/pkg' -q --timeout=300
           uv run coverage report --show-missing --include='build/pkg/pbtkit/core.py' --fail-under=100
 
   compiled-one-disabled:
+    needs: [format, typecheck, test]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     strategy:
-      fail-fast: false
       matrix:
         extension:
           - bytes
@@ -173,11 +186,13 @@ jobs:
           from tools.compile_pbtkit import expand_disabled
           print(','.join(sorted(expand_disabled(frozenset(['${{ matrix.extension }}'])))))
           ")
-          PBTKIT_DISABLED=$disabled uv run python -m coverage run --source=build/pkg/pbtkit --branch -m pytest tests/ -m 'not hypothesis' --override-ini='pythonpath=build/pkg' -q
+          PBTKIT_DISABLED=$disabled uv run python -m coverage run --source=build/pkg/pbtkit --branch -m pytest tests/ -m 'not hypothesis' --override-ini='pythonpath=build/pkg' -q --timeout=300
           uv run coverage report --show-missing --include='build/pkg/pbtkit/core.py' --fail-under=100
 
   hypothesis:
+    needs: [format, typecheck, test]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
@@ -185,30 +200,34 @@ jobs:
       - name: Run Hypothesis pbtsmith tests
         env:
           HYPOTHESIS_PROFILE: ci
-        run: uv run pytest tests/test_pbtsmith.py tests/test_shrink_comparison.py tests/test_findability_comparison.py -m hypothesis -v -o 'addopts='
+        run: uv run pytest tests/test_pbtsmith.py tests/test_shrink_comparison.py tests/test_findability_comparison.py -m hypothesis -v -o 'addopts=' --timeout=300
 
   test-macos:
+    needs: [format, typecheck, test]
     runs-on: macos-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
       - run: uv sync
       - name: Test (uncompiled)
-        run: uv run pytest tests/ -m 'not hypothesis' -q
+        run: uv run pytest tests/ -m 'not hypothesis' -q --timeout=300
       - name: Test (compiled)
         run: |
           uv run python tools/compile_pbtkit.py
-          uv run pytest tests/ -m 'not hypothesis' --override-ini='pythonpath=build/pkg' -q
+          uv run pytest tests/ -m 'not hypothesis' --override-ini='pythonpath=build/pkg' -q --timeout=300
 
   test-windows:
+    needs: [format, typecheck, test]
     runs-on: windows-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
       - run: uv sync
       - name: Test (uncompiled)
-        run: uv run pytest tests/ -m 'not hypothesis' -q
+        run: uv run pytest tests/ -m 'not hypothesis' -q --timeout=300
       - name: Test (compiled)
         run: |
           uv run python tools/compile_pbtkit.py
-          uv run pytest tests/ -m 'not hypothesis' --override-ini='pythonpath=build/pkg' -q
+          uv run pytest tests/ -m 'not hypothesis' --override-ini='pythonpath=build/pkg' -q --timeout=300

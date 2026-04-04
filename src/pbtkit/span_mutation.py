@@ -31,7 +31,7 @@ def _span_mutation_hook(state: PbtkitState, base: TestCase) -> None:
 
     For each attempt: pick a label with 2+ spans, pick two spans,
     and replace both with the same (randomly chosen) content."""
-    if not base.spans:
+    if not getattr(base, "spans", None):
         return
 
     values = [n.value for n in base.nodes]

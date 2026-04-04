@@ -519,6 +519,9 @@ def test_bin_search_down_lo_satisfies():
     assert state.result[0].value == 5
 
 
+@pytest.mark.requires("bytes")
+@pytest.mark.requires("floats")
+@pytest.mark.requires("text")
 def test_sort_key_type_mismatch():
     """sort_key methods handle wrong-type values gracefully.
 
@@ -529,6 +532,8 @@ def test_sort_key_type_mismatch():
     assert FloatChoice(-1.0, 1.0, False, False).sort_key("hello") == (0, 0)
 
 
+@pytest.mark.requires("collections")
+@pytest.mark.requires("spans")
 def test_shrink_duplicates_with_stale_indices():
     """Regression: duplication pass crashed with AttributeError:
     'BooleanChoice' object has no attribute 'max_value'.

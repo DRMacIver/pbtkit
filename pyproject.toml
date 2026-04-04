@@ -8,8 +8,9 @@ requires-python = ">=3.11"
 dev = [
     "hypothesis",
     "pytest",
+    "pytest-timeout",
     "coverage",
-    "ruff",
+    "ruff==0.15.9",
     "pyright",
     "libcst",
 ]

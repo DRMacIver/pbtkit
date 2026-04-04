@@ -65,7 +65,8 @@ def find_monkey_patches(tree: cst.Module) -> dict[str, str]:
 def collect_imports(trees: dict[str, cst.Module]) -> str:
     """Merge all non-pbtkit imports from all modules."""
     from_imports: dict[str, set[str]] = defaultdict(set)
-    regular: set[str] = set()
+    # Map module name to optional alias (e.g. "libcst" -> "cst")
+    regular: dict[str, str | None] = {}
 
     for tree in trees.values():
         for stmt in tree.body:
@@ -87,11 +88,20 @@ def collect_imports(trees: dict[str, cst.Module]) -> str:
                         name = _dotted(alias.name)
                         if name.startswith("pbtkit"):
                             continue
-                        regular.add(name)
+                        asname = None
+                        if alias.asname and isinstance(alias.asname, cst.AsName):
+                            asname_node = alias.asname.name
+                            if isinstance(asname_node, cst.Name):
+                                asname = asname_node.value
+                        regular[name] = asname
 
     lines = ["from __future__ import annotations", ""]
     for name in sorted(regular):
-        lines.append(f"import {name}")
+        asname = regular[name]
+        if asname:
+            lines.append(f"import {name} as {asname}")
+        else:
+            lines.append(f"import {name}")
     if regular:
         lines.append("")
     for mod in sorted(from_imports):
@@ -344,14 +354,30 @@ class _StripNeededFor(cst.CSTTransformer):
             return cst.RemovalSentinel.REMOVE
         return updated_node
 
+    def _is_feature_enabled_guard(self, node: cst.If) -> bool:
+        """Check if the condition is a feature_enabled("...") call."""
+        test = node.test
+        return (
+            isinstance(test, cst.Call)
+            and isinstance(test.func, cst.Name)
+            and test.func.value == "feature_enabled"
+        )
+
     def leave_If(
         self,
         original_node: cst.If,
         updated_node: cst.If,
-    ) -> cst.If | cst.RemovalSentinel:
+    ) -> cst.If | cst.RemovalSentinel | cst.FlattenSentinel[cst.BaseCompoundStatement]:
         feature = self._comment_needed_for(original_node)
-        if feature and feature in self.disabled_features and original_node.orelse is None:
+        if feature is None:
+            return updated_node
+        if feature in self.disabled_features and original_node.orelse is None:
             return cst.RemovalSentinel.REMOVE
+        # Feature is enabled. For feature_enabled() guards, inline the body
+        # (the condition is always true). For other conditions, keep as-is.
+        if self._is_feature_enabled_guard(original_node):
+            if isinstance(updated_node.body, cst.IndentedBlock):
+                return cst.FlattenSentinel(updated_node.body.body)
         return updated_node
 
 
@@ -635,6 +661,28 @@ def extract_docstring(source: str) -> str:
     return ""
 
 
+# Import lines to strip from compiled output. These reference pbtkit
+# submodules that don't exist in the single-file build — the symbols
+# they import are already defined in the compiled file.
+_STRIP_IMPORT_PREFIXES = [
+    "from pbtkit.edge_case_boosting import",
+    "from pbtkit.features import feature_enabled",
+    "from pbtkit.features import feature_enabled,",
+]
+
+
+def _inline_extension_constants(source: str) -> str:
+    """Strip imports from merged extension modules."""
+    lines = source.splitlines(keepends=True)
+    result = []
+    for line in lines:
+        stripped = line.strip()
+        if any(stripped.startswith(p) for p in _STRIP_IMPORT_PREFIXES):
+            continue
+        result.append(line)
+    return "".join(result)
+
+
 def compile_pbtkit(disabled: frozenset[str] = frozenset()) -> str:
     """Compile the pbtkit package into a single source string.
 
@@ -761,6 +809,12 @@ def compile_pbtkit(disabled: frozenset[str] = frozenset()) -> str:
 
     # Remove TypeVar definitions that aren't used in any subscript.
     result = _strip_unused_typevars(result)
+
+    # Inline constants from extension modules that got merged.
+    # Strip imports that reference pbtkit submodules (they don't exist
+    # in the single-file build) and replace the imported names with
+    # their literal values.
+    result = _inline_extension_constants(result)
 
     return result
 

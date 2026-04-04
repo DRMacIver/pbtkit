@@ -99,7 +99,6 @@ import pbtkit.shrinking.advanced_integer_passes
 import pbtkit.shrinking.bind_deletion
 import pbtkit.shrinking.duplication_passes
 import pbtkit.shrinking.sorting
-import pbtkit.span_mutation
 import pbtkit.spans
 import pbtkit.targeting
 import pbtkit.text
@@ -111,6 +110,7 @@ _FEATURE_DEPENDENT_MODULES = {
     "pbtkit.shrinking.advanced_string_passes": "text",
     "pbtkit.shrinking.index_passes": "indexing",
     "pbtkit.shrinking.mutation": "indexing",
+    "pbtkit.span_mutation": "spans",
 }
 
 from pbtkit.features import DISABLED_MODULES as _disabled

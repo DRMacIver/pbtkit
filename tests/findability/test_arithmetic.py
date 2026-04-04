@@ -10,7 +10,7 @@ import pytest
 import pbtkit.generators as gs
 from pbtkit import run_test
 
-pytestmark = pytest.mark.requires("collections")
+pytestmark = [pytest.mark.requires("collections"), pytest.mark.requires("floats")]
 
 
 def test_float_addition_is_not_associative():
