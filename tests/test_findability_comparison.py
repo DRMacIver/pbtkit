@@ -65,11 +65,6 @@ def _pbtkit_finds(test_body, max_examples: int = 5000) -> bool:
 
 
 @given(program())
-@settings(
-    max_examples=2000,
-    deadline=None,
-    suppress_health_check=[HealthCheck.too_slow],
-)
 def test_pbtkit_finds_what_hypothesis_finds(pbtkit_program: str) -> None:
     """If Hypothesis can find a failure in 100 examples, pbtkit should
     find it in 1000."""

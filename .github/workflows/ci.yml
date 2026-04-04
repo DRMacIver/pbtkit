@@ -1,32 +1,214 @@
-name: ci
+name: CI
 
 on:
   push:
-    branches: [ master ]
+    branches: [main, master]
   pull_request:
-    branches: [ master ]
   workflow_dispatch:
 
 jobs:
-  build:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync
+      - run: uv run ruff format --check src/ tests/
+      - run: uv run ruff check src/ tests/
 
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync
+      - run: uv run pyright src/
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync
+      - name: Run tests with 100% branch coverage
+        run: |
+          uv run python -m coverage run --source=src/pbtkit --branch -m pytest tests/ -m 'not hypothesis' --verbose
+          uv run coverage report --show-missing --fail-under=100
+
+  test-core:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: [3.8, 3.9]
-
+        extension:
+          - bytes
+          - caching
+          - collections
+          - database
+          - draw_names
+          - edge_case_boosting
+          - floats
+          - shrinking.advanced_bytes_passes
+          - shrinking.advanced_integer_passes
+          - shrinking.advanced_string_passes
+          - shrinking.bind_deletion
+          - shrinking.duplication_passes
+          - shrinking.index_passes
+          - shrinking.mutation
+          - shrinking.sorting
+          - span_mutation
+          - spans
+          - targeting
+          - text
     steps:
-    - uses: actions/checkout@v2
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v2
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        python -m pip install flake8 pytest
-        pip install -r requirements.txt
-    - name: Test with pytest
-      run: |
-        pytest
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync
+      - name: "Test with ${{ matrix.extension }} disabled"
+        run: PBTKIT_DISABLED=${{ matrix.extension }} uv run pytest tests/ -m 'not hypothesis' --verbose
+
+  compiled-full:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync
+      - run: uv run python tools/compile_pbtkit.py
+      - run: uv run pyright build/pkg/pbtkit/core.py
+      - name: Test compiled (full)
+        run: |
+          uv run python -m coverage run --source=build/pkg/pbtkit --branch -m pytest tests/ -m 'not hypothesis' --override-ini='pythonpath=build/pkg' -q
+          uv run coverage report --show-missing --include='build/pkg/pbtkit/core.py' --fail-under=100
+
+  compiled-minimal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync
+      - run: uv run python tools/compile_pbtkit.py --minimal
+      - run: uv run pyright build/pkg/pbtkit/core.py
+      - name: Test compiled (minimal)
+        run: |
+          disabled=$(uv run python -c "from tools.compile_pbtkit import EXTENSIONS; print(','.join(EXTENSIONS))")
+          PBTKIT_DISABLED=$disabled uv run python -m coverage run --source=build/pkg/pbtkit --branch -m pytest tests/ -m 'not hypothesis' --override-ini='pythonpath=build/pkg' -q
+          uv run coverage report --show-missing --include='build/pkg/pbtkit/core.py' --fail-under=100
+
+  compiled-one-enabled:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        extension:
+          - bytes
+          - caching
+          - collections
+          - database
+          - draw_names
+          - edge_case_boosting
+          - floats
+          - shrinking.advanced_bytes_passes
+          - shrinking.advanced_integer_passes
+          - shrinking.advanced_string_passes
+          - shrinking.bind_deletion
+          - shrinking.duplication_passes
+          - shrinking.index_passes
+          - shrinking.mutation
+          - shrinking.sorting
+          - span_mutation
+          - spans
+          - targeting
+          - text
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync
+      - name: "Compile with only ${{ matrix.extension }}"
+        run: uv run python tools/compile_pbtkit.py --features=${{ matrix.extension }}
+      - run: uv run pyright build/pkg/pbtkit/core.py
+      - name: "Test compiled (feature=${{ matrix.extension }})"
+        run: |
+          disabled=$(uv run python -c "
+          from tools.compile_pbtkit import EXTENSIONS, expand_disabled
+          print(','.join(sorted(expand_disabled(frozenset(set(EXTENSIONS) - {'${{ matrix.extension }}'})))))
+          ")
+          PBTKIT_DISABLED=$disabled uv run python -m coverage run --source=build/pkg/pbtkit --branch -m pytest tests/ -m 'not hypothesis' --override-ini='pythonpath=build/pkg' -q
+          uv run coverage report --show-missing --include='build/pkg/pbtkit/core.py' --fail-under=100
+
+  compiled-one-disabled:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        extension:
+          - bytes
+          - caching
+          - collections
+          - database
+          - draw_names
+          - edge_case_boosting
+          - floats
+          - shrinking.advanced_bytes_passes
+          - shrinking.advanced_integer_passes
+          - shrinking.advanced_string_passes
+          - shrinking.bind_deletion
+          - shrinking.duplication_passes
+          - shrinking.index_passes
+          - shrinking.mutation
+          - shrinking.sorting
+          - span_mutation
+          - spans
+          - targeting
+          - text
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync
+      - name: "Compile without ${{ matrix.extension }}"
+        run: uv run python tools/compile_pbtkit.py --disable=${{ matrix.extension }}
+      - run: uv run pyright build/pkg/pbtkit/core.py
+      - name: "Test compiled (disable=${{ matrix.extension }})"
+        run: |
+          disabled=$(uv run python -c "
+          from tools.compile_pbtkit import expand_disabled
+          print(','.join(sorted(expand_disabled(frozenset(['${{ matrix.extension }}'])))))
+          ")
+          PBTKIT_DISABLED=$disabled uv run python -m coverage run --source=build/pkg/pbtkit --branch -m pytest tests/ -m 'not hypothesis' --override-ini='pythonpath=build/pkg' -q
+          uv run coverage report --show-missing --include='build/pkg/pbtkit/core.py' --fail-under=100
+
+  hypothesis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync
+      - name: Run Hypothesis pbtsmith tests
+        env:
+          HYPOTHESIS_PROFILE: ci
+        run: uv run pytest tests/test_pbtsmith.py tests/test_shrink_comparison.py tests/test_findability_comparison.py -m hypothesis -v -o 'addopts='
+
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync
+      - name: Test (uncompiled)
+        run: uv run pytest tests/ -m 'not hypothesis' -q
+      - name: Test (compiled)
+        run: |
+          uv run python tools/compile_pbtkit.py
+          uv run pytest tests/ -m 'not hypothesis' --override-ini='pythonpath=build/pkg' -q
+
+  test-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync
+      - name: Test (uncompiled)
+        run: uv run pytest tests/ -m 'not hypothesis' -q
+      - name: Test (compiled)
+        run: |
+          uv run python tools/compile_pbtkit.py
+          uv run pytest tests/ -m 'not hypothesis' --override-ini='pythonpath=build/pkg' -q

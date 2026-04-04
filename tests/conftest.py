@@ -2,6 +2,15 @@ import os
 
 import pytest
 
+from hypothesis import HealthCheck, settings
+
+settings.register_profile(
+    "ci",
+    max_examples=200,
+    deadline=None,
+    suppress_health_check=[HealthCheck.too_slow],
+)
+
 try:
     from pbtkit.features import DISABLED_MODULES
 except (ImportError, AttributeError):

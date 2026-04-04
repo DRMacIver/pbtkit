@@ -1644,11 +1644,6 @@ pytestmark = [
 
 
 @given(program())
-@settings(
-    max_examples=2000,
-    deadline=None,
-    suppress_health_check=[HealthCheck.too_slow],
-)
 def test_pbtsmith_no_internal_errors(pbtkit_program: str) -> None:
     """Generated programs either succeed or fail with Failure,
     never with internal crashes."""

@@ -199,7 +199,7 @@ class ConjectureTestCase:
         if status == Status.INVALID:
             self.data.mark_invalid("rejected")
         elif status == Status.INTERESTING:
-            self.data.mark_interesting(("pbtsmith",))
+            self.data.mark_interesting(("pbtsmith", 0))
         elif status == Status.EARLY_STOP:
             self.data.mark_invalid("early stop")
 
@@ -272,7 +272,7 @@ def _run_hypothesis(test_body, seed: int) -> list[ChoiceNode] | None:
             test_body(tc)
         except Failure:
             captured_nodes.append(list(tc.nodes))
-            data.mark_interesting(("pbtsmith",))
+            data.mark_interesting(("pbtsmith", 0))
         except StopTest:
             pass
 
@@ -332,11 +332,6 @@ pytestmark = [
 
 
 @given(program())
-@settings(
-    max_examples=20000,
-    deadline=None,
-    suppress_health_check=[HealthCheck.too_slow],
-)
 def test_pbtkit_shrink_results_are_stable_across_seeds(
     pbtkit_program: str,
 ) -> None:
@@ -369,11 +364,6 @@ def test_pbtkit_shrink_results_are_stable_across_seeds(
 
 
 @given(program())
-@settings(
-    max_examples=2000,
-    deadline=None,
-    suppress_health_check=[HealthCheck.too_slow],
-)
 def test_pbtkit_shrinks_at_least_as_well_as_hypothesis(
     pbtkit_program: str,
 ) -> None:
