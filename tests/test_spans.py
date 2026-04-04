@@ -7,6 +7,7 @@ import pytest
 import pbtkit.generators as gs
 from pbtkit import run_test
 from pbtkit.core import PbtkitState, Status, StopTest, TestCase
+from pbtkit.span_mutation import _span_mutation_hook
 
 pytestmark = [
     pytest.mark.requires("spans"),
@@ -85,8 +86,6 @@ def test_span_mutation_finds_duplicate():
 @pytest.mark.requires("span_mutation")
 def test_span_mutation_noop_without_spans():
     """Span mutation hook does nothing when test case has no spans."""
-    from pbtkit.span_mutation import _span_mutation_hook
-
     state = PbtkitState(Random(0), lambda tc: None, 100)
     tc = TestCase.for_choices([0])
     state.test_function(tc)
@@ -96,8 +95,6 @@ def test_span_mutation_noop_without_spans():
 @pytest.mark.requires("span_mutation")
 def test_span_mutation_exercises_swaps():
     """Span mutation hook tries span swaps on a test case with spans."""
-    from pbtkit.span_mutation import _span_mutation_hook
-
     gen = gs.lists(
         gs.tuples(gs.integers(0, 3), gs.integers(0, 3)), min_size=2, max_size=5
     )

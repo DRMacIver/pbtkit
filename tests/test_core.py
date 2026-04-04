@@ -17,6 +17,7 @@ import pytest
 import pbtkit.core as core
 import pbtkit.generators as gs
 from pbtkit import Unsatisfiable, run_test
+from pbtkit.bytes import BytesChoice
 from pbtkit.caching import CachedTestFunction, _cache_key
 from pbtkit.core import (
     Frozen,
@@ -26,6 +27,8 @@ from pbtkit.core import (
 from pbtkit.core import PbtkitState as State
 from pbtkit.core import TestCase as TC
 from pbtkit.database import DirectoryDB
+from pbtkit.floats import FloatChoice
+from pbtkit.text import StringChoice
 
 
 @pytest.mark.requires("database")
@@ -521,10 +524,6 @@ def test_sort_key_type_mismatch():
 
     During shrinking, type changes in the choice sequence can cause a
     ChoiceNode to have a value that doesn't match its kind."""
-    from pbtkit.bytes import BytesChoice
-    from pbtkit.floats import FloatChoice
-    from pbtkit.text import StringChoice
-
     assert StringChoice(0, 127, 0, 10).sort_key(42) == (0, ())
     assert BytesChoice(0, 10).sort_key(42) == (0, b"")
     assert FloatChoice(-1.0, 1.0, False, False).sort_key("hello") == (0, 0)
@@ -535,18 +534,11 @@ def test_shrink_duplicates_with_stale_indices():
     'BooleanChoice' object has no attribute 'max_value'.
 
     Exact program from pbtsmith that triggered the crash."""
-    from pbtkit.generators import (
-        booleans,
-        integers,
-        just,
-        lists,
-        sampled_from,
-    )
 
     @gs.composite
     def _tree_node(tc, depth):
         if depth <= 0 or not tc.weighted(0.9):
-            return tc.draw(booleans())
+            return tc.draw(gs.booleans())
         op = tc.choice(3)
         if op == 0:
             child = tc.draw(_tree_node(depth - 1))
@@ -564,7 +556,7 @@ def test_shrink_duplicates_with_stale_indices():
         return ("mul", left, right)
 
     def _tree():
-        return integers(0, 2).flat_map(lambda d: _tree_node(d))
+        return gs.integers(0, 2).flat_map(lambda d: _tree_node(d))
 
     def tree_size(node):
         if not isinstance(node, tuple) or len(node) == 0:
@@ -593,10 +585,10 @@ def test_shrink_duplicates_with_stale_indices():
             v0 = tc.draw(_tree().filter(lambda t: isinstance(t, tuple)))
             _nodes_v0 = tree_nodes(v0)
             tc.draw(_tree().filter(lambda t: isinstance(t, tuple)))
-            tc.draw(lists(booleans(), max_size=tree_leaves(v0) + 1))
+            tc.draw(gs.lists(gs.booleans(), max_size=tree_leaves(v0) + 1))
             if not (tree_size(v0) < 5):
                 raise Failure("tree_size(v0) < 5")
-            v3 = tc.draw(sampled_from(_nodes_v0) if _nodes_v0 else just(0))
+            v3 = tc.draw(gs.sampled_from(_nodes_v0) if _nodes_v0 else gs.just(0))
             if not isinstance(v3, tuple):
                 raise Failure("isinstance(v3, tuple)")
     except (Unsatisfiable, Failure):
