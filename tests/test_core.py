@@ -20,6 +20,7 @@ from pbtkit import Unsatisfiable, run_test
 from pbtkit.bytes import BytesChoice
 from pbtkit.caching import CachedTestFunction, _cache_key
 from pbtkit.core import (
+    SHRINK_PASSES,
     Frozen,
     IntegerChoice,
     Status,
@@ -29,6 +30,16 @@ from pbtkit.core import TestCase as TC
 from pbtkit.database import DirectoryDB
 from pbtkit.floats import FloatChoice
 from pbtkit.text import StringChoice
+
+try:
+    from pbtkit.shrinking.sequence_redistribution import (
+        redistribute_sequence_pair,
+    )
+except (ImportError, ModuleNotFoundError):
+    try:
+        from pbtkit.core import redistribute_sequence_pair
+    except ImportError:
+        redistribute_sequence_pair = None  # type: ignore[assignment]
 
 
 @pytest.mark.requires("database")
@@ -598,3 +609,78 @@ def test_shrink_duplicates_with_stale_indices():
                 raise Failure("isinstance(v3, tuple)")
     except (Unsatisfiable, Failure):
         pass
+
+
+def test_generator_repr():
+    g = gs.integers(0, 10)
+    assert repr(g) == "integers(min_value=0, max_value=10)"
+
+
+@pytest.mark.requires("shrinking.advanced_bytes_passes")
+def test_redistribute_binary_search():
+    """Exercise the binary search path in redistribute_sequence_pair.
+
+    Condition: moving all fails, moving 1 works → binary search finds max."""
+    assert redistribute_sequence_pair is not None
+
+    calls: list[tuple[bytes, bytes]] = []
+
+    def condition(new_s: bytes, new_t: bytes) -> bool:
+        calls.append((new_s, new_t))
+        # Accept only if we keep at least 2 bytes in s.
+        # This forces: moving all fails, moving 1 works,
+        # and the binary search finds the max moveable suffix.
+        return len(new_s) >= 2
+
+    redistribute_sequence_pair(b"abcde", b"fg", condition)
+    # The binary search should explore different split points.
+    assert len(calls) > 2
+
+
+@pytest.mark.requires("shrinking.duplication_passes")
+def test_shrink_duplicates_valid_drops_below_two():
+    """Exercise the len(valid) < 2 break in shrink_duplicates.
+
+    We create two duplicate groups. Processing the first group causes the
+    result to shrink in length, making the second group's indices out of
+    bounds so _valid_indices returns < 2 elements."""
+    shrink_dup = next(p for p in SHRINK_PASSES if "duplicate" in p.__name__)
+
+    # Test: choice(100) controls draw count. Fails when n >= 3.
+    # This means replacing values with anything >= 3 still fails,
+    # but the result shrinks in length when n changes.
+    def test_fn(tc):
+        n = tc.choice(100)
+        for _ in range(n):
+            tc.choice(100)
+        if n >= 3:
+            raise AssertionError
+
+    def mark_failures_interesting(tc):
+        try:
+            test_fn(tc)
+        except Exception:
+            if tc.status is not None:
+                raise
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(
+        random=Random(42),
+        test_function=mark_failures_interesting,
+        max_examples=1000,
+        database={},
+    )
+    state._print_function = test_fn
+    state._original_test = test_fn
+
+    # Seed: [5, 5, 5, 20, 20, 20]
+    # Group 1: value=5 at indices [0,1,2]
+    # Group 2: value=20 at indices [3,4,5]
+    # After processing group 1, binary_search may shrink n from 5 to 3,
+    # giving a 4-element result. Then group 2's indices [3,4,5] are
+    # mostly out of bounds → len(valid) < 2 → break.
+    tc = TC.for_choices([5, 5, 5, 20, 20, 20])
+    state.test_function(tc)
+    assert state.result is not None
+
+    shrink_dup(state)

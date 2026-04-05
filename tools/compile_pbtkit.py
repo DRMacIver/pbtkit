@@ -783,6 +783,7 @@ def compile_pbtkit(disabled: frozenset[str] = frozenset()) -> str:
         "setup_hook": "SETUP_HOOKS",
         "teardown_hook": "TEARDOWN_HOOKS",
         "test_function_hook": "TEST_FUNCTION_HOOKS",
+        "generation_hook": "GENERATION_HOOKS",
         "run_phase": "RUN_PHASES",
     }
     used_hooks: set[str] = set()
@@ -815,6 +816,10 @@ def compile_pbtkit(disabled: frozenset[str] = frozenset()) -> str:
     # in the single-file build) and replace the imported names with
     # their literal values.
     result = _inline_extension_constants(result)
+
+    # Strip residual # needed_for("...") comments — they reference the
+    # feature system which doesn't exist in compiled output.
+    result = re.sub(r'\s*# needed_for\("[^"]+"\)', "", result)
 
     return result
 
@@ -1005,6 +1010,9 @@ def main() -> None:
                 print(msg, file=sys.stderr)
             print(f"Valid extensions: {', '.join(EXTENSIONS)}", file=sys.stderr)
             sys.exit(1)
+    # Expand transitive dependencies before compiling so that both
+    # compile_pbtkit() and write_test_package() see the same set.
+    disabled = expand_disabled(disabled)
     result = compile_pbtkit(disabled=disabled)
 
     # Write standalone compiled file

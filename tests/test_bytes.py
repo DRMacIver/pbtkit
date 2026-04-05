@@ -145,3 +145,8 @@ def test_bytes_choice_unit():
     # Second-simplest in sort_key order: next byte value, not next length.
     assert BytesChoice(0, 10).unit == b"\x01"
     assert BytesChoice(3, 10).unit == b"\x00\x00\x01"
+
+
+def test_bytes_sort_key_type_mismatch():
+    """sort_key handles non-bytes values that can arrive during shrinking."""
+    assert BytesChoice(0, 10).sort_key(42) == (0, b"")
