@@ -12,8 +12,8 @@ special value is drawn at least once with P > 0.999.
 from __future__ import annotations
 
 # This module is a feature flag — importing it enables edge-case
-# boosting in core.py and floats.py via feature_enabled() guards.
-# The actual boosting logic lives inline in those modules.
+# boosting in core.py and floats.py. The actual boosting logic
+# lives inline in those modules.
 
 # Probability of drawing a special value (boundary or zero) per draw.
 # With k special values and n=1000 draws:

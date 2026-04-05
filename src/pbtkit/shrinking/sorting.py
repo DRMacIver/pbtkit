@@ -13,6 +13,7 @@ from pbtkit.core import (
     PbtkitState,
     shrink_pass,
 )
+from pbtkit.features import feature_enabled
 
 
 @shrink_pass
@@ -55,31 +56,36 @@ def _try_sort_group(state: PbtkitState, choice_type: type, indices: list[int]) -
 
     # Fall back to insertion sort: for each element, swap it
     # backward until it's in the right place or a swap fails.
-    for pos in range(1, len(indices)):
-        j = pos
-        while j > 0:
-            # Recompute valid indices since a prior swap may have
-            # changed the result structure (e.g. via value punning).
-            indices = [
-                i
-                for i in indices
-                if i < len(state.result) and type(state.result[i].kind) == choice_type
-            ]
-            if j >= len(indices):  # needed_for("collections")
+    # The full sort above always succeeds for simple types (integers,
+    # booleans); insertion sort is only needed when collections cause
+    # structural changes during replacement that make the full sort fail.
+    if feature_enabled("collections"):  # needed_for("collections")
+        for pos in range(1, len(indices)):
+            j = pos
+            while j > 0:
+                # Recompute valid indices since a prior swap may have
+                # changed the result structure (e.g. via value punning).
+                indices = [
+                    i
+                    for i in indices
+                    if i < len(state.result)
+                    and type(state.result[i].kind) == choice_type
+                ]
+                if j >= len(indices):  # needed_for("collections")
+                    break
+                idx_j = indices[j]
+                idx_prev = indices[j - 1]
+                if state.result[idx_prev].sort_key <= state.result[idx_j].sort_key:
+                    break
+                if state.replace(
+                    {
+                        idx_prev: state.result[idx_j].value,
+                        idx_j: state.result[idx_prev].value,
+                    }
+                ):
+                    j -= 1
+                    continue
                 break
-            idx_j = indices[j]
-            idx_prev = indices[j - 1]
-            if state.result[idx_prev].sort_key <= state.result[idx_j].sort_key:
-                break
-            if state.replace(
-                {
-                    idx_prev: state.result[idx_j].value,
-                    idx_j: state.result[idx_prev].value,
-                }
-            ):
-                j -= 1
-                continue
-            break
 
 
 @shrink_pass

@@ -387,6 +387,11 @@ def test_floats_sort_key_ordering():
     assert kind.sort_key(1.0) < kind.sort_key(-1.0)
 
 
+def test_float_sort_key_type_mismatch():
+    """sort_key handles non-float values that can arrive during shrinking."""
+    assert FloatChoice(-1.0, 1.0, False, False).sort_key("hello") == (0, 0)
+
+
 def test_floats_shrinks_small_positive():
     """Floats < 1 reach step 4 with int_part '0', exercising
     the skip-integer-shrinking branch."""

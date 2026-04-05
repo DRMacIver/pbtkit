@@ -137,6 +137,11 @@ def test_string_from_index_out_of_range():
     assert sc.from_index(sc.max_index + 1) is None
 
 
+def test_string_sort_key_type_mismatch():
+    """sort_key handles non-string values that can arrive during shrinking."""
+    assert StringChoice(0, 127, 0, 10).sort_key(42) == (0, ())
+
+
 @pytest.mark.requires("shrinking.mutation")
 def test_string_from_index_past_end():
     """from_index returns None for indices past all length buckets.

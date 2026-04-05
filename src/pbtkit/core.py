@@ -785,6 +785,7 @@ class PbtkitState:
         self._original_test: Callable[[TestCase], None] | None = None
         self._print_function: Callable[[TestCase], None] | None = None
 
+    @needed_for("draw_names")
     def replace_test_function(self, new_test: Callable[[TestCase], None]) -> None:
         """Replace the test function. The new function is wrapped in the same
         error-marking shim as the original so that exceptions are counted as

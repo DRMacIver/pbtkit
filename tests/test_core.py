@@ -20,6 +20,9 @@ from pbtkit import Unsatisfiable, run_test
 from pbtkit.bytes import BytesChoice
 from pbtkit.caching import CachedTestFunction, _cache_key
 from pbtkit.core import (
+    SHRINK_PASSES,
+    BooleanChoice,
+    ChoiceNode,
     Frozen,
     IntegerChoice,
     Status,
@@ -29,6 +32,16 @@ from pbtkit.core import TestCase as TC
 from pbtkit.database import DirectoryDB
 from pbtkit.floats import FloatChoice
 from pbtkit.text import StringChoice
+
+try:
+    from pbtkit.shrinking.sequence_redistribution import (
+        redistribute_sequence_pair,
+    )
+except (ImportError, ModuleNotFoundError):
+    try:
+        from pbtkit.core import redistribute_sequence_pair
+    except ImportError:
+        redistribute_sequence_pair = None  # type: ignore[assignment]
 
 
 @pytest.mark.requires("database")
@@ -469,6 +482,40 @@ def test_delete_chunks_stale_index():
     assert len(state.result) == 1
 
 
+def test_delete_chunks_guard_after_decrement():
+    """delete_chunks i >= len(state.result) guard fires when a deletion
+    fails but the decrement-and-delete succeeds with a boolean flipping
+    to False, shortening the result so that i goes past the new end."""
+
+    def tf(tc):
+        count = 0
+        while tc.weighted(0.9):
+            tc.draw_integer(0, 10)
+            count += 1
+        if count >= 5:
+            tc.mark_status(Status.INTERESTING)
+
+    ic = IntegerChoice(0, 10)
+    bc = BooleanChoice(0.9)
+
+    # Build a long interleaved sequence: 10 (True, value) pairs + False = 21 choices.
+    # The minimum interesting result needs count >= 5, so at least 11 choices.
+    nodes = []
+    for v in [7, 3, 0, 5, 2, 8, 1, 4, 6, 9]:
+        nodes.append(ChoiceNode(kind=bc, value=True, was_forced=False))
+        nodes.append(ChoiceNode(kind=ic, value=v, was_forced=False))
+    nodes.append(ChoiceNode(kind=bc, value=False, was_forced=False))
+
+    state = State(Random(0), tf, 1000)
+    state.result = nodes
+
+    delete_fn = next(p for p in SHRINK_PASSES if p.__name__ == "delete_chunks")
+    delete_fn(state)
+
+    assert state.result is not None
+    assert len(state.result) < 21
+
+
 def test_run_test_with_preseeded_result():
     """Exercise the run_test path where state.result is not None
     before state.run() (normally set by database hooks)."""
@@ -598,3 +645,197 @@ def test_shrink_duplicates_with_stale_indices():
                 raise Failure("isinstance(v3, tuple)")
     except (Unsatisfiable, Failure):
         pass
+
+
+def test_generator_repr():
+    g = gs.integers(0, 10)
+    assert repr(g) == "integers(min_value=0, max_value=10)"
+
+
+@pytest.mark.requires("shrinking.advanced_bytes_passes")
+def test_redistribute_binary_search():
+    """Exercise the binary search path in redistribute_sequence_pair.
+
+    Condition: moving all fails, moving 1 works → binary search finds max."""
+    assert redistribute_sequence_pair is not None
+
+    calls: list[tuple[bytes, bytes]] = []
+
+    def condition(new_s: bytes, new_t: bytes) -> bool:
+        calls.append((new_s, new_t))
+        # Accept only if we keep at least 2 bytes in s.
+        # This forces: moving all fails, moving 1 works,
+        # and the binary search finds the max moveable suffix.
+        return len(new_s) >= 2
+
+    redistribute_sequence_pair(b"abcde", b"fg", condition)
+    # The binary search should explore different split points.
+    assert len(calls) > 2
+
+
+@pytest.mark.requires("shrinking.duplication_passes")
+def test_shrink_duplicates_valid_drops_below_two():
+    """Exercise the len(valid) < 2 break in shrink_duplicates.
+
+    We create two duplicate groups. Processing the first group causes the
+    result to shrink in length, making the second group's indices out of
+    bounds so _valid_indices returns < 2 elements."""
+    shrink_dup = next(p for p in SHRINK_PASSES if "duplicate" in p.__name__)
+
+    # Test: choice(100) controls draw count. Fails when n >= 3.
+    # This means replacing values with anything >= 3 still fails,
+    # but the result shrinks in length when n changes.
+    def test_fn(tc):
+        n = tc.choice(100)
+        for _ in range(n):
+            tc.choice(100)
+        if n >= 3:
+            raise AssertionError
+
+    def mark_failures_interesting(tc):
+        try:
+            test_fn(tc)
+        except Exception:
+            if tc.status is not None:
+                raise
+            tc.mark_status(Status.INTERESTING)
+
+    state = State(
+        random=Random(42),
+        test_function=mark_failures_interesting,
+        max_examples=1000,
+        database={},
+    )
+    state._print_function = test_fn
+    state._original_test = test_fn
+
+    # Seed: [5, 5, 5, 20, 20, 20]
+    # Group 1: value=5 at indices [0,1,2]
+    # Group 2: value=20 at indices [3,4,5]
+    # After processing group 1, binary_search may shrink n from 5 to 3,
+    # giving a 4-element result. Then group 2's indices [3,4,5] are
+    # mostly out of bounds → len(valid) < 2 → break.
+    tc = TC.for_choices([5, 5, 5, 20, 20, 20])
+    state.test_function(tc)
+    assert state.result is not None
+
+    shrink_dup(state)
+
+
+@pytest.mark.requires("shrinking.advanced_integer_passes")
+def test_redistribute_integers_stale_indices():
+    """redistribute_integers handles stale indices when redistribution
+    between a loop-controlling value and a later value shortens the result."""
+
+    def tf(tc):
+        n = tc.draw_integer(2, 8)
+        total = 0
+        for _ in range(n):
+            total += tc.draw_integer(0, 100)
+        if n >= 2 and total >= 50:
+            tc.mark_status(Status.INTERESTING)
+
+    ic_n = IntegerChoice(2, 8)
+    ic_v = IntegerChoice(0, 100)
+    state = State(Random(0), tf, 1000)
+    state.result = [
+        ChoiceNode(kind=ic_n, value=4, was_forced=False),
+        ChoiceNode(kind=ic_v, value=20, was_forced=False),
+        ChoiceNode(kind=ic_v, value=30, was_forced=False),
+        ChoiceNode(kind=ic_v, value=25, was_forced=False),
+        ChoiceNode(kind=ic_v, value=35, was_forced=False),
+    ]
+
+    redist_fn = next(p for p in SHRINK_PASSES if p.__name__ == "redistribute_integers")
+    redist_fn(state)
+
+    assert state.result is not None
+    # Redistribution should have reduced the result
+    assert len(state.result) <= 5
+
+
+@pytest.mark.requires("shrinking.bind_deletion")
+def test_bind_deletion_try_deletions_succeeds():
+    """_try_deletions returns True when deleting excess choices after a
+    value reduction recovers an interesting result."""
+
+    def tf(tc):
+        n = tc.draw_integer(1, 5)
+        total = 0
+        for _ in range(n):
+            total += tc.draw_integer(0, 10)
+        if n >= 2 and total >= 10:
+            tc.mark_status(Status.INTERESTING)
+
+    ic_n = IntegerChoice(1, 5)
+    ic_v = IntegerChoice(0, 10)
+    # n=3, values=[8, 1, 4], sum=13 >= 10. Reducing n to 2 and deleting
+    # the low-value choice (1) leaves [n=2, 8, 4] with sum=12.
+    state = State(Random(0), tf, 1000)
+    state.result = [
+        ChoiceNode(kind=ic_n, value=3, was_forced=False),
+        ChoiceNode(kind=ic_v, value=8, was_forced=False),
+        ChoiceNode(kind=ic_v, value=1, was_forced=False),
+        ChoiceNode(kind=ic_v, value=4, was_forced=False),
+    ]
+
+    bind_fn = next(p for p in SHRINK_PASSES if p.__name__ == "bind_deletion")
+    bind_fn(state)
+
+    assert state.result is not None
+    assert len(state.result) < 4
+
+
+@pytest.mark.requires("shrinking.sorting")
+def test_sort_values_full_sort_fails():
+    """sort_values full sort fails when sorting changes the test outcome,
+    covering the replace-returns-False branch."""
+
+    def tf(tc):
+        a = tc.draw_integer(0, 10)
+        b = tc.draw_integer(0, 10)
+        # Interesting only when first > second, so sorting breaks it.
+        if a > b:
+            tc.mark_status(Status.INTERESTING)
+
+    ic = IntegerChoice(0, 10)
+    state = State(Random(0), tf, 1000)
+    state.result = [
+        ChoiceNode(kind=ic, value=5, was_forced=False),
+        ChoiceNode(kind=ic, value=3, was_forced=False),
+    ]
+
+    sort_fn = next(p for p in SHRINK_PASSES if p.__name__ == "sort_values")
+    sort_fn(state)
+
+    # Sort should have failed: order is preserved.
+    values = [n.value for n in state.result]
+    assert values == [5, 3]
+
+
+@pytest.mark.requires("shrinking.sorting")
+def test_swap_adjacent_blocks_equal_blocks():
+    """swap_adjacent_blocks skips blocks with identical values."""
+
+    def tf(tc):
+        a = tc.draw_integer(0, 10)
+        b = tc.draw_integer(0, 10)
+        c = tc.draw_integer(0, 10)
+        d = tc.draw_integer(0, 10)
+        if a == c and b == d and a > 0:
+            tc.mark_status(Status.INTERESTING)
+
+    ic = IntegerChoice(0, 10)
+    state = State(Random(0), tf, 1000)
+    state.result = [
+        ChoiceNode(kind=ic, value=1, was_forced=False),
+        ChoiceNode(kind=ic, value=2, was_forced=False),
+        ChoiceNode(kind=ic, value=1, was_forced=False),
+        ChoiceNode(kind=ic, value=2, was_forced=False),
+    ]
+
+    swap_fn = next(p for p in SHRINK_PASSES if p.__name__ == "swap_adjacent_blocks")
+    swap_fn(state)
+
+    values = [n.value for n in state.result]
+    assert values == [1, 2, 1, 2]
