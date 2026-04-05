@@ -108,16 +108,18 @@ def test_targeting_when_most_do_not_benefit(capsys):
     ]
 
 
-@pytest.mark.parametrize("seed", range(10))
-def test_targeting_adjust_avoids_negative_values(seed):
+def test_targeting_adjust_avoids_negative_values():
     """Targeting adjust must handle choices near zero — attempting
-    step=-1 on value 0 should not produce a negative choice."""
+    step=-1 on value 0 should not produce a negative choice.
 
-    @run_test(database={}, max_examples=200, random=Random(seed))
+    choice(0) always returns 0.  When targeting tries step=-1 the
+    value would go to -1; the guard at `if value + step < 0` must
+    fire and return False.  This is deterministic because the only
+    possible value is 0 — no randomness involved."""
+
+    @run_test(database={}, max_examples=200, random=Random(0))
     def _(test_case):
-        # choice(1) gives 0 or 1. Targeting tries step=-1 on 0,
-        # which would go negative — must be skipped.
-        n = test_case.choice(1)
+        n = test_case.choice(0)
         test_case.target(n)
 
 
