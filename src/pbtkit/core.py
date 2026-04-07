@@ -381,6 +381,9 @@ class TestCase:
         # Named-draw tracking, used by pbtkit.draw_names when imported.
         self._named_draw_used: set[str] = set()
         self._named_draw_flags: dict[str, bool] = {}
+        if feature_enabled("multi_example"):  # needed_for("multi_example")
+            # Exception capture for multi-example failure classification.
+            self._failure_exception: Exception | None = None
 
     def draw_integer(self, min_value: int, max_value: int) -> int:
         """Returns a number in the range [min_value, max_value]."""
@@ -807,6 +810,14 @@ class PbtkitState:
                 test_case.mark_status(Status.INTERESTING)
 
         self.__test_function = mark_failures_interesting
+
+    @needed_for("multi_example")
+    def _set_test_function(self, fn: Callable[[TestCase], None]) -> None:
+        """Directly set the test function (no mark_failures_interesting wrapper).
+
+        Used by multi_example to install a filtered wrapper that captures
+        exceptions and supports per-key shrinking."""
+        self.__test_function = fn
 
     def test_function(self, test_case: TestCase) -> None:
         try:
