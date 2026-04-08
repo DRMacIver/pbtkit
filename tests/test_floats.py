@@ -17,7 +17,7 @@ import pbtkit.floats
 pytestmark = pytest.mark.requires("floats")
 import pbtkit.generators as gs
 from pbtkit import DirectoryDB, run_test
-from pbtkit.core import PbtkitState, Status
+from pbtkit.core import ChoiceNode, PbtkitState, Status
 from pbtkit.core import TestCase as TC
 from pbtkit.database import SerializationTag
 from pbtkit.floats import _MAX_FINITE_INDEX, FloatChoice, _draw_unbounded_float
@@ -575,3 +575,48 @@ def test_float_choice_unit():
     assert fc.simplest == -5.0  # exp_rank=3, simpler than -8.0 (exp_rank=5)
     # Single-value range: falls back to simplest.
     assert FloatChoice(5.0, 5.0, False, False).unit == 5.0
+
+
+@pytest.mark.requires("shrinking.bind_deletion")
+def test_mantissa_reduction_search():
+    """The float shrinker's mantissa reduction (step 7) converges when
+    failing values cluster near the current mantissa.
+
+    We set up a PbtkitState with x=1.0 and y=-3.0000000136813605
+    (a float ~30M mantissa units above the optimal -3.0000000000000004)
+    and run shrinking directly. Without step 7, this would crawl at
+    1 ULP per iteration; with it, convergence is immediate."""
+    kind = FloatChoice(
+        min_value=-1e100, max_value=1e100, allow_nan=False, allow_infinity=False
+    )
+    x_kind = FloatChoice(
+        min_value=-1e100, max_value=1e100, allow_nan=False, allow_infinity=False
+    )
+
+    def mark_failures_interesting(tc):
+        try:
+            x = tc.draw_float(min_value=-1e100, max_value=1e100)
+            y = tc.draw_float(min_value=-1e100, max_value=1e100)
+            assert x + (y - x) == y
+        except Exception:
+            if tc.status is not None:
+                raise
+            tc.mark_status(Status.INTERESTING)
+
+    state = PbtkitState(
+        random=Random(0),
+        test_function=mark_failures_interesting,
+        max_examples=100,
+    )
+    # Set result to a known-interesting choice sequence.
+    state.result = [
+        ChoiceNode(kind=x_kind, value=1.0, was_forced=False),
+        ChoiceNode(kind=kind, value=-3.0000000136813605, was_forced=False),
+    ]
+    assert state.consider(state.result)
+    state.shrink()
+
+    # The shrinker should converge to the optimal value.
+    values = [n.value for n in state.result]
+    assert values[0] == 1.0
+    assert values[1] == -3.0000000000000004

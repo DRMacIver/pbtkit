@@ -398,22 +398,33 @@ def _shrink_float(
 
     Tries simplest, special value transitions, sign flip, exponent
     reduction, then mantissa binary search within exponent band."""
+    # Track current best so later steps use fresh data after earlier
+    # steps succeed. try_replace modifies state.result but we only
+    # receive the initial value as a parameter.
+    current = [value]
+
+    def try_and_track(v: float) -> bool:
+        if try_replace(v):
+            current[0] = v
+            return True
+        return False
+
     # Try simplest first.
-    try_replace(kind.simplest)
+    try_and_track(kind.simplest)
 
     # Step 1: Replace special values with simpler ones.
     if math.isnan(value):
         for v in [0.0, math.inf, -math.inf]:
-            try_replace(v)
+            try_and_track(v)
         return
     if math.isinf(value):
         if value < 0:
-            try_replace(math.inf)
-        try_replace(sys.float_info.max if value > 0 else -sys.float_info.max)
+            try_and_track(math.inf)
+        try_and_track(sys.float_info.max if value > 0 else -sys.float_info.max)
 
     # Step 2: If negative (or -0.0), try flipping sign.
     if value < 0 or math.copysign(1.0, value) < 0:
-        try_replace(-value)
+        try_and_track(-value)
 
     if not math.isfinite(value):
         return
@@ -426,24 +437,26 @@ def _shrink_float(
         bin_search_down(
             0,
             abs(int_part),
-            lambda n: try_replace(math.copysign(float(n), value) + (value - int_part)),
+            lambda n: try_and_track(
+                math.copysign(float(n), value) + (value - int_part)
+            ),
         )
 
     # Step 4: Binary search on the raw index toward simplest.
     # This handles cross-exponent transitions (e.g. -4.0 → -3.0)
     # where reducing the exponent alone doesn't work but a smaller
     # raw index with a different exponent+mantissa combination does.
-    current_raw = _float_to_index(value)
+    current_raw = _float_to_index(current[0])
     simplest_raw = _float_to_index(kind.simplest)
     bin_search_down(
         simplest_raw,
         current_raw,
-        lambda idx: try_replace(_index_to_float(idx)),
+        lambda idx: try_and_track(_index_to_float(idx)),
     )
 
-    # Step 4: Reduce exponent toward 1023 (binary search on biased_exp).
-    # Re-read bits since step 3 may have changed the value.
-    bits = struct.unpack("!Q", struct.pack("!d", value))[0]
+    # Step 5: Reduce exponent toward 1023 (binary search on biased_exp).
+    # Re-read bits from the current best, not the original value.
+    bits = struct.unpack("!Q", struct.pack("!d", current[0]))[0]
     sign = bits >> 63
     biased_exp = (bits >> 52) & 0x7FF
     mantissa = bits & ((1 << 52) - 1)
@@ -452,7 +465,7 @@ def _shrink_float(
         bin_search_down(
             1023,
             biased_exp,
-            lambda e: try_replace(
+            lambda e: try_and_track(
                 struct.unpack("!d", struct.pack("!Q", (sign << 63) | (e << 52)))[0]
             ),
         )
@@ -461,19 +474,63 @@ def _shrink_float(
         bin_search_down(
             biased_exp,
             1023,
-            lambda e: try_replace(
+            lambda e: try_and_track(
                 struct.unpack("!d", struct.pack("!Q", (sign << 63) | (e << 52)))[0]
             ),
         )
 
-    # Step 5: Binary search the mantissa toward 0 within current exponent.
+    # Step 6: Binary search the mantissa toward 0 within current exponent.
+    # Re-read bits again since steps 4-5 may have changed the value.
+    bits = struct.unpack("!Q", struct.pack("!d", current[0]))[0]
+    sign = bits >> 63
+    biased_exp = (bits >> 52) & 0x7FF
+    mantissa = bits & ((1 << 52) - 1)
+
     base_bits = (sign << 63) | (biased_exp << 52)
-    try_replace(struct.unpack("!d", struct.pack("!Q", base_bits))[0])
+    try_and_track(struct.unpack("!d", struct.pack("!Q", base_bits))[0])
     bin_search_down(
         0,
         mantissa,
-        lambda m: try_replace(struct.unpack("!d", struct.pack("!Q", base_bits | m))[0]),
+        lambda m: try_and_track(
+            struct.unpack("!d", struct.pack("!Q", base_bits | m))[0]
+        ),
     )
+
+    # Step 7: Binary search mantissa reduction from the current value.
+    # Steps 4 and 6 search upward from mantissa 0, but when other
+    # shrink passes (bind_deletion, mutation) interfere, each outer
+    # loop iteration makes only 1 ULP progress. This step probes
+    # mantissa reductions to jump to the optimal value in one shot.
+    # Only needed when multiple shrink passes are active.
+    if feature_enabled(
+        "shrinking.bind_deletion"
+    ):  # needed_for("shrinking.bind_deletion")
+        bits = struct.unpack("!Q", struct.pack("!d", current[0]))[0]
+        mantissa = bits & ((1 << 52) - 1)
+        base_bits = bits & ~((1 << 52) - 1)
+
+        if mantissa > 0:
+
+            def try_reduce(k: int) -> bool:
+                return try_and_track(
+                    struct.unpack("!d", struct.pack("!Q", base_bits | (mantissa - k)))[
+                        0
+                    ]
+                )
+
+            # Exponential probing: find the largest reduction that works.
+            # Start at 2 since failing values can alternate every ULP.
+            max_reduction = 0
+            k = 2
+            while k <= mantissa:
+                if try_reduce(k):
+                    max_reduction = k
+                    k *= 2
+                else:
+                    break
+            # Binary search between max_reduction and k for the boundary.
+            if max_reduction > 0:
+                bin_search_down(max_reduction, min(k, mantissa), try_reduce)
 
 
 # ---------------------------------------------------------------------------

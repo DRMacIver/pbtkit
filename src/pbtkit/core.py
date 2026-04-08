@@ -244,6 +244,13 @@ class ChoiceNode(Generic[U]):
 # by effectively rejecting test cases that use too many choices.
 BUFFER_SIZE = 8 * 1024
 
+# Maximum number of outer shrink loop iterations. Prevents pathological
+# cases where each pass makes tiny progress (e.g. 1 ULP on a float)
+# that triggers a full restart of all passes. With ~20 passes, each
+# iteration is relatively expensive, so 500 iterations gives ample room
+# for productive shrinking while bounding worst-case time.
+MAX_SHRINK_ITERATIONS = 500
+
 
 def run_test(
     max_examples: int = 100,
@@ -864,10 +871,15 @@ class PbtkitState:
         assert self.consider(self.result)
 
         # Run registered shrink passes repeatedly until none of
-        # them make any progress.
+        # them make any progress or we hit the iteration cap.
+        # The cap prevents pathological cases where each pass makes
+        # tiny progress (e.g. 1 ULP on a float) that triggers a
+        # full restart of all passes.
         prev = None
-        while prev != self.result:
+        iterations = 0
+        while prev != self.result and iterations < MAX_SHRINK_ITERATIONS:
             prev = self.result
+            iterations += 1
             for pass_fn in SHRINK_PASSES:
                 pass_fn(self)
 
