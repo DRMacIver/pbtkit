@@ -502,7 +502,9 @@ def _shrink_float(
     # loop iteration makes only 1 ULP progress. This step probes
     # mantissa reductions to jump to the optimal value in one shot.
     # Only needed when multiple shrink passes are active.
-    if feature_enabled("shrinking.bind_deletion"):  # needed_for("shrinking.bind_deletion")
+    if feature_enabled(
+        "shrinking.bind_deletion"
+    ):  # needed_for("shrinking.bind_deletion")
         bits = struct.unpack("!Q", struct.pack("!d", current[0]))[0]
         mantissa = bits & ((1 << 52) - 1)
         base_bits = bits & ~((1 << 52) - 1)
@@ -511,9 +513,9 @@ def _shrink_float(
 
             def try_reduce(k: int) -> bool:
                 return try_and_track(
-                    struct.unpack(
-                        "!d", struct.pack("!Q", base_bits | (mantissa - k))
-                    )[0]
+                    struct.unpack("!d", struct.pack("!Q", base_bits | (mantissa - k)))[
+                        0
+                    ]
                 )
 
             # Exponential probing: find the largest reduction that works.
