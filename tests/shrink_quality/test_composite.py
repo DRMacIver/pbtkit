@@ -10,7 +10,7 @@ import pytest
 import pbtkit.generators as gs
 from pbtkit import Generator, run_test
 from pbtkit.core import PbtkitState as State
-from pbtkit.core import Status
+from pbtkit.core import Shrinker, Status
 from pbtkit.core import TestCase as TC
 from pbtkit.shrinking.index_passes import lower_and_bump
 
@@ -615,13 +615,17 @@ def test_lower_and_bump_j_past_end_after_shortening():
     # and at gap=2 the j target falls past the shortened result.
     tc = TC.for_choices([3, 5, 5, 5])
     state.test_function(tc)
-    assert state.result is not None
-    assert len(state.result) == 4
-    lower_and_bump(state)
-    assert state.result is not None
+    assert tc.status == Status.INTERESTING
+    assert len(tc.nodes) == 4
+    shrinker = Shrinker(
+        state=state,
+        initial=tc,
+        is_interesting=lambda t: t.status == Status.INTERESTING,
+    )
+    lower_and_bump(shrinker)
     # Shrinks to n=0 (1 node) since lower_and_bump now tries
     # decrementing to simplest, not just index-1.
-    assert len(state.result) == 1
+    assert len(shrinker.current.nodes) == 1
 
 
 @pytest.mark.requires("shrinking.duplication_passes")

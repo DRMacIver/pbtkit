@@ -10,8 +10,9 @@ import pytest
 import pbtkit.core as core
 import pbtkit.generators as gs
 from pbtkit import run_test
-from pbtkit.core import ChoiceNode, IntegerChoice, Status
+from pbtkit.core import ChoiceNode, IntegerChoice, Shrinker, Status
 from pbtkit.core import PbtkitState as State
+from pbtkit.core import TestCase as TC
 
 from .conftest import minimal
 
@@ -405,14 +406,21 @@ def test_sort_values_insertion_natural_exit():
     sort_fn = next(p for p in core.SHRINK_PASSES if p.__name__ == "sort_values")
     ic = IntegerChoice(0, 10)
     state = State(Random(0), tf, 1000)
-    state.result = [
+    nodes = [
         ChoiceNode(kind=ic, value=1, was_forced=False),
         ChoiceNode(kind=ic, value=0, was_forced=False),
         ChoiceNode(kind=ic, value=0, was_forced=False),
     ]
-    sort_fn(state)
-    assert state.result is not None
-    assert [n.value for n in state.result] == [0, 1, 0]
+    tc = TC.for_choices([n.value for n in nodes], prefix_nodes=nodes)
+    state.test_function(tc)
+    assert tc.status == Status.INTERESTING
+    shrinker = Shrinker(
+        state=state,
+        initial=tc,
+        is_interesting=lambda t: t.status == Status.INTERESTING,
+    )
+    sort_fn(shrinker)
+    assert [n.value for n in shrinker.current.nodes] == [0, 1, 0]
 
 
 @pytest.mark.requires("shrinking.sorting")

@@ -10,23 +10,21 @@ from __future__ import annotations
 from collections import defaultdict
 
 from pbtkit.core import (
-    PbtkitState,
+    Shrinker,
     shrink_pass,
 )
 from pbtkit.features import feature_enabled
 
 
 @shrink_pass
-def sort_values(state: PbtkitState) -> None:
+def sort_values(shrinker: Shrinker) -> None:
     """Group values by choice type and try sorting each group."""
-    assert state.result is not None
-
     # Process each choice type. Recompute groups each iteration
-    # since sorting one group can change the result structure.
+    # since sorting one group can change the current structure.
     processed: set[type] = set()
     while True:
         groups: dict[type, list[int]] = defaultdict(list)
-        for i, node in enumerate(state.result):
+        for i, node in enumerate(shrinker.current.nodes):
             groups[type(node.kind)].append(i)
         found = False
         for choice_type, indices in groups.items():
@@ -34,24 +32,23 @@ def sort_values(state: PbtkitState) -> None:
                 continue
             found = True
             processed.add(choice_type)
-            _try_sort_group(state, choice_type, indices)
+            _try_sort_group(shrinker, choice_type, indices)
             break
         if not found:
             break
 
 
-def _try_sort_group(state: PbtkitState, choice_type: type, indices: list[int]) -> None:
+def _try_sort_group(shrinker: Shrinker, choice_type: type, indices: list[int]) -> None:
     """Try sorting the values at the given indices by the sort key
     of the first node's kind. First try a full sort, then fall back
     to insertion sort."""
-    assert state.result is not None
-
     # Try a full sort.
-    kind = state.result[indices[0]].kind
-    values = [state.result[i].value for i in indices]
+    nodes = shrinker.current.nodes
+    kind = nodes[indices[0]].kind
+    values = [nodes[i].value for i in indices]
     sorted_values = sorted(values, key=kind.sort_key)
     if sorted_values != values:
-        if state.replace(dict(zip(indices, sorted_values))):
+        if shrinker.replace(dict(zip(indices, sorted_values))):
             return
 
     # Fall back to insertion sort: for each element, swap it
@@ -64,23 +61,23 @@ def _try_sort_group(state: PbtkitState, choice_type: type, indices: list[int]) -
             j = pos
             while j > 0:
                 # Recompute valid indices since a prior swap may have
-                # changed the result structure (e.g. via value punning).
+                # changed the current structure (e.g. via value punning).
+                nodes = shrinker.current.nodes
                 indices = [
                     i
                     for i in indices
-                    if i < len(state.result)
-                    and type(state.result[i].kind) == choice_type
+                    if i < len(nodes) and type(nodes[i].kind) == choice_type
                 ]
                 if j >= len(indices):  # needed_for("collections")
                     break
                 idx_j = indices[j]
                 idx_prev = indices[j - 1]
-                if state.result[idx_prev].sort_key <= state.result[idx_j].sort_key:
+                if nodes[idx_prev].sort_key <= nodes[idx_j].sort_key:
                     break
-                if state.replace(
+                if shrinker.replace(
                     {
-                        idx_prev: state.result[idx_j].value,
-                        idx_j: state.result[idx_prev].value,
+                        idx_prev: nodes[idx_j].value,
+                        idx_j: nodes[idx_prev].value,
                     }
                 ):
                     j -= 1
@@ -89,25 +86,25 @@ def _try_sort_group(state: PbtkitState, choice_type: type, indices: list[int]) -
 
 
 @shrink_pass
-def swap_adjacent_blocks(state: PbtkitState) -> None:
+def swap_adjacent_blocks(shrinker: Shrinker) -> None:
     """Try swapping adjacent blocks of choices of the same size.
 
     This handles cases like dictionary entries where each entry spans
     multiple choices (e.g. [continue, key, value]) and the sorting
     pass can't swap individual values without breaking structure."""
-    assert state.result is not None
     for block_size in range(2, 9):
         i = 0
-        while i + 2 * block_size <= len(state.result):
+        while i + 2 * block_size <= len(shrinker.current.nodes):
+            nodes = shrinker.current.nodes
             j = i + block_size
             # Only swap blocks with matching type structure.
-            types_a = [type(state.result[i + k].kind) for k in range(block_size)]
-            types_b = [type(state.result[j + k].kind) for k in range(block_size)]
+            types_a = [type(nodes[i + k].kind) for k in range(block_size)]
+            types_b = [type(nodes[j + k].kind) for k in range(block_size)]
             if types_a != types_b:
                 i += 1
                 continue
-            block_a = [state.result[i + k].value for k in range(block_size)]
-            block_b = [state.result[j + k].value for k in range(block_size)]
+            block_a = [nodes[i + k].value for k in range(block_size)]
+            block_b = [nodes[j + k].value for k in range(block_size)]
             if block_a == block_b:
                 i += 1
                 continue
@@ -115,5 +112,5 @@ def swap_adjacent_blocks(state: PbtkitState) -> None:
             for k in range(block_size):
                 swap[i + k] = block_b[k]
                 swap[j + k] = block_a[k]
-            state.replace(swap)
+            shrinker.replace(swap)
             i += 1

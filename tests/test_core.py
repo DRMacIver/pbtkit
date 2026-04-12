@@ -25,6 +25,7 @@ from pbtkit.core import (
     ChoiceNode,
     Frozen,
     IntegerChoice,
+    Shrinker,
     Status,
 )
 from pbtkit.core import PbtkitState as State
@@ -42,6 +43,20 @@ except (ImportError, ModuleNotFoundError):
         from pbtkit.core import redistribute_sequence_pair
     except ImportError:
         redistribute_sequence_pair = None  # type: ignore[assignment]
+
+
+def _shrinker_for_nodes(state, nodes):
+    """Test helper: run `nodes` through `state` once to produce a
+    completed interesting TestCase, then wrap it in a Shrinker with
+    the default predicate (status == INTERESTING)."""
+    tc = TC.for_choices([n.value for n in nodes], prefix_nodes=nodes)
+    state.test_function(tc)
+    assert tc.status == Status.INTERESTING
+    return Shrinker(
+        state=state,
+        initial=tc,
+        is_interesting=lambda t: t.status == Status.INTERESTING,
+    )
 
 
 @pytest.mark.requires("database")
@@ -507,13 +522,12 @@ def test_delete_chunks_guard_after_decrement():
     nodes.append(ChoiceNode(kind=bc, value=False, was_forced=False))
 
     state = State(Random(0), tf, 1000)
-    state.result = nodes
+    shrinker = _shrinker_for_nodes(state, nodes)
 
     delete_fn = next(p for p in SHRINK_PASSES if p.__name__ == "delete_chunks")
-    delete_fn(state)
+    delete_fn(shrinker)
 
-    assert state.result is not None
-    assert len(state.result) < 21
+    assert len(shrinker.current.nodes) < 21
 
 
 def test_run_test_with_preseeded_result():
@@ -717,9 +731,14 @@ def test_shrink_duplicates_valid_drops_below_two():
     # mostly out of bounds → len(valid) < 2 → break.
     tc = TC.for_choices([5, 5, 5, 20, 20, 20])
     state.test_function(tc)
-    assert state.result is not None
+    assert tc.status == Status.INTERESTING
+    shrinker = Shrinker(
+        state=state,
+        initial=tc,
+        is_interesting=lambda t: t.status == Status.INTERESTING,
+    )
 
-    shrink_dup(state)
+    shrink_dup(shrinker)
 
 
 @pytest.mark.requires("shrinking.advanced_integer_passes")
@@ -738,20 +757,22 @@ def test_redistribute_integers_stale_indices():
     ic_n = IntegerChoice(2, 8)
     ic_v = IntegerChoice(0, 100)
     state = State(Random(0), tf, 1000)
-    state.result = [
-        ChoiceNode(kind=ic_n, value=4, was_forced=False),
-        ChoiceNode(kind=ic_v, value=20, was_forced=False),
-        ChoiceNode(kind=ic_v, value=30, was_forced=False),
-        ChoiceNode(kind=ic_v, value=25, was_forced=False),
-        ChoiceNode(kind=ic_v, value=35, was_forced=False),
-    ]
+    shrinker = _shrinker_for_nodes(
+        state,
+        [
+            ChoiceNode(kind=ic_n, value=4, was_forced=False),
+            ChoiceNode(kind=ic_v, value=20, was_forced=False),
+            ChoiceNode(kind=ic_v, value=30, was_forced=False),
+            ChoiceNode(kind=ic_v, value=25, was_forced=False),
+            ChoiceNode(kind=ic_v, value=35, was_forced=False),
+        ],
+    )
 
     redist_fn = next(p for p in SHRINK_PASSES if p.__name__ == "redistribute_integers")
-    redist_fn(state)
+    redist_fn(shrinker)
 
-    assert state.result is not None
     # Redistribution should have reduced the result
-    assert len(state.result) <= 5
+    assert len(shrinker.current.nodes) <= 5
 
 
 @pytest.mark.requires("shrinking.bind_deletion")
@@ -772,18 +793,20 @@ def test_bind_deletion_try_deletions_succeeds():
     # n=3, values=[8, 1, 4], sum=13 >= 10. Reducing n to 2 and deleting
     # the low-value choice (1) leaves [n=2, 8, 4] with sum=12.
     state = State(Random(0), tf, 1000)
-    state.result = [
-        ChoiceNode(kind=ic_n, value=3, was_forced=False),
-        ChoiceNode(kind=ic_v, value=8, was_forced=False),
-        ChoiceNode(kind=ic_v, value=1, was_forced=False),
-        ChoiceNode(kind=ic_v, value=4, was_forced=False),
-    ]
+    shrinker = _shrinker_for_nodes(
+        state,
+        [
+            ChoiceNode(kind=ic_n, value=3, was_forced=False),
+            ChoiceNode(kind=ic_v, value=8, was_forced=False),
+            ChoiceNode(kind=ic_v, value=1, was_forced=False),
+            ChoiceNode(kind=ic_v, value=4, was_forced=False),
+        ],
+    )
 
     bind_fn = next(p for p in SHRINK_PASSES if p.__name__ == "bind_deletion")
-    bind_fn(state)
+    bind_fn(shrinker)
 
-    assert state.result is not None
-    assert len(state.result) < 4
+    assert len(shrinker.current.nodes) < 4
 
 
 @pytest.mark.requires("shrinking.sorting")
@@ -800,16 +823,19 @@ def test_sort_values_full_sort_fails():
 
     ic = IntegerChoice(0, 10)
     state = State(Random(0), tf, 1000)
-    state.result = [
-        ChoiceNode(kind=ic, value=5, was_forced=False),
-        ChoiceNode(kind=ic, value=3, was_forced=False),
-    ]
+    shrinker = _shrinker_for_nodes(
+        state,
+        [
+            ChoiceNode(kind=ic, value=5, was_forced=False),
+            ChoiceNode(kind=ic, value=3, was_forced=False),
+        ],
+    )
 
     sort_fn = next(p for p in SHRINK_PASSES if p.__name__ == "sort_values")
-    sort_fn(state)
+    sort_fn(shrinker)
 
     # Sort should have failed: order is preserved.
-    values = [n.value for n in state.result]
+    values = [n.value for n in shrinker.current.nodes]
     assert values == [5, 3]
 
 
@@ -827,15 +853,18 @@ def test_swap_adjacent_blocks_equal_blocks():
 
     ic = IntegerChoice(0, 10)
     state = State(Random(0), tf, 1000)
-    state.result = [
-        ChoiceNode(kind=ic, value=1, was_forced=False),
-        ChoiceNode(kind=ic, value=2, was_forced=False),
-        ChoiceNode(kind=ic, value=1, was_forced=False),
-        ChoiceNode(kind=ic, value=2, was_forced=False),
-    ]
+    shrinker = _shrinker_for_nodes(
+        state,
+        [
+            ChoiceNode(kind=ic, value=1, was_forced=False),
+            ChoiceNode(kind=ic, value=2, was_forced=False),
+            ChoiceNode(kind=ic, value=1, was_forced=False),
+            ChoiceNode(kind=ic, value=2, was_forced=False),
+        ],
+    )
 
     swap_fn = next(p for p in SHRINK_PASSES if p.__name__ == "swap_adjacent_blocks")
-    swap_fn(state)
+    swap_fn(shrinker)
 
-    values = [n.value for n in state.result]
+    values = [n.value for n in shrinker.current.nodes]
     assert values == [1, 2, 1, 2]

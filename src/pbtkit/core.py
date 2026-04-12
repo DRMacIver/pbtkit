@@ -640,9 +640,9 @@ class Generator(Generic[T]):
 
 
 # Shrink pass registry. Each pass is a function taking a
-# PbtkitState and attempting to simplify state.result.
+# Shrinker and attempting to simplify shrinker.current.
 # Passes are run in order, repeating until a fixed point.
-SHRINK_PASSES: list[Callable[["PbtkitState"], None]] = []
+SHRINK_PASSES: list[Callable[[Shrinker], None]] = []
 # Value shrinker registry. Maps choice type to list of value
 # shrinker functions (kind, value, try_replace) -> None.
 VALUE_SHRINKERS: dict[type, list[Callable]] = defaultdict(list)
@@ -655,8 +655,8 @@ TEARDOWN_HOOKS: list[Callable[["PbtkitState"], None]] = []
 
 
 def shrink_pass(
-    fn: Callable[["PbtkitState"], None],
-) -> Callable[["PbtkitState"], None]:
+    fn: Callable[[Shrinker], None],
+) -> Callable[[Shrinker], None]:
     """Decorator that registers a function as a shrink pass."""
     SHRINK_PASSES.append(fn)
     return fn
@@ -742,13 +742,12 @@ def value_shrinker(
     try_replace(v) -> bool attempts to replace the current value with v."""
 
     def accept(fn: Callable) -> Callable:
-        def shrink_pass_fn(state: "PbtkitState") -> None:
-            assert state.result is not None
+        def shrink_pass_fn(shrinker: Shrinker) -> None:
             i = 0
-            while i < len(state.result):
-                node = state.result[i]
+            while i < len(shrinker.current.nodes):
+                node = shrinker.current.nodes[i]
                 if isinstance(node.kind, choice_type):
-                    fn(node.kind, node.value, lambda v: state.replace({i: v}))
+                    fn(node.kind, node.value, lambda v: shrinker.replace({i: v}))
                 i += 1
 
         shrink_pass_fn.__name__ = fn.__name__
@@ -868,43 +867,91 @@ class PbtkitState:
         if not self.result:
             return
 
-        assert self.consider(self.result)
+        # Seed a Shrinker from the current best result. Re-running the
+        # test both validates the choice sequence is still interesting
+        # and gives us a concrete TestCase to hand to the Shrinker.
+        nodes = self.result
+        initial = TestCase.for_choices([n.value for n in nodes], prefix_nodes=nodes)
+        self.test_function(initial)
+        assert initial.status == Status.INTERESTING
+        Shrinker(
+            state=self,
+            initial=initial,
+            is_interesting=lambda tc: tc.status == Status.INTERESTING,
+        ).shrink()
 
-        # Run registered shrink passes repeatedly until none of
-        # them make any progress or we hit the iteration cap.
-        # The cap prevents pathological cases where each pass makes
-        # tiny progress (e.g. 1 ULP on a float) that triggers a
-        # full restart of all passes.
-        prev = None
-        iterations = 0
-        while prev != self.result and iterations < MAX_SHRINK_ITERATIONS:
-            prev = self.result
-            iterations += 1
-            for pass_fn in SHRINK_PASSES:
-                pass_fn(self)
+
+class Shrinker:
+    """Drives shrinking of a single interesting test case against an
+    is_interesting predicate.
+
+    The shrinker holds a `current` TestCase (its shrink target) and a
+    predicate that tells it which completed test cases count as
+    interesting. Each registered pass receives a Shrinker, reads
+    `shrinker.current.nodes`, and calls `shrinker.consider` /
+    `shrinker.replace` / `shrinker.test_function` to try replacements.
+    """
+
+    def __init__(
+        self,
+        state: "PbtkitState",
+        initial: TestCase,
+        is_interesting: Callable[[TestCase], bool],
+    ):
+        assert initial.status is not None
+        assert is_interesting(initial)
+        self.state = state
+        self.is_interesting = is_interesting
+        self.current: TestCase = initial
+
+    def test_function(self, test_case: TestCase) -> None:
+        """Run a test case through the underlying state, and update
+        `current` if the resulting test case is interesting and
+        shortlex-smaller than the current target."""
+        self.state.test_function(test_case)
+        assert test_case.status is not None
+        if self.is_interesting(test_case) and sort_key(test_case.nodes) < sort_key(
+            self.current.nodes
+        ):
+            self.current = test_case
 
     def consider(self, nodes: list[ChoiceNode]) -> bool:
-        """Test whether a choice sequence is interesting."""
-        assert self.result is not None
-        if sort_key(nodes) == sort_key(self.result):
+        """Test whether a choice sequence is interesting under the
+        shrinker's predicate. Returns False for anything the predicate
+        rejects, even if the state would otherwise record it."""
+        if sort_key(nodes) == sort_key(self.current.nodes):
             return True
         test_case = TestCase.for_choices([n.value for n in nodes], prefix_nodes=nodes)
         self.test_function(test_case)
         assert test_case.status is not None
-        return test_case.status == Status.INTERESTING
+        return self.is_interesting(test_case)
 
     def replace(self, values: Mapping[int, Any]) -> bool:
-        """Attempt to replace node values at given indices."""
-        assert self.result is not None
-        attempt = list(self.result)
+        """Attempt to replace node values at given indices on the
+        current target."""
+        attempt = list(self.current.nodes)
         for i, v in values.items():
             assert i < len(attempt)
             attempt[i] = attempt[i].with_value(v)
         return self.consider(attempt)
 
+    def shrink(self) -> None:
+        """Run registered shrink passes repeatedly until none of them
+        make any progress or we hit the iteration cap. The cap
+        prevents pathological cases where each pass makes tiny
+        progress (e.g. 1 ULP on a float) that triggers a full restart
+        of all passes."""
+        prev = None
+        iterations = 0
+        while prev != self.current.nodes and iterations < MAX_SHRINK_ITERATIONS:
+            prev = self.current.nodes
+            iterations += 1
+            for pass_fn in SHRINK_PASSES:
+                pass_fn(self)
+
 
 @shrink_pass
-def delete_chunks(state: PbtkitState) -> None:
+def delete_chunks(shrinker: Shrinker) -> None:
     """Try deleting chunks of choices from the sequence.
 
     We try longer chunks because this allows us to delete whole
@@ -915,45 +962,44 @@ def delete_chunks(state: PbtkitState) -> None:
 
     We iterate backwards because later bits tend to depend on earlier
     bits, so it's easier to make changes near the end."""
-    assert state.result is not None
     k = 8
     while k > 0:
-        i = len(state.result) - k - 1
+        i = len(shrinker.current.nodes) - k - 1
         while i >= 0:
-            if i >= len(state.result):
+            if i >= len(shrinker.current.nodes):
                 i -= 1
                 continue
-            attempt = state.result[:i] + state.result[i + k :]
-            assert len(attempt) < len(state.result)
-            if not state.consider(attempt):
+            attempt = shrinker.current.nodes[:i] + shrinker.current.nodes[i + k :]
+            assert len(attempt) < len(shrinker.current.nodes)
+            if not shrinker.consider(list(attempt)):
                 if (
                     i > 0
                     and isinstance(attempt[i - 1].kind, (IntegerChoice, BooleanChoice))
                     and attempt[i - 1].value != attempt[i - 1].kind.simplest
                 ):
-                    attempt = list(attempt)
-                    attempt[i - 1] = attempt[i - 1].with_value(attempt[i - 1].value - 1)
-                    if state.consider(attempt):
+                    modified = list(attempt)
+                    modified[i - 1] = modified[i - 1].with_value(
+                        modified[i - 1].value - 1
+                    )
+                    if shrinker.consider(modified):
                         i += 1
                 i -= 1
         k -= 1
 
 
 @shrink_pass
-def zero_choices(state: PbtkitState) -> None:
+def zero_choices(shrinker: Shrinker) -> None:
     """Replace blocks of choices with their simplest values.
     Skip k=1 because we handle that in the per-choice pass."""
-    assert state.result is not None
-    k = len(state.result)
+    k = len(shrinker.current.nodes)
     while k > 0:
         i = 0
-        while i + k <= len(state.result):
-            if state.result[i].value == state.result[i].kind.simplest:
+        while i + k <= len(shrinker.current.nodes):
+            nodes = shrinker.current.nodes
+            if nodes[i].value == nodes[i].kind.simplest:
                 i += 1
             else:
-                state.replace(
-                    {j: state.result[j].kind.simplest for j in range(i, i + k)}
-                )
+                shrinker.replace({j: nodes[j].kind.simplest for j in range(i, i + k)})
                 i += k
         k //= 2
 
