@@ -608,12 +608,12 @@ def test_mantissa_reduction_search():
         test_function=mark_failures_interesting,
         max_examples=100,
     )
-    # Set result to a known-interesting choice sequence.
+    # Seed state.result via a known-interesting choice sequence so
+    # state.shrink() can pick it up and construct a Shrinker from it.
     state.result = [
         ChoiceNode(kind=x_kind, value=1.0, was_forced=False),
         ChoiceNode(kind=kind, value=-3.0000000136813605, was_forced=False),
     ]
-    assert state.consider(state.result)
     state.shrink()
 
     # The shrinker should converge to the optimal value.

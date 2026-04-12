@@ -9,35 +9,39 @@ from __future__ import annotations
 
 from pbtkit.bytes import BytesChoice
 from pbtkit.core import (
-    PbtkitState,
+    Shrinker,
     shrink_pass,
 )
 from pbtkit.shrinking.sequence_redistribution import redistribute_sequence_pair
 
 
-def _bytes_indices(state: PbtkitState) -> list[int]:
-    """Return indices of all BytesChoice nodes in the result."""
-    assert state.result is not None
-    return [i for i, n in enumerate(state.result) if isinstance(n.kind, BytesChoice)]
+def _bytes_indices(shrinker: Shrinker) -> list[int]:
+    """Return indices of all BytesChoice nodes in the current target."""
+    return [
+        i
+        for i, n in enumerate(shrinker.current.nodes)
+        if isinstance(n.kind, BytesChoice)
+    ]
 
 
 @shrink_pass
-def redistribute_bytes_pairs(state: PbtkitState) -> None:
+def redistribute_bytes_pairs(shrinker: Shrinker) -> None:
     """Try redistributing length between pairs of bytes values.
 
     For adjacent and skip-one-adjacent pairs of BytesChoice nodes,
     try moving bytes from the first to the second."""
-    assert state.result is not None
     for gap in range(1, 3):
         idx = 0
-        while idx < len(_bytes_indices(state)) - gap:
-            indices = _bytes_indices(state)
+        while idx < len(_bytes_indices(shrinker)) - gap:
+            indices = _bytes_indices(shrinker)
             i = indices[idx]
             j = indices[idx + gap]
-            result = state.result
+            nodes = shrinker.current.nodes
             redistribute_sequence_pair(
-                result[i].value,
-                result[j].value,
-                lambda s, t: result[j].kind.validate(t) and state.replace({i: s, j: t}),
+                nodes[i].value,
+                nodes[j].value,
+                lambda s, t: (
+                    nodes[j].kind.validate(t) and shrinker.replace({i: s, j: t})
+                ),
             )
             idx += 1

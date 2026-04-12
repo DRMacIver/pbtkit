@@ -14,7 +14,7 @@ from __future__ import annotations
 from random import Random
 
 from pbtkit.core import (
-    PbtkitState,
+    Shrinker,
     TestCase,
     shrink_pass,
 )
@@ -24,18 +24,17 @@ RANDOM_ATTEMPTS = 3
 
 
 @shrink_pass
-def mutate_and_shrink(state: PbtkitState) -> None:
+def mutate_and_shrink(shrinker: Shrinker) -> None:
     """Try random mutations of a few positions to escape local optima.
 
     For each indexed position, try changing its value by small index
     offsets and filling the continuation with random values. Also probes
     with extreme continuations to handle boundary cases."""
-    assert state.result is not None
-    if len(state.result) > 32:
+    if len(shrinker.current.nodes) > 32:
         return
     i = 0
-    while i < len(state.result):
-        node = state.result[i]
+    while i < len(shrinker.current.nodes):
+        node = shrinker.current.nodes[i]
         kind = node.kind
         assert kind.supports_index
         current_idx = kind.to_index(node.value)
@@ -50,44 +49,44 @@ def mutate_and_shrink(state: PbtkitState) -> None:
                 if v is not None and v != node.value and v not in candidates:
                     candidates.append(v)
         for new_val in candidates:
-            prefix = [n.value for n in state.result[:i]] + [new_val]
+            prefix = [n.value for n in shrinker.current.nodes[:i]] + [new_val]
             # Probe with simplest continuation to discover downstream kinds.
             probe = TestCase(
                 prefix=tuple(prefix),
                 random=Random(0),
-                max_size=len(state.result),
+                max_size=len(shrinker.current.nodes),
             )
-            state.test_function(probe)
+            shrinker.test_function(probe)
             # Try random continuations for general exploration.
             for attempt in range(RANDOM_ATTEMPTS):
                 tc = TestCase(
                     prefix=tuple(prefix),
                     random=Random(i * 1000 + attempt),
-                    max_size=len(state.result),
+                    max_size=len(shrinker.current.nodes),
                 )
-                state.test_function(tc)
+                shrinker.test_function(tc)
             # Also try setting each of the next few positions to
             # unit (from_index(1)), with random continuation.
-            # Re-check len(state.result) each iteration since mutations
-            # above may have shortened it.
+            # Re-check len each iteration since mutations above may
+            # have shortened it.
             j_offset = 1
-            while j_offset < 3 and i + j_offset < len(state.result):
+            while j_offset < 3 and i + j_offset < len(shrinker.current.nodes):
                 j = i + j_offset
                 j_offset += 1
-                kind_j = state.result[j].kind
+                kind_j = shrinker.current.nodes[j].kind
                 assert kind_j.supports_index
                 unit_val = kind_j.from_index(1)
                 if unit_val is None:
                     continue
                 two_prefix = prefix + [
-                    unit_val if k == j else state.result[k].kind.simplest
+                    unit_val if k == j else shrinker.current.nodes[k].kind.simplest
                     for k in range(i + 1, j + 1)
                 ]
                 for attempt in range(RANDOM_ATTEMPTS):
                     tc2 = TestCase(
                         prefix=tuple(two_prefix),
                         random=Random(i * 1000 + j_offset * 100 + attempt),
-                        max_size=len(state.result),
+                        max_size=len(shrinker.current.nodes),
                     )
-                    state.test_function(tc2)
+                    shrinker.test_function(tc2)
         i += 1
