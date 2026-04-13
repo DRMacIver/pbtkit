@@ -1618,6 +1618,10 @@ try:
 {body}
 except (Unsatisfiable, Failure):
     pass
+except BaseExceptionGroup as _eg:
+    _matched, _rest = _eg.split((Unsatisfiable, Failure))
+    if _rest is not None:
+        raise
     """
     return result
 
@@ -1674,6 +1678,10 @@ def test_regression_2():
                 raise Failure("len(v0) == len(v1)")
     except (Unsatisfiable, Failure):
         pass
+    except BaseExceptionGroup as eg:
+        _matched, rest = eg.split((Unsatisfiable, Failure))
+        if rest is not None:
+            raise
 
 
 def test_regression_3():
@@ -1706,6 +1714,10 @@ def test_regression_3():
                 raise Failure("not v1")
     except (Unsatisfiable, Failure):
         pass
+    except BaseExceptionGroup as eg:
+        _matched, rest = eg.split((Unsatisfiable, Failure))
+        if rest is not None:
+            raise
 
 
 def test_regression_4():
@@ -1736,6 +1748,10 @@ def test_regression_4():
                 raise Failure("compound condition")
     except (Unsatisfiable, Failure):
         pass
+    except BaseExceptionGroup as eg:
+        _matched, rest = eg.split((Unsatisfiable, Failure))
+        if rest is not None:
+            raise
 
 
 def test_regression_5():
@@ -1783,3 +1799,7 @@ def test_regression_5():
                 raise Failure("isinstance(v3, tuple)")
     except (Unsatisfiable, Failure):
         pass
+    except BaseExceptionGroup as eg:
+        _matched, rest = eg.split((Unsatisfiable, Failure))
+        if rest is not None:
+            raise

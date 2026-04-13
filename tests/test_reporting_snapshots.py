@@ -34,6 +34,9 @@ def _disable_multi_bug(monkeypatch):
 def _normalise(out: str) -> str:
     """Strip absolute paths and lineno noise so snapshots are stable
     across machines and source edits within the same file."""
+    # Normalise path separators so Windows (``\\pbtkit\\``) matches
+    # the same regexes as POSIX paths.
+    out = out.replace("\\", "/")
     # The "Falsifying example" header embeds the origin's path:line.
     out = re.sub(
         r"\(([A-Za-z_]+) at [^:)]+:\d+\)",
