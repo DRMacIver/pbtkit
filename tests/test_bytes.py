@@ -63,9 +63,7 @@ def test_shrinks_bytes_with_constraints(capsys):
     # Should find 2 bytes summing to 11. The ``b = ...`` print line is
     # only present when the draw_names rewriter is enabled; skip the
     # value check otherwise.
-    draws = [
-        line for line in captured.out.splitlines() if line.startswith("b = ")
-    ]
+    draws = [line for line in captured.out.splitlines() if line.startswith("b = ")]
     if draws:
         value = eval(draws[0].split(" = ", 1)[1])
         assert len(value) == 2

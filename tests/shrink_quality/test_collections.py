@@ -292,6 +292,10 @@ def test_sorting_full_sort_survives_stale_indices():
                     raise AssertionError
     except AssertionError:
         pass
+    except BaseExceptionGroup as eg:
+        _matched, rest = eg.split(AssertionError)
+        if rest is not None:
+            raise
 
 
 def test_sorting_stale_filter_with_punning():

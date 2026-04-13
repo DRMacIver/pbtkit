@@ -671,6 +671,12 @@ def test_shrink_duplicates_with_stale_indices():
                 raise Failure("isinstance(v3, tuple)")
     except (Unsatisfiable, Failure):
         pass
+    except BaseExceptionGroup as eg:
+        # multi_bug may surface several distinct failures together;
+        # as long as each member is one we already handle, absorb them.
+        _matched, rest = eg.split((Unsatisfiable, Failure))
+        if rest is not None:
+            raise
 
 
 def test_generator_repr():

@@ -229,13 +229,17 @@ def multi_bug_report(state: PbtkitState, quiet: bool) -> None:
                 sys.stdout.write(
                     "".join(traceback.format_exception(type(exc), exc, trimmed))
                 )
-    if captured:
-        # Re-raise the smallest (sorted first). The full set was
-        # already printed above with per-example tracebacks, so no
-        # information is lost — the re-raise is just so callers that
-        # expect an exception (pytest.raises, run_test's outer
-        # contract) still see one.
+    if not captured:
+        return
+    if len(captured) == 1:
         raise captured[0]
+    # Multiple distinct failures: surface them all via a
+    # BaseExceptionGroup so every one is visible in the failure
+    # output (not just printed inline above). Callers can match with
+    # ``pytest.raises(BaseExceptionGroup)`` or ``except*``.
+    raise BaseExceptionGroup(
+        f"multi_bug found {len(captured)} distinct failures", captured
+    )
 
 
 def _user_visible_traceback(exc: BaseException):  # type: ignore[no-untyped-def]
