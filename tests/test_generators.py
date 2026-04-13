@@ -95,8 +95,12 @@ def test_target_and_reduce(capsys):
             assert m <= 99900
 
     captured = capsys.readouterr()
-
-    assert captured.out.strip() == "choice(100000): 99901"
+    draws = [
+        c.strip()
+        for c in captured.out.splitlines()
+        if c.strip() and not c.startswith("Falsifying example")
+    ]
+    assert draws == ["choice(100000): 99901"]
 
 
 def test_impossible_weighted():

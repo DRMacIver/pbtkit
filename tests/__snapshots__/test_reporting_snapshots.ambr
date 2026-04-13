@@ -1,0 +1,50 @@
+# serializer version: 1
+# name: test_mark_status_failure_multi_bug_on
+  '''
+  Falsifying example (no origin):
+  n = 0
+  
+  '''
+# ---
+# name: test_single_failure_multi_bug_off
+  '''
+  n = 50
+  
+  '''
+# ---
+# name: test_single_failure_multi_bug_on
+  '''
+  Falsifying example (AssertionError at <file>:NN):
+  n = 50
+  
+  '''
+# ---
+# name: test_three_failures_multi_bug_on
+  '''
+  Falsifying example 1 of 3 (KeyError at <file>:NN):
+  n = 0
+  
+  Falsifying example 2 of 3 (ValueError at <file>:NN):
+  n = 51
+  
+  Falsifying example 3 of 3 (IndexError at <file>:NN):
+  n = -51
+  
+  '''
+# ---
+# name: test_two_distinct_failures_multi_bug_off
+  '''
+  n = 51
+  
+  '''
+# ---
+# name: test_two_distinct_failures_multi_bug_on
+  '''
+  Falsifying example 1 of 2 (ValueError at <file>:NN):
+  n = 51
+  
+  Falsifying example 2 of 2 (IndexError at <file>:NN):
+  n = -51
+  
+  '''
+# ---

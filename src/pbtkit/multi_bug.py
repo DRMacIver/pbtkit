@@ -179,12 +179,21 @@ def shrink_per_origin(state: PbtkitState) -> None:
 
 def multi_bug_report(state: PbtkitState, quiet: bool) -> None:
     """Replacement reporter for the standard single-print block in
-    ``run_test``. Prints each per-origin example. Falls back to
-    ``state.result`` if ``interesting_examples`` is empty for any reason."""
+    ``run_test``. Prints a labelled section per origin so the user can
+    tell distinct failures apart, then replays each example through
+    the test function (which prints its draws).
+
+    Each replay typically raises the failing example's exception. We
+    catch them so every example gets printed, and re-raise the first
+    (shortlex-smallest) one at the end so callers still see a real
+    failure."""
     print_fn = state._print_function
     assert print_fn is not None
     examples = getattr(state.extras, "interesting_examples", None) or {}
     if not examples:
+        # Fallback: nothing recorded by the hook (only possible if
+        # state.result was set out-of-band). Replay it once and let
+        # any exception propagate.
         assert state.result is not None
         print_fn(
             TestCase.for_choices(
@@ -192,7 +201,40 @@ def multi_bug_report(state: PbtkitState, quiet: bool) -> None:
             )
         )
         return
-    for tc in examples.values():
-        print_fn(
-            TestCase.for_choices([n.value for n in tc.nodes], print_results=not quiet)
+    items = sorted(examples.items(), key=lambda kv: sort_key(kv[1].nodes))
+    total = len(items)
+    captured: list[BaseException] = []
+    for idx, (origin, tc) in enumerate(items, start=1):
+        if not quiet:
+            if idx > 1:
+                print()
+            print(_origin_header(origin, idx, total))
+        try:
+            print_fn(
+                TestCase.for_choices(
+                    [n.value for n in tc.nodes], print_results=not quiet
+                )
+            )
+        except BaseException as exc:  # noqa: BLE001
+            captured.append(exc)
+    if captured:
+        raise captured[0]
+
+
+def _origin_header(origin: InterestingOrigin, idx: int, total: int) -> str:
+    """Format a one-line header describing a failing example."""
+    if origin.exc_type is BaseException:
+        # Synthetic origin: the test marked itself INTERESTING via
+        # mark_status without supplying a tag. We can't say anything
+        # specific.
+        location = "no origin"
+    else:
+        loc = (
+            f"{origin.filename}:{origin.lineno}"
+            if origin.filename is not None
+            else "<unknown>"
         )
+        location = f"{origin.exc_type.__name__} at {loc}"
+    if total == 1:
+        return f"Falsifying example ({location}):"
+    return f"Falsifying example {idx} of {total} ({location}):"

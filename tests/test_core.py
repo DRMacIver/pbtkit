@@ -190,7 +190,12 @@ def test_prints_a_top_level_weighted(capsys):
             assert test_case.weighted(0.5)
 
     captured = capsys.readouterr()
-    assert captured.out.strip() == "weighted(0.5): False"
+    draws = [
+        c.strip()
+        for c in captured.out.splitlines()
+        if c.strip() and not c.startswith("Falsifying example")
+    ]
+    assert draws == ["weighted(0.5): False"]
 
 
 def test_errors_when_using_frozen():
@@ -433,7 +438,14 @@ def test_draw_silent_does_not_print(capsys):
             assert n == 0
 
     captured = capsys.readouterr()
-    assert captured.out.strip() == ""
+    # The "Falsifying example..." header is the only output — draw_silent
+    # itself prints nothing.
+    draws = [
+        c.strip()
+        for c in captured.out.splitlines()
+        if c.strip() and not c.startswith("Falsifying example")
+    ]
+    assert draws == []
 
 
 def test_note_prints_on_failing_example(capsys):

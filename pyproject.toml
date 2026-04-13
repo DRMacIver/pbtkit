@@ -13,6 +13,7 @@ dev = [
     "ruff==0.15.9",
     "pyright",
     "libcst",
+    "syrupy",
 ]
 
 [tool.pytest.ini_options]
@@ -40,6 +41,7 @@ known-third-party = ["hypothesis"]
 # Tests use deferred imports for symbols pulled from the database
 # module after monkeypatching multi_bug off.
 "tests/test_multi_bug.py" = ["PLC0415"]
+"tests/test_reporting_snapshots.py" = ["PLC0415"]
 
 [tool.coverage.report]
 exclude_also = [

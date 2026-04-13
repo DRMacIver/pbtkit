@@ -89,6 +89,27 @@ def test_origin_handles_no_traceback():
     assert o.lineno is None
 
 
+def test_origin_header_handles_unknown_filename():
+    """When an origin has filename=None (rare: exception with no
+    traceback), the header reports ``<unknown>`` for the location."""
+    o = InterestingOrigin(ValueError, None, None)
+    assert "<unknown>" in multi_bug._origin_header(o, 1, 1)
+
+
+def test_origin_header_handles_synthetic_no_origin():
+    """Test cases that mark INTERESTING via mark_status without an
+    origin get a header that says ``no origin``."""
+    o = InterestingOrigin(BaseException, None, None)
+    assert "no origin" in multi_bug._origin_header(o, 1, 1)
+
+
+def test_origin_header_numbers_multi():
+    """When there are multiple origins, the header includes the index."""
+    o = InterestingOrigin(ValueError, "f.py", 1)
+    header = multi_bug._origin_header(o, 2, 5)
+    assert "2 of 5" in header
+
+
 # ---------------------------------------------------------------------------
 # Per-origin shrinking via run_test
 # ---------------------------------------------------------------------------

@@ -65,11 +65,12 @@ def test_can_target_a_score_upwards_to_interesting(capsys):
             assert score < 2000
 
     captured = capsys.readouterr()
-
-    assert [c.strip() for c in captured.out.splitlines()] == [
-        "choice(1000): 1000",
-        "choice(1000): 1000",
+    draws = [
+        c.strip()
+        for c in captured.out.splitlines()
+        if c.strip() and not c.startswith("Falsifying example")
     ]
+    assert draws == ["choice(1000): 1000", "choice(1000): 1000"]
 
 
 def test_can_target_a_score_upwards_without_failing():
@@ -100,8 +101,12 @@ def test_targeting_when_most_do_not_benefit(capsys):
             assert score < big
 
     captured = capsys.readouterr()
-
-    assert [c.strip() for c in captured.out.splitlines()] == [
+    draws = [
+        c.strip()
+        for c in captured.out.splitlines()
+        if c.strip() and not c.startswith("Falsifying example")
+    ]
+    assert draws == [
         "choice(1000): 0",
         "choice(1000): 0",
         f"choice({big}): {big}",
@@ -135,8 +140,9 @@ def test_can_target_a_score_downwards(capsys):
             assert score > 0
 
     captured = capsys.readouterr()
-
-    assert [c.strip() for c in captured.out.splitlines()] == [
-        "choice(1000): 0",
-        "choice(1000): 0",
+    draws = [
+        c.strip()
+        for c in captured.out.splitlines()
+        if c.strip() and not c.startswith("Falsifying example")
     ]
+    assert draws == ["choice(1000): 0", "choice(1000): 0"]

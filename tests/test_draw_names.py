@@ -87,9 +87,13 @@ def test_choice_output_unchanged(capsys):
             n = tc.choice(5)
             assert n != 0
 
-    out = capsys.readouterr().out
-    assert "choice(5):" in out
-    assert "draw_" not in out
+    draws = [
+        line
+        for line in capsys.readouterr().out.splitlines()
+        if line and not line.startswith("Falsifying example")
+    ]
+    assert any("choice(5):" in line for line in draws)
+    assert not any("draw_" in line for line in draws)
 
 
 def test_weighted_output_unchanged(capsys):
@@ -102,9 +106,13 @@ def test_weighted_output_unchanged(capsys):
             if tc.weighted(1.0):
                 raise AssertionError("always")
 
-    out = capsys.readouterr().out
-    assert "weighted(1.0):" in out
-    assert "draw_" not in out
+    draws = [
+        line
+        for line in capsys.readouterr().out.splitlines()
+        if line and not line.startswith("Falsifying example")
+    ]
+    assert any("weighted(1.0):" in line for line in draws)
+    assert not any("draw_" in line for line in draws)
 
 
 def test_draw_uses_repr_format(capsys):
@@ -473,9 +481,14 @@ def test_rewrite_draws_no_error_for_no_draw_function(capsys):
         def _(tc):
             assert False  # noqa: B011
 
-    # No draw output expected
-    out = capsys.readouterr().out
-    assert "draw" not in out
+    # No draw output expected (the "Falsifying example" header may
+    # contain the word "draw" via a path or class name, so filter it).
+    draws = [
+        line
+        for line in capsys.readouterr().out.splitlines()
+        if line and not line.startswith("Falsifying example")
+    ]
+    assert not any("draw" in line for line in draws)
 
 
 # ---------------------------------------------------------------------------
