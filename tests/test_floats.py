@@ -19,7 +19,7 @@ import pbtkit.generators as gs
 from pbtkit import DirectoryDB, run_test
 from pbtkit.core import ChoiceNode, PbtkitState, Status
 from pbtkit.core import TestCase as TC
-from pbtkit.database import SerializationTag
+from pbtkit.database import InMemoryDB, SerializationTag
 from pbtkit.floats import _MAX_FINITE_INDEX, FloatChoice, _draw_unbounded_float
 
 
@@ -320,7 +320,8 @@ def test_floats_shrinks_inf_to_finite():
 @pytest.mark.requires("database")
 def test_floats_deserialize_truncated():
     """Truncated float in database is handled gracefully."""
-    db = {"_": bytes([SerializationTag.FLOAT, 0x40, 0x09])}
+    db = InMemoryDB()
+    db.save("_", bytes([SerializationTag.FLOAT, 0x40, 0x09]))
 
     @run_test(database=db, max_examples=1)
     def _(test_case):

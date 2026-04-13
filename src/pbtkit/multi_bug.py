@@ -10,9 +10,7 @@ Without this feature, pbtkit keeps its single-best-failure behaviour.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any
 
 from pbtkit.core import (
     PbtkitState,
@@ -23,7 +21,6 @@ from pbtkit.core import (
     sort_key,
     test_function_hook,
 )
-from pbtkit.features import needed_for
 
 # Continuation budget after the first bug — mirrors Hypothesis.
 MAX_EXTRA_CALLS = 1000
@@ -173,88 +170,6 @@ def shrink_per_origin(state: PbtkitState) -> None:
     # Update state.result so the standard database teardown and the
     # reporting fallback see the shortlex-smallest example overall.
     state.result = min(examples.values(), key=lambda tc: sort_key(tc.nodes)).nodes
-
-
-# ---------------------------------------------------------------------------
-# Database integration: store every per-origin example under a side key.
-# ---------------------------------------------------------------------------
-
-
-@needed_for("database")
-def _serialize_multi(sequences: Sequence[Sequence[Any]]) -> bytes:
-    """Length-prefixed list of choice sequences: u32 count, then for
-    each: u32 size + size bytes of _serialize_choices."""
-    from pbtkit.database import _serialize_choices
-
-    parts: list[bytes] = [len(sequences).to_bytes(4, "big")]
-    for seq in sequences:
-        body = _serialize_choices(seq)
-        parts.append(len(body).to_bytes(4, "big"))
-        parts.append(body)
-    return b"".join(parts)
-
-
-@needed_for("database")
-def _deserialize_multi(data: bytes) -> list[list] | None:
-    """Inverse of _serialize_multi; returns None on malformed input.
-
-    The explicit length checks cover every truncation path, and
-    ``_deserialize_choices`` swallows its own ``IndexError`` /
-    ``ValueError`` and returns ``None``, so no try/except is needed
-    here — we just propagate the ``None`` if an inner sequence won't
-    parse."""
-    from pbtkit.database import _deserialize_choices
-
-    if len(data) < 4:
-        return None
-    count = int.from_bytes(data[:4], "big")
-    offset = 4
-    sequences: list[list] = []
-    for _ in range(count):
-        if offset + 4 > len(data):
-            return None
-        size = int.from_bytes(data[offset : offset + 4], "big")
-        offset += 4
-        if offset + size > len(data):
-            return None
-        seq = _deserialize_choices(data[offset : offset + size])
-        if seq is None:
-            return None
-        sequences.append(seq)
-        offset += size
-    return sequences
-
-
-@needed_for("database")
-def load_from_db(state: PbtkitState, db: Any, test_name: str) -> None:
-    """Replay every previously-saved per-origin example. Called by the
-    standard database setup hook (``pbtkit.database._database_setup``)
-    when multi_bug is enabled, *replacing* the legacy single-best
-    replay so we don't double-replay."""
-    raw = db.get(test_name + ".multi")
-    if raw is None:
-        return
-    sequences = _deserialize_multi(raw)
-    if sequences is None:
-        return
-    for seq in sequences:
-        state.test_function(TestCase.for_choices(seq))
-
-
-@needed_for("database")
-def save_to_db(state: PbtkitState, db: Any, test_name: str) -> None:
-    """Persist (or clear) the per-origin examples under
-    ``test_name + '.multi'``. Called by the standard database teardown
-    hook when multi_bug is enabled."""
-    examples = getattr(state.extras, "interesting_examples", None) or {}
-    if not examples:
-        try:
-            del db[test_name + ".multi"]
-        except KeyError:
-            pass
-        return
-    sequences = [[n.value for n in tc.nodes] for tc in examples.values()]
-    db[test_name + ".multi"] = _serialize_multi(sequences)
 
 
 # ---------------------------------------------------------------------------

@@ -13,6 +13,7 @@ import pytest
 
 from pbtkit import DirectoryDB, run_test
 from pbtkit.core import PbtkitState, Status
+from pbtkit.database import InMemoryDB
 
 pytestmark = pytest.mark.requires("text")
 import pbtkit.generators as gs
@@ -190,7 +191,8 @@ def test_truncated_string_database_entry():
             [SerializationTag.STRING, 0x00, 0x00, 0x00, 0x05, 0x61]
         ),  # length 5 but only 1 byte
     ]:
-        db = {"_": data}
+        db = InMemoryDB()
+        db.save("_", data)
 
         @run_test(database=db, max_examples=1)
         def _(test_case):

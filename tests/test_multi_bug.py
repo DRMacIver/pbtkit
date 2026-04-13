@@ -15,6 +15,7 @@ import pytest
 from pbtkit import DirectoryDB, run_test
 from pbtkit.core import PbtkitState, Status
 from pbtkit.core import TestCase as TC
+from pbtkit.database import InMemoryDB
 
 multi_bug = pytest.importorskip("pbtkit.multi_bug")
 pytestmark = pytest.mark.requires("multi_bug")
@@ -102,7 +103,7 @@ def test_two_distinct_failures_are_each_recorded_and_shrunk():
     def runner():
         with pytest.raises(BaseException):
 
-            @run_test(database={}, max_examples=200, random=Random(0))
+            @run_test(database=InMemoryDB(), max_examples=200, random=Random(0))
             def _(tc):
                 n = tc.draw_integer(-100, 100)
                 if n < -50:
@@ -293,7 +294,8 @@ def test_record_origin_handles_mark_status_without_exception():
 
 @pytest.mark.requires("database")
 def test_database_round_trip_persists_per_origin_examples(tmpdir):
-    """Two distinct origins are persisted; reload replays both."""
+    """Two distinct origins are persisted as separate DB entries;
+    reload replays both and reconstructs the per-origin dict."""
     db = DirectoryDB(str(tmpdir))
 
     def runner():
@@ -308,106 +310,17 @@ def test_database_round_trip_persists_per_origin_examples(tmpdir):
                     raise ValueError("high")
 
     runner()
-    # First run: db should have a .multi entry with both origins.
-    state1_files = list(tmpdir.listdir())
-    assert len(state1_files) == 1
+    # First run: the key's subdirectory holds two value files,
+    # one per origin.
+    key_dirs = list(tmpdir.listdir())
+    assert len(key_dirs) == 1
+    assert len(list(key_dirs[0].listdir())) == 2
 
-    # Reload: same logic. Both examples should be replayed and re-shrunk.
+    # Reload: same logic, same shape. Round-trip is stable.
     runner()
-    state2_files = list(tmpdir.listdir())
-    assert len(state2_files) == 1
-
-
-@pytest.mark.requires("database")
-def test_save_to_db_clears_when_no_examples(tmpdir):
-    """save_to_db deletes the .multi key when interesting_examples is empty."""
-    db = DirectoryDB(str(tmpdir))
-    state = PbtkitState(Random(0), lambda tc: None, max_examples=1)
-    state.extras.test_name = "T"
-    state.extras.interesting_examples = {}
-    # Pre-populate the key so the delete path is exercised.
-    db["T.multi"] = b"junk"
-    multi_bug.save_to_db(state, db, "T")
-    assert db.get("T.multi") is None
-
-
-@pytest.mark.requires("database")
-def test_save_to_db_clears_when_key_already_absent(tmpdir):
-    """The KeyError on stale-delete is swallowed."""
-    db = DirectoryDB(str(tmpdir))
-    state = PbtkitState(Random(0), lambda tc: None, max_examples=1)
-    state.extras.test_name = "T"
-    state.extras.interesting_examples = {}
-    multi_bug.save_to_db(state, db, "T")  # key doesn't exist; no error
-    assert db.get("T.multi") is None
-
-
-@pytest.mark.requires("database")
-def test_load_from_db_skips_missing_key(tmpdir):
-    """No-op when the .multi key isn't in the database."""
-    db = DirectoryDB(str(tmpdir))
-    state = PbtkitState(Random(0), lambda tc: None, max_examples=1)
-    multi_bug.load_from_db(state, db, "absent")
-    assert state.calls == 0
-
-
-@pytest.mark.requires("database")
-def test_load_from_db_skips_malformed_payload(tmpdir):
-    """If the payload doesn't deserialise, no replay happens."""
-    db = DirectoryDB(str(tmpdir))
-    db["T.multi"] = b"\x00\x00\x00\x01garbage"  # claims 1 entry, malformed
-    state = PbtkitState(Random(0), lambda tc: None, max_examples=1)
-    multi_bug.load_from_db(state, db, "T")
-    assert state.calls == 0
-
-
-@pytest.mark.requires("database")
-def test_serialize_round_trip():
-    """_serialize_multi / _deserialize_multi are inverses."""
-    sequences = [[1, True], [-7, False]]
-    raw = multi_bug._serialize_multi(sequences)
-    out = multi_bug._deserialize_multi(raw)
-    assert out == sequences
-
-
-@pytest.mark.requires("database")
-def test_deserialize_too_short_returns_none():
-    assert multi_bug._deserialize_multi(b"") is None
-    assert multi_bug._deserialize_multi(b"\x00\x00") is None
-
-
-@pytest.mark.requires("database")
-def test_deserialize_truncated_size_returns_none():
-    """Header claims 1 entry but the size prefix is truncated."""
-    assert multi_bug._deserialize_multi(b"\x00\x00\x00\x01\x00") is None
-
-
-@pytest.mark.requires("database")
-def test_deserialize_truncated_body_returns_none():
-    """Header claims 1 entry of size 100 but body is shorter."""
-    assert multi_bug._deserialize_multi(b"\x00\x00\x00\x01\x00\x00\x00\x64ab") is None
-
-
-@pytest.mark.requires("database")
-def test_deserialize_invalid_inner_payload_returns_none():
-    """Header is well-formed but the inner choice sequence has an
-    unknown serialization tag."""
-    # 1 entry, size 1, body = 0xFF (not a valid tag).
-    assert multi_bug._deserialize_multi(b"\x00\x00\x00\x01\x00\x00\x00\x01\xff") is None
-
-
-@pytest.mark.requires("database")
-def test_deserialize_truncated_value_payload_returns_none():
-    """Inner choice sequence has a valid tag but truncated body —
-    exercises _read_fixed's ValueError('truncated') path inside
-    _deserialize_choices."""
-    # 1 entry, size 4, body = INTEGER tag (0x00) + only 3 bytes (need 8).
-    assert (
-        multi_bug._deserialize_multi(
-            b"\x00\x00\x00\x01\x00\x00\x00\x04\x00\x01\x02\x03"
-        )
-        is None
-    )
+    key_dirs = list(tmpdir.listdir())
+    assert len(key_dirs) == 1
+    assert len(list(key_dirs[0].listdir())) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -575,20 +488,21 @@ def test_ensure_state_is_idempotent():
 
 
 # ---------------------------------------------------------------------------
-# Legacy (no-multi_bug) database paths
+# Feature-disabled path coverage
 #
-# The standard database setup/teardown hooks have a feature_enabled gate
-# that delegates to multi_bug when enabled. With multi_bug always on in
-# ``just test``, the legacy paths would be uncovered — we exercise them
-# here by temporarily disabling the feature via DISABLED_MODULES.
+# The reporting block in ``run_test`` and the ``should_keep_generating``
+# else branch are dead when multi_bug is enabled at import time
+# (the feature_enabled gate is evaluated once at class-creation /
+# branch-selection time). ``just test-compiled --disable=multi_bug``
+# is the authoritative test for those paths; we monkey-patch here
+# so coverage of the report fallback is also exercisable at runtime.
 # ---------------------------------------------------------------------------
 
 
 def _disable_multi_bug(monkeypatch):
     """Patch DISABLED_MODULES so feature_enabled('multi_bug') returns
     False inside the test. Skips when running against the compiled
-    single-file build, which doesn't have ``pbtkit.features`` (the
-    feature system is stripped at compile time)."""
+    single-file build, which doesn't have ``pbtkit.features``."""
     try:
         import pbtkit.features
     except ModuleNotFoundError:
@@ -601,125 +515,18 @@ def _disable_multi_bug(monkeypatch):
 
 
 @pytest.mark.requires("database")
-def test_legacy_database_setup_replays_single_best(tmpdir, monkeypatch):
-    """With multi_bug disabled, _database_setup falls back to reading
-    the single ``test_name`` key and replaying it."""
-    from pbtkit.database import _database_setup, _serialize_choices
-
-    db = DirectoryDB(str(tmpdir))
-    db["legacy_test"] = _serialize_choices([7])
-    _disable_multi_bug(monkeypatch)
-
-    captured: list = []
-
-    def tf(tc):
-        v = tc.draw_integer(0, 100)
-        captured.append(v)
-
-    state = PbtkitState(Random(0), tf, max_examples=1, test_name="legacy_test")
-    state.extras.database = db
-    _database_setup(state)
-    assert captured == [7]
-
-
-@pytest.mark.requires("database")
-def test_legacy_database_setup_handles_missing_key(tmpdir, monkeypatch):
-    """Missing key — no replay, no error."""
-    from pbtkit.database import _database_setup
-
-    db = DirectoryDB(str(tmpdir))
-    _disable_multi_bug(monkeypatch)
-
-    state = PbtkitState(Random(0), lambda tc: None, max_examples=1, test_name="absent")
-    state.extras.database = db
-    _database_setup(state)
-    assert state.calls == 0
-
-
-@pytest.mark.requires("database")
-def test_legacy_database_setup_handles_malformed_payload(tmpdir, monkeypatch):
-    """Malformed payload — _deserialize_choices returns None, no replay.
-    Uses an integer tag with truncated body so _read_fixed raises and
-    _deserialize_choices catches the ValueError."""
-    from pbtkit.database import _database_setup
-
-    db = DirectoryDB(str(tmpdir))
-    # Tag 0 = INTEGER, expects 8 bytes; we only give 4.
-    db["legacy_test"] = b"\x00\x01\x02\x03\x04"
-    _disable_multi_bug(monkeypatch)
-
-    state = PbtkitState(
-        Random(0), lambda tc: None, max_examples=1, test_name="legacy_test"
-    )
-    state.extras.database = db
-    _database_setup(state)
-    assert state.calls == 0
-
-
-@pytest.mark.requires("database")
-def test_legacy_database_teardown_writes_result(tmpdir, monkeypatch):
-    """With multi_bug disabled, teardown serialises state.result to the
-    single-key DB entry."""
-    from pbtkit.database import _database_teardown, _deserialize_choices
-
-    db = DirectoryDB(str(tmpdir))
-    _disable_multi_bug(monkeypatch)
-
-    def tf(tc):
-        tc.draw_integer(0, 10)
-        tc.mark_status(Status.INTERESTING)
-
-    state = PbtkitState(Random(0), tf, max_examples=1, test_name="t")
-    state.extras.database = db
-    state.run()
-    _database_teardown(state)
-    raw = db.get("t")
-    assert raw is not None
-    assert _deserialize_choices(raw) is not None
-
-
-@pytest.mark.requires("database")
-def test_legacy_database_teardown_clears_when_no_result(tmpdir, monkeypatch):
-    """state.result is None ⇒ delete the entry."""
-    from pbtkit.database import _database_teardown
-
-    db = DirectoryDB(str(tmpdir))
-    db["t"] = b"old"
-    _disable_multi_bug(monkeypatch)
-
-    state = PbtkitState(Random(0), lambda tc: None, max_examples=1, test_name="t")
-    state.extras.database = db
-    _database_teardown(state)
-    assert db.get("t") is None
-
-
-@pytest.mark.requires("database")
-def test_legacy_database_teardown_swallows_missing_key(tmpdir, monkeypatch):
-    """Deleting an already-absent key is silently swallowed."""
-    from pbtkit.database import _database_teardown
-
-    db = DirectoryDB(str(tmpdir))
-    _disable_multi_bug(monkeypatch)
-
-    state = PbtkitState(Random(0), lambda tc: None, max_examples=1, test_name="t")
-    state.extras.database = db
-    _database_teardown(state)  # KeyError swallowed
-    assert db.get("t") is None
-
-
-@pytest.mark.requires("database")
 @pytest.mark.requires("draw_names")
-def test_legacy_run_test_reporting_path(monkeypatch, capsys):
-    """With multi_bug disabled, the reporting block in ``run_test``
-    takes its single-print fallback (the ``else`` branch in
-    ``core.py``)."""
+def test_run_test_reporting_fallback(monkeypatch, capsys):
+    """With multi_bug disabled at runtime, the ``if feature_enabled(...)
+    else:`` reporting block in ``run_test`` takes its single-print
+    fallback."""
     import pbtkit.generators as gs
 
     _disable_multi_bug(monkeypatch)
 
     with pytest.raises(AssertionError):
 
-        @run_test(database={}, max_examples=10, random=Random(0), quiet=False)
+        @run_test(database=InMemoryDB(), max_examples=10, random=Random(0), quiet=False)
         def _(tc):
             n = tc.draw(gs.integers(0, 100))
             assert n < 0
