@@ -23,6 +23,7 @@ from pbtkit.core import (
     sort_key,
     test_function_hook,
 )
+from pbtkit.features import needed_for
 
 # Continuation budget after the first bug — mirrors Hypothesis.
 MAX_EXTRA_CALLS = 1000
@@ -75,20 +76,17 @@ def _multi_bug_setup(state: PbtkitState) -> None:
 
 @test_function_hook
 def _record_origin(state: PbtkitState, test_case: TestCase) -> None:
-    """If the test case is interesting, derive its origin and update
-    the per-origin best-example dict."""
+    """If the test case is interesting, bucket it under its
+    ``interesting_origin`` (set by core's mark_status). Test cases
+    that mark INTERESTING without supplying an origin all share a
+    single synthetic bucket — we also write that synthetic value back
+    onto the test case so the per-origin shrink predicate matches."""
     if test_case.status != Status.INTERESTING:
         return
-    exc = test_case._exception
-    if exc is None:
-        # Test marked itself INTERESTING via mark_status without raising.
-        # Bucket all such cases under a single synthetic origin so they
-        # still get tracked (and shrunk as one group, matching today's
-        # single-best behaviour for non-exception failures).
+    origin = test_case.interesting_origin
+    if origin is None:
         origin = InterestingOrigin(BaseException, None, None)
-    else:
-        origin = InterestingOrigin.from_exception(exc)
-    setattr(test_case, "_origin", origin)
+        test_case.interesting_origin = origin
     _ensure_state(state)
     examples = state.extras.interesting_examples
     is_new = origin not in examples
@@ -156,9 +154,7 @@ def shrink_per_origin(state: PbtkitState) -> None:
         before = dict(examples)
 
         def predicate(tc: TestCase, _t: InterestingOrigin = target) -> bool:
-            return (
-                tc.status == Status.INTERESTING and getattr(tc, "_origin", None) == _t
-            )
+            return tc.status == Status.INTERESTING and tc.interesting_origin == _t
 
         sh = Shrinker(state=state, initial=examples[target], is_interesting=predicate)
         sh.shrink()
@@ -184,6 +180,7 @@ def shrink_per_origin(state: PbtkitState) -> None:
 # ---------------------------------------------------------------------------
 
 
+@needed_for("database")
 def _serialize_multi(sequences: Sequence[Sequence[Any]]) -> bytes:
     """Length-prefixed list of choice sequences: u32 count, then for
     each: u32 size + size bytes of _serialize_choices."""
@@ -197,6 +194,7 @@ def _serialize_multi(sequences: Sequence[Sequence[Any]]) -> bytes:
     return b"".join(parts)
 
 
+@needed_for("database")
 def _deserialize_multi(data: bytes) -> list[list] | None:
     """Inverse of _serialize_multi; returns None on malformed input.
 
@@ -227,6 +225,7 @@ def _deserialize_multi(data: bytes) -> list[list] | None:
     return sequences
 
 
+@needed_for("database")
 def load_from_db(state: PbtkitState, db: Any, test_name: str) -> None:
     """Replay every previously-saved per-origin example. Called by the
     standard database setup hook (``pbtkit.database._database_setup``)
@@ -242,6 +241,7 @@ def load_from_db(state: PbtkitState, db: Any, test_name: str) -> None:
         state.test_function(TestCase.for_choices(seq))
 
 
+@needed_for("database")
 def save_to_db(state: PbtkitState, db: Any, test_name: str) -> None:
     """Persist (or clear) the per-origin examples under
     ``test_name + '.multi'``. Called by the standard database teardown

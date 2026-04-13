@@ -128,8 +128,10 @@ def test_two_distinct_failures_are_each_recorded_and_shrunk():
         except Exception as exc:
             if tc.status is not None:
                 raise
-            tc._exception = exc
-            tc.mark_status(Status.INTERESTING)
+            tc.mark_status(
+                Status.INTERESTING,
+                interesting_origin=InterestingOrigin.from_exception(exc),
+            )
 
     state = PbtkitState(Random(0), shim, max_examples=200)
     state.run()
@@ -164,8 +166,10 @@ def test_per_origin_predicate_rejects_other_origins():
         except Exception as exc:
             if tc.status is not None:
                 raise
-            tc._exception = exc
-            tc.mark_status(Status.INTERESTING)
+            tc.mark_status(
+                Status.INTERESTING,
+                interesting_origin=InterestingOrigin.from_exception(exc),
+            )
 
     state = PbtkitState(Random(0), shim, max_examples=200)
     state.run()
@@ -196,8 +200,10 @@ def test_generation_stops_quickly_when_only_one_origin():
         except Exception as exc:
             if tc.status is not None:
                 raise
-            tc._exception = exc
-            tc.mark_status(Status.INTERESTING)
+            tc.mark_status(
+                Status.INTERESTING,
+                interesting_origin=InterestingOrigin.from_exception(exc),
+            )
 
     state = PbtkitState(Random(0), shim, max_examples=100)
     state.run()
