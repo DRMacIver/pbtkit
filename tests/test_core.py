@@ -191,9 +191,9 @@ def test_prints_a_top_level_weighted(capsys):
 
     captured = capsys.readouterr()
     draws = [
-        c.strip()
-        for c in captured.out.splitlines()
-        if c.strip() and not c.startswith("Falsifying example")
+        line.strip()
+        for line in captured.out.splitlines()
+        if line.strip().startswith("weighted(")
     ]
     assert draws == ["weighted(0.5): False"]
 
@@ -438,14 +438,10 @@ def test_draw_silent_does_not_print(capsys):
             assert n == 0
 
     captured = capsys.readouterr()
-    # The "Falsifying example..." header is the only output — draw_silent
-    # itself prints nothing.
-    draws = [
-        c.strip()
-        for c in captured.out.splitlines()
-        if c.strip() and not c.startswith("Falsifying example")
-    ]
-    assert draws == []
+    # draw_silent itself prints nothing; only the "Falsifying example"
+    # header and replay traceback show up in stdout.
+    assert "draw_silent" not in captured.out
+    assert " = " not in captured.out
 
 
 def test_note_prints_on_failing_example(capsys):

@@ -96,9 +96,9 @@ def test_target_and_reduce(capsys):
 
     captured = capsys.readouterr()
     draws = [
-        c.strip()
-        for c in captured.out.splitlines()
-        if c.strip() and not c.startswith("Falsifying example")
+        line.strip()
+        for line in captured.out.splitlines()
+        if line.strip().startswith("choice(")
     ]
     assert draws == ["choice(100000): 99901"]
 

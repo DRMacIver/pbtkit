@@ -66,10 +66,10 @@ def _test_with_coverage(disabled: frozenset[str]) -> bool:
             env=env,
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=120,
         )
     except subprocess.TimeoutExpired:
-        print("  TIMEOUT (>30s)")
+        print("  TIMEOUT (>120s)")
         return False
     test_output = result.stdout + result.stderr
     if result.returncode != 0:

@@ -34,12 +34,21 @@ def _disable_multi_bug(monkeypatch):
 def _normalise(out: str) -> str:
     """Strip absolute paths and lineno noise so snapshots are stable
     across machines and source edits within the same file."""
-    # Reduce '...../tests/test_reporting_snapshots.py:123' to '<file>:NN'.
+    # The "Falsifying example" header embeds the origin's path:line.
     out = re.sub(
         r"\(([A-Za-z_]+) at [^:)]+:\d+\)",
         r"(\1 at <file>:NN)",
         out,
     )
+    # Traceback frame lines: 'File "..../x.py", line NN, in ...'.
+    out = re.sub(
+        r'File "[^"]+/([^/"]+)", line \d+',
+        r'File "<.../\1>", line NN',
+        out,
+    )
+    # Replace exact pointer carets (e.g. "    ^^^^") with a stable
+    # placeholder — column positions shift with cosmetic edits.
+    out = re.sub(r"^\s*\^+\s*$", "    <caret>", out, flags=re.MULTILINE)
     return out
 
 

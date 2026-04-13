@@ -130,9 +130,9 @@ def test_reduces_additive_pairs(capsys):
 
     captured = capsys.readouterr()
     draws = [
-        c.strip()
-        for c in captured.out.splitlines()
-        if c.strip() and not c.startswith("Falsifying example")
+        line.strip()
+        for line in captured.out.splitlines()
+        if line.strip().startswith("choice(")
     ]
     assert draws == ["choice(1000): 1", "choice(1000): 1000"]
 

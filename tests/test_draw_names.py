@@ -11,6 +11,7 @@
 
 import contextlib
 import inspect
+import re
 import textwrap
 from random import Random
 
@@ -87,13 +88,13 @@ def test_choice_output_unchanged(capsys):
             n = tc.choice(5)
             assert n != 0
 
-    draws = [
-        line
-        for line in capsys.readouterr().out.splitlines()
-        if line and not line.startswith("Falsifying example")
-    ]
-    assert any("choice(5):" in line for line in draws)
-    assert not any("draw_" in line for line in draws)
+    out = capsys.readouterr().out
+    # The user code calls choice(); its draws print as `choice(N): v`.
+    # Other unrelated stdout (header, traceback paths) may mention
+    # things like draw_silent or paths under tests/test_draw_names.py;
+    # we only care that draws use the non-prefixed format.
+    assert any(line.startswith("choice(5):") for line in out.splitlines())
+    assert not any(line.lstrip().startswith("draw_") for line in out.splitlines())
 
 
 def test_weighted_output_unchanged(capsys):
@@ -106,13 +107,9 @@ def test_weighted_output_unchanged(capsys):
             if tc.weighted(1.0):
                 raise AssertionError("always")
 
-    draws = [
-        line
-        for line in capsys.readouterr().out.splitlines()
-        if line and not line.startswith("Falsifying example")
-    ]
-    assert any("weighted(1.0):" in line for line in draws)
-    assert not any("draw_" in line for line in draws)
+    out = capsys.readouterr().out
+    assert any(line.startswith("weighted(1.0):") for line in out.splitlines())
+    assert not any(line.lstrip().startswith("draw_") for line in out.splitlines())
 
 
 def test_draw_uses_repr_format(capsys):
@@ -481,14 +478,12 @@ def test_rewrite_draws_no_error_for_no_draw_function(capsys):
         def _(tc):
             assert False  # noqa: B011
 
-    # No draw output expected (the "Falsifying example" header may
-    # contain the word "draw" via a path or class name, so filter it).
-    draws = [
-        line
-        for line in capsys.readouterr().out.splitlines()
-        if line and not line.startswith("Falsifying example")
-    ]
-    assert not any("draw" in line for line in draws)
+    # No draws happened, so no auto-named ``draw_N = ...`` lines
+    # should appear. (The header and traceback might mention "draw"
+    # via paths/identifiers — only check for the rewriter's signature
+    # output pattern.)
+    out = capsys.readouterr().out
+    assert not re.search(r"^draw_\d+ = ", out, re.MULTILINE)
 
 
 # ---------------------------------------------------------------------------

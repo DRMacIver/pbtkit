@@ -110,6 +110,41 @@ def test_origin_header_numbers_multi():
     assert "2 of 5" in header
 
 
+def test_quiet_suppresses_headers_and_tracebacks(capsys):
+    """quiet=True silences the per-origin header and the inline
+    traceback printing."""
+
+    def user_test(tc):
+        n = tc.draw_integer(0, 10)
+        if n >= 0:
+            raise AssertionError(f"value was {n}")
+
+    def shim(tc):
+        try:
+            user_test(tc)
+        except Exception as exc:
+            if tc.status is not None:
+                raise
+            tc.mark_status(
+                Status.INTERESTING,
+                interesting_origin=InterestingOrigin.from_exception(exc),
+            )
+
+    state = PbtkitState(Random(0), shim, max_examples=10)
+    state.extras.test_name = "T"
+    state._original_test = user_test
+    state._print_function = user_test
+    state.run()
+    capsys.readouterr()  # clear
+
+    with pytest.raises(AssertionError):
+        multi_bug.multi_bug_report(state, quiet=True)
+
+    out = capsys.readouterr().out
+    assert "Falsifying example" not in out
+    assert "Traceback" not in out
+
+
 # ---------------------------------------------------------------------------
 # Per-origin shrinking via run_test
 # ---------------------------------------------------------------------------

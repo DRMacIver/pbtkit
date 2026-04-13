@@ -10,6 +10,8 @@ Without this feature, pbtkit keeps its single-best-failure behaviour.
 
 from __future__ import annotations
 
+import sys
+import traceback
 from dataclasses import dataclass
 
 from pbtkit.core import (
@@ -217,8 +219,40 @@ def multi_bug_report(state: PbtkitState, quiet: bool) -> None:
             )
         except BaseException as exc:  # noqa: BLE001
             captured.append(exc)
+            if not quiet:
+                # Show the traceback inline so the reporting output
+                # actually tells the user what went wrong for each
+                # example — not just the draws that led to it. Strip
+                # pbtkit-internal frames so the output focuses on the
+                # user's code.
+                trimmed = _user_visible_traceback(exc)
+                sys.stdout.write(
+                    "".join(traceback.format_exception(type(exc), exc, trimmed))
+                )
     if captured:
+        # Re-raise the smallest (sorted first). The full set was
+        # already printed above with per-example tracebacks, so no
+        # information is lost — the re-raise is just so callers that
+        # expect an exception (pytest.raises, run_test's outer
+        # contract) still see one.
         raise captured[0]
+
+
+def _user_visible_traceback(exc: BaseException):  # type: ignore[no-untyped-def]
+    """Return *exc*'s traceback with pbtkit-internal frames stripped
+    off the top.
+
+    When the test raises, the captured traceback goes through
+    ``multi_bug.multi_bug_report`` → ``state._print_function`` →
+    ``TestCase`` machinery → the user's test function. Everything
+    above the user's frame is pbtkit bookkeeping. If the whole stack
+    is internal (shouldn't happen, but be safe), we keep it so the
+    user sees something rather than nothing."""
+    tb = exc.__traceback__
+    head = tb
+    while head is not None and "/pbtkit/" in head.tb_frame.f_code.co_filename:
+        head = head.tb_next
+    return head if head is not None else tb
 
 
 def _origin_header(origin: InterestingOrigin, idx: int, total: int) -> str:
