@@ -106,6 +106,7 @@ import pbtkit.text
 # Advanced passes that depend on specific type modules or features.
 # Hardcoded dependency list: each entry is (module, required_feature).
 _FEATURE_DEPENDENT_MODULES = {
+    "pbtkit.multi_bug": "database",
     "pbtkit.shrinking.advanced_bytes_passes": "bytes",
     "pbtkit.shrinking.advanced_string_passes": "text",
     "pbtkit.shrinking.index_passes": "indexing",

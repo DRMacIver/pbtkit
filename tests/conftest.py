@@ -32,6 +32,7 @@ def pytest_configure(config):
 # Feature dependency map: module → required feature.
 # A module is disabled if its required feature is disabled.
 _FEATURE_DEPS = {
+    "multi_bug": "database",
     "shrinking.advanced_bytes_passes": "bytes",
     "shrinking.advanced_string_passes": "text",
     "shrinking.index_passes": "indexing",

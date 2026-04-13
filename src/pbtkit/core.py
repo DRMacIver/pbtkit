@@ -295,9 +295,13 @@ def run_test(
         def mark_failures_interesting(test_case: TestCase) -> None:
             try:
                 test(test_case)
-            except Exception:
+            except Exception as exc:
                 if test_case.status is not None:
                     raise
+                # Stash the exception so multi_bug can derive an
+                # InterestingOrigin. Cheap (one attribute) and harmless
+                # when multi_bug is disabled — the attribute is never read.
+                test_case._exception = exc
                 test_case.mark_status(Status.INTERESTING)
 
         state = PbtkitState(
@@ -327,11 +331,16 @@ def run_test(
             hook(state)
 
         if state.result is not None:
-            state._print_function(
-                TestCase.for_choices(
-                    [n.value for n in state.result], print_results=not quiet
+            if feature_enabled("multi_bug"):  # needed_for("multi_bug")
+                from pbtkit.multi_bug import multi_bug_report
+
+                multi_bug_report(state, quiet)
+            else:
+                state._print_function(
+                    TestCase.for_choices(
+                        [n.value for n in state.result], print_results=not quiet
+                    )
                 )
-            )
 
     return accept
 
@@ -374,6 +383,10 @@ class TestCase:
         self._draw_counter = 0
         self.targeting_score: int | None = None
         self.prefix_nodes = prefix_nodes
+        # Captured exception when the test raised (used by multi_bug to
+        # derive an InterestingOrigin). Always None when the test
+        # marked itself INTERESTING via mark_status without raising.
+        self._exception: BaseException | None = None
         if feature_enabled("spans"):  # needed_for("spans")
             # Span tracking — (label, start, stop) regions over nodes.
             self.spans: list[tuple[str, int, int]] = []
@@ -800,9 +813,10 @@ class PbtkitState:
         def mark_failures_interesting(test_case: TestCase) -> None:
             try:
                 new_test(test_case)
-            except Exception:
+            except Exception as exc:
                 if test_case.status is not None:
                     raise
+                test_case._exception = exc
                 test_case.mark_status(Status.INTERESTING)
 
         self.__test_function = mark_failures_interesting
@@ -835,6 +849,10 @@ class PbtkitState:
         self.shrink()
 
     def should_keep_generating(self) -> bool:
+        if feature_enabled("multi_bug"):  # needed_for("multi_bug")
+            from pbtkit.multi_bug import multi_bug_should_keep_generating
+
+            return multi_bug_should_keep_generating(self)
         return (
             not self.test_is_trivial
             and self.result is None
@@ -867,13 +885,24 @@ class PbtkitState:
         if not self.result:
             return
 
-        # Seed a Shrinker from the current best result. Re-running the
-        # test both validates the choice sequence is still interesting
-        # and gives us a concrete TestCase to hand to the Shrinker.
+        # Seed a Shrinker (or, with multi_bug, the per-origin examples
+        # dict) from the current best result. Re-running the test both
+        # validates that the sequence is still interesting and gives us
+        # a concrete TestCase to hand off — and triggers
+        # test_function_hooks, which is how multi_bug records the
+        # initial origin when shrink() was driven manually (without a
+        # prior generation phase).
         nodes = self.result
         initial = TestCase.for_choices([n.value for n in nodes], prefix_nodes=nodes)
         self.test_function(initial)
         assert initial.status == Status.INTERESTING
+
+        if feature_enabled("multi_bug"):  # needed_for("multi_bug")
+            from pbtkit.multi_bug import shrink_per_origin
+
+            shrink_per_origin(self)
+            return
+
         Shrinker(
             state=self,
             initial=initial,

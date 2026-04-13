@@ -371,8 +371,16 @@ class _StripNeededFor(cst.CSTTransformer):
         feature = self._comment_needed_for(original_node)
         if feature is None:
             return updated_node
-        if feature in self.disabled_features and original_node.orelse is None:
-            return cst.RemovalSentinel.REMOVE
+        if feature in self.disabled_features:
+            if original_node.orelse is None:
+                return cst.RemovalSentinel.REMOVE
+            # Replace the whole If with the body of its `else` clause.
+            # We don't support `elif` chains here (none in current source).
+            if isinstance(original_node.orelse, cst.Else) and isinstance(
+                original_node.orelse.body, cst.IndentedBlock
+            ):
+                return cst.FlattenSentinel(original_node.orelse.body.body)
+            return updated_node
         # Feature is enabled. For feature_enabled() guards, inline the body
         # (the condition is always true). For other conditions, keep as-is.
         if self._is_feature_enabled_guard(original_node):
@@ -665,9 +673,11 @@ def extract_docstring(source: str) -> str:
 # submodules that don't exist in the single-file build — the symbols
 # they import are already defined in the compiled file.
 _STRIP_IMPORT_PREFIXES = [
+    "from pbtkit.database import",
     "from pbtkit.edge_case_boosting import",
     "from pbtkit.features import feature_enabled",
     "from pbtkit.features import feature_enabled,",
+    "from pbtkit.multi_bug import",
 ]
 
 

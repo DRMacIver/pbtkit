@@ -24,6 +24,7 @@ from pbtkit.core import (
     setup_hook,
     teardown_hook,
 )
+from pbtkit.features import feature_enabled
 
 
 class Database(Protocol):
@@ -177,6 +178,11 @@ def _database_setup(state: PbtkitState) -> None:
         db = DirectoryDB(_DEFAULT_DATABASE_PATH)
     state.extras.database = db
     test_name = state.extras.test_name
+    if feature_enabled("multi_bug"):  # needed_for("multi_bug")
+        from pbtkit.multi_bug import load_from_db
+
+        load_from_db(state, db, test_name)
+        return
     previous_failure = db.get(test_name)
     if previous_failure is not None:
         values = _deserialize_choices(previous_failure)
@@ -189,6 +195,11 @@ def _database_teardown(state: PbtkitState) -> None:
     """Save or clear the result in the database after running."""
     db = state.extras.database
     test_name = state.extras.test_name
+    if feature_enabled("multi_bug"):  # needed_for("multi_bug")
+        from pbtkit.multi_bug import save_to_db
+
+        save_to_db(state, db, test_name)
+        return
     if state.result is None:
         try:
             del db[test_name]
