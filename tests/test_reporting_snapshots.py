@@ -52,6 +52,16 @@ def _normalise(out: str) -> str:
     # Replace exact pointer carets (e.g. "    ^^^^") with a stable
     # placeholder — column positions shift with cosmetic edits.
     out = re.sub(r"^\s*\^+\s*$", "    <caret>", out, flags=re.MULTILINE)
+    # Drop the optional source-code line that traceback prints under
+    # each ``File "..."`` frame — it's only present when the source
+    # file is readable from the running process, which isn't true on
+    # all platforms (notably the compiled package on Windows).
+    out = re.sub(
+        r'^(  File "[^"]*", line [^\n]+\n)    [^\n]+\n',
+        r"\1",
+        out,
+        flags=re.MULTILINE,
+    )
     return out
 
 

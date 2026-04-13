@@ -6,7 +6,6 @@
   Traceback (most recent call last):
     File "<string>", line 5, in _
     File "<.../core.py>", line NN, in mark_status
-      raise StopTest()
   pbtkit.core.StopTest
   
   '''

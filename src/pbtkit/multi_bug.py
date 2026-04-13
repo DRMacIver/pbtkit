@@ -254,12 +254,11 @@ def _user_visible_traceback(exc: BaseException):  # type: ignore[no-untyped-def]
     user sees something rather than nothing."""
     tb = exc.__traceback__
     head = tb
-    while head is not None:
-        # Normalise path separators so Windows (``\\pbtkit\\``) is
-        # recognised the same as POSIX (``/pbtkit/``).
-        fn = head.tb_frame.f_code.co_filename.replace("\\", "/")
-        if "/pbtkit/" not in fn:
-            break
+    # Normalise path separators so Windows (``\\pbtkit\\``) is
+    # recognised the same as POSIX (``/pbtkit/``).
+    while head is not None and "/pbtkit/" in head.tb_frame.f_code.co_filename.replace(
+        "\\", "/"
+    ):
         head = head.tb_next
     return head if head is not None else tb
 

@@ -957,8 +957,10 @@ def write_test_package(
         import shutil
 
         shutil.rmtree(pycache)
-    (pkg_dir / "core.py").write_text(compiled_source)
-    (pkg_dir / "__init__.py").write_text(_generate_init_py(disabled))
+    (pkg_dir / "core.py").write_text(compiled_source, encoding="utf-8")
+    (pkg_dir / "__init__.py").write_text(
+        _generate_init_py(disabled), encoding="utf-8"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1038,7 +1040,7 @@ def main() -> None:
 
     # Write standalone compiled file
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(result)
+    args.output.write_text(result, encoding="utf-8")
 
     # Write test package
     write_test_package(result, args.pkg, disabled)
