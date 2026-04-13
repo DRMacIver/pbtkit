@@ -188,7 +188,10 @@ def test_give_pbtkit_a_workout(data):
 
 
 def test_failure_from_hypothesis_1():
-    with pytest.raises(Failure):
+    # multi_bug may bucket the three ``raise Failure()`` sites as
+    # distinct origins depending on which feature set is active, so
+    # accept either a bare Failure or a group of them.
+    with pytest.raises((Failure, BaseExceptionGroup)) as excinfo:
 
         @run_test(max_examples=1000, database={}, random=Random(100))
         def _(tc):
@@ -208,9 +211,16 @@ def test_failure_from_hypothesis_1():
                 else:
                     tc.mark_status(Status.INVALID)
 
+    if isinstance(excinfo.value, BaseExceptionGroup):
+        _matched, rest = excinfo.value.split(Failure)
+        assert rest is None, "expected only Failure exceptions in the group"
+
 
 def test_failure_from_hypothesis_2():
-    with pytest.raises(Failure):
+    # multi_bug discovers three distinct ``raise Failure()`` sites
+    # (different line numbers) in this fixture, so the run raises a
+    # group instead of a bare Failure. Either is acceptable.
+    with pytest.raises((Failure, BaseExceptionGroup)) as excinfo:
 
         @run_test(max_examples=1000, database={}, random=Random(0))
         def _(tc):
@@ -229,3 +239,7 @@ def test_failure_from_hypothesis_2():
                 raise Failure()
             else:
                 tc.mark_status(Status.INVALID)
+
+    if isinstance(excinfo.value, BaseExceptionGroup):
+        _matched, rest = excinfo.value.split(Failure)
+        assert rest is None, "expected only Failure exceptions in the group"

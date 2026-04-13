@@ -13,6 +13,7 @@ dev = [
     "ruff==0.15.9",
     "pyright",
     "libcst",
+    "syrupy",
 ]
 
 [tool.pytest.ini_options]
@@ -33,8 +34,14 @@ known-third-party = ["hypothesis"]
 # the single-file compiler strips these blocks when the feature is disabled.
 "src/pbtkit/bytes.py" = ["PLC0415"]
 "src/pbtkit/core.py" = ["PLC0415"]
+"src/pbtkit/database.py" = ["PLC0415"]
 "src/pbtkit/floats.py" = ["PLC0415"]
+"src/pbtkit/multi_bug.py" = ["PLC0415"]
 "src/pbtkit/text.py" = ["PLC0415"]
+# Tests use deferred imports for symbols pulled from the database
+# module after monkeypatching multi_bug off.
+"tests/test_multi_bug.py" = ["PLC0415"]
+"tests/test_reporting_snapshots.py" = ["PLC0415"]
 
 [tool.coverage.report]
 exclude_also = [

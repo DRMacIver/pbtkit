@@ -343,7 +343,7 @@ def _draw_float(
             return _draw_unbounded_float(self.random)
 
     generate = _base_generate
-    if feature_enabled("edge_case_boosting"):  # needed_for("edge_case_boosting")
+    if feature_enabled("edge_case_boosting"):
         from pbtkit.edge_case_boosting import BOUNDARY_PROBABILITY
 
         # Candidates: boundaries, zero, infinities, NaN, small integers.

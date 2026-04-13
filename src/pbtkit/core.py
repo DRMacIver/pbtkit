@@ -295,10 +295,15 @@ def run_test(
         def mark_failures_interesting(test_case: TestCase) -> None:
             try:
                 test(test_case)
-            except Exception:
+            except Exception as exc:
                 if test_case.status is not None:
                     raise
-                test_case.mark_status(Status.INTERESTING)
+                origin: Any = None
+                if feature_enabled("multi_bug"):
+                    from pbtkit.multi_bug import InterestingOrigin
+
+                    origin = InterestingOrigin.from_exception(exc)
+                test_case.mark_status(Status.INTERESTING, interesting_origin=origin)
 
         state = PbtkitState(
             random or Random(),
@@ -327,11 +332,16 @@ def run_test(
             hook(state)
 
         if state.result is not None:
-            state._print_function(
-                TestCase.for_choices(
-                    [n.value for n in state.result], print_results=not quiet
+            if feature_enabled("multi_bug"):
+                from pbtkit.multi_bug import multi_bug_report
+
+                multi_bug_report(state, quiet)
+            else:
+                state._print_function(
+                    TestCase.for_choices(
+                        [n.value for n in state.result], print_results=not quiet
+                    )
                 )
-            )
 
     return accept
 
@@ -374,7 +384,12 @@ class TestCase:
         self._draw_counter = 0
         self.targeting_score: int | None = None
         self.prefix_nodes = prefix_nodes
-        if feature_enabled("spans"):  # needed_for("spans")
+        # Caller-supplied tag set on INTERESTING test cases — used by
+        # the multi_bug feature to bucket distinct failures. Core
+        # carries it as an opaque value; a None default means "no
+        # origin" (the test marked INTERESTING without supplying one).
+        self.interesting_origin: Any = None
+        if feature_enabled("spans"):
             # Span tracking — (label, start, stop) regions over nodes.
             self.spans: list[tuple[str, int, int]] = []
             self._span_stack: list[tuple[str, int]] = []
@@ -392,7 +407,7 @@ class TestCase:
             return self.random.randint(min_value, max_value)
 
         generate = _draw_uniform
-        if feature_enabled("edge_case_boosting"):  # needed_for("edge_case_boosting")
+        if feature_enabled("edge_case_boosting"):
             from pbtkit.edge_case_boosting import BOUNDARY_PROBABILITY
 
             nasty = [min_value, max_value]
@@ -505,14 +520,14 @@ class TestCase:
 
     def draw(self, generator: Generator[U]) -> U:
         """Return a value from ``generator``, printing it if this is a failing example."""
-        if feature_enabled("spans"):  # needed_for("spans")
+        if feature_enabled("spans"):
             self.start_span(repr(generator))
         try:
             self.depth += 1
             result = generator.produce(self)
         finally:
             self.depth -= 1
-            if feature_enabled("spans"):  # needed_for("spans")
+            if feature_enabled("spans"):
                 self.stop_span()
 
         if self._should_print():
@@ -534,11 +549,17 @@ class TestCase:
         if self.print_results:
             print(message)
 
-    def mark_status(self, status: Status) -> NoReturn:
-        """Set the status and raise StopTest."""
+    def mark_status(self, status: Status, interesting_origin: Any = None) -> NoReturn:
+        """Set the status and raise StopTest.
+
+        ``interesting_origin`` is an opaque caller-supplied tag used by
+        the multi_bug feature to bucket distinct failures. Core treats
+        it as a passthrough value — a None default means "no origin".
+        """
         if self.status is not None:
             raise Frozen()
         self.status = status
+        self.interesting_origin = interesting_origin
         raise StopTest()
 
     @property
@@ -800,10 +821,15 @@ class PbtkitState:
         def mark_failures_interesting(test_case: TestCase) -> None:
             try:
                 new_test(test_case)
-            except Exception:
+            except Exception as exc:
                 if test_case.status is not None:
                     raise
-                test_case.mark_status(Status.INTERESTING)
+                origin: Any = None
+                if feature_enabled("multi_bug"):
+                    from pbtkit.multi_bug import InterestingOrigin
+
+                    origin = InterestingOrigin.from_exception(exc)
+                test_case.mark_status(Status.INTERESTING, interesting_origin=origin)
 
         self.__test_function = mark_failures_interesting
 
@@ -834,18 +860,30 @@ class PbtkitState:
             phase(self)
         self.shrink()
 
-    def should_keep_generating(self) -> bool:
-        return (
-            not self.test_is_trivial
-            and self.result is None
-            and self.valid_test_cases < self.max_examples
-            and
-            # We impose a limit on the maximum number of calls as
-            # well as the maximum number of valid examples. This is
-            # to avoid taking a prohibitively long time on tests which
-            # have hard or impossible to satisfy preconditions.
-            self.calls < self.max_examples * 10
-        )
+    if feature_enabled("multi_bug"):
+
+        def should_keep_generating(self) -> bool:
+            from pbtkit.multi_bug import multi_bug_should_keep_generating
+
+            return multi_bug_should_keep_generating(self)
+
+    else:  # pragma: no cover
+        # The else branch is dead at runtime when multi_bug is enabled
+        # (the if was evaluated at class-creation time). It survives
+        # in compiled --disable=multi_bug builds and is exercised by
+        # `just test-compiled`.
+        def should_keep_generating(self) -> bool:
+            return (
+                not self.test_is_trivial
+                and self.result is None
+                and self.valid_test_cases < self.max_examples
+                and
+                # We impose a limit on the maximum number of calls as
+                # well as the maximum number of valid examples. This is
+                # to avoid taking a prohibitively long time on tests
+                # which have hard or impossible to satisfy preconditions.
+                self.calls < self.max_examples * 10
+            )
 
     def generate(self) -> None:
         """Run generation types until either we have found an interesting
@@ -867,13 +905,24 @@ class PbtkitState:
         if not self.result:
             return
 
-        # Seed a Shrinker from the current best result. Re-running the
-        # test both validates the choice sequence is still interesting
-        # and gives us a concrete TestCase to hand to the Shrinker.
+        # Seed a Shrinker (or, with multi_bug, the per-origin examples
+        # dict) from the current best result. Re-running the test both
+        # validates that the sequence is still interesting and gives us
+        # a concrete TestCase to hand off — and triggers
+        # test_function_hooks, which is how multi_bug records the
+        # initial origin when shrink() was driven manually (without a
+        # prior generation phase).
         nodes = self.result
         initial = TestCase.for_choices([n.value for n in nodes], prefix_nodes=nodes)
         self.test_function(initial)
         assert initial.status == Status.INTERESTING
+
+        if feature_enabled("multi_bug"):
+            from pbtkit.multi_bug import shrink_per_origin
+
+            shrink_per_origin(self)
+            return
+
         Shrinker(
             state=self,
             initial=initial,

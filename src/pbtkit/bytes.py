@@ -117,7 +117,7 @@ def _draw_bytes(self: TestCase, min_size: int, max_size: int) -> bytes:
         )
 
     generate = _random_bytes
-    if feature_enabled("edge_case_boosting"):  # needed_for("edge_case_boosting")
+    if feature_enabled("edge_case_boosting"):
         from pbtkit.edge_case_boosting import BOUNDARY_PROBABILITY
 
         nasty_bytes = [b"\x00" * min_size]

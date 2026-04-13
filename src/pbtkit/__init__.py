@@ -95,6 +95,7 @@ import pbtkit.database
 import pbtkit.draw_names
 import pbtkit.edge_case_boosting
 import pbtkit.floats
+import pbtkit.multi_bug
 import pbtkit.shrinking.advanced_integer_passes
 import pbtkit.shrinking.bind_deletion
 import pbtkit.shrinking.duplication_passes

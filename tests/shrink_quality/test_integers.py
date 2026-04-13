@@ -129,11 +129,12 @@ def test_reduces_additive_pairs(capsys):
             assert m + n <= 1000
 
     captured = capsys.readouterr()
-
-    assert [c.strip() for c in captured.out.splitlines()] == [
-        "choice(1000): 1",
-        "choice(1000): 1000",
+    draws = [
+        line.strip()
+        for line in captured.out.splitlines()
+        if line.strip().startswith("choice(")
     ]
+    assert draws == ["choice(1000): 1", "choice(1000): 1000"]
 
 
 @pytest.mark.requires("shrinking.advanced_integer_passes")

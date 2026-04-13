@@ -7,6 +7,8 @@
 # v. 2.0. If a copy of the MPL was not distributed with this file, You can
 # obtain one at https://mozilla.org/MPL/2.0/.
 
+from random import Random
+
 import pytest
 
 import pbtkit.generators as gs
@@ -88,15 +90,19 @@ def test_target_and_reduce(capsys):
     shrinking."""
     with pytest.raises(AssertionError):
 
-        @run_test(database={})
+        @run_test(database={}, random=Random(0), max_examples=500)
         def _(tc):
             m = tc.choice(100000)
             tc.target(m)
             assert m <= 99900
 
     captured = capsys.readouterr()
-
-    assert captured.out.strip() == "choice(100000): 99901"
+    draws = [
+        line.strip()
+        for line in captured.out.splitlines()
+        if line.strip().startswith("choice(")
+    ]
+    assert draws == ["choice(100000): 99901"]
 
 
 def test_impossible_weighted():

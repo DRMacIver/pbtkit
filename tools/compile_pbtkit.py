@@ -354,28 +354,47 @@ class _StripNeededFor(cst.CSTTransformer):
             return cst.RemovalSentinel.REMOVE
         return updated_node
 
-    def _is_feature_enabled_guard(self, node: cst.If) -> bool:
-        """Check if the condition is a feature_enabled("...") call."""
+    def _feature_enabled_arg(self, node: cst.If) -> str | None:
+        """If the condition is ``feature_enabled("X")``, return ``"X"``.
+        Otherwise return None."""
         test = node.test
-        return (
+        if not (
             isinstance(test, cst.Call)
             and isinstance(test.func, cst.Name)
             and test.func.value == "feature_enabled"
-        )
+            and len(test.args) == 1
+            and isinstance(test.args[0].value, cst.SimpleString)
+        ):
+            return None
+        val = test.args[0].value.evaluated_value
+        return val if isinstance(val, str) else None
 
     def leave_If(
         self,
         original_node: cst.If,
         updated_node: cst.If,
     ) -> cst.If | cst.RemovalSentinel | cst.FlattenSentinel[cst.BaseCompoundStatement]:
-        feature = self._comment_needed_for(original_node)
+        # Prefer the feature named in `feature_enabled("X")` — the
+        # `# needed_for("X")` comment is then redundant and optional.
+        feature = self._feature_enabled_arg(original_node)
+        is_feature_enabled_guard = feature is not None
+        if feature is None:
+            feature = self._comment_needed_for(original_node)
         if feature is None:
             return updated_node
-        if feature in self.disabled_features and original_node.orelse is None:
-            return cst.RemovalSentinel.REMOVE
+        if feature in self.disabled_features:
+            if original_node.orelse is None:
+                return cst.RemovalSentinel.REMOVE
+            # Replace the whole If with the body of its `else` clause.
+            # We don't support `elif` chains here (none in current source).
+            if isinstance(original_node.orelse, cst.Else) and isinstance(
+                original_node.orelse.body, cst.IndentedBlock
+            ):
+                return cst.FlattenSentinel(original_node.orelse.body.body)
+            return updated_node
         # Feature is enabled. For feature_enabled() guards, inline the body
         # (the condition is always true). For other conditions, keep as-is.
-        if self._is_feature_enabled_guard(original_node):
+        if is_feature_enabled_guard:
             if isinstance(updated_node.body, cst.IndentedBlock):
                 return cst.FlattenSentinel(updated_node.body.body)
         return updated_node
@@ -665,9 +684,11 @@ def extract_docstring(source: str) -> str:
 # submodules that don't exist in the single-file build — the symbols
 # they import are already defined in the compiled file.
 _STRIP_IMPORT_PREFIXES = [
+    "from pbtkit.database import",
     "from pbtkit.edge_case_boosting import",
     "from pbtkit.features import feature_enabled",
     "from pbtkit.features import feature_enabled,",
+    "from pbtkit.multi_bug import",
 ]
 
 
@@ -936,8 +957,10 @@ def write_test_package(
         import shutil
 
         shutil.rmtree(pycache)
-    (pkg_dir / "core.py").write_text(compiled_source)
-    (pkg_dir / "__init__.py").write_text(_generate_init_py(disabled))
+    (pkg_dir / "core.py").write_text(compiled_source, encoding="utf-8")
+    (pkg_dir / "__init__.py").write_text(
+        _generate_init_py(disabled), encoding="utf-8"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1017,7 +1040,7 @@ def main() -> None:
 
     # Write standalone compiled file
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(result)
+    args.output.write_text(result, encoding="utf-8")
 
     # Write test package
     write_test_package(result, args.pkg, disabled)

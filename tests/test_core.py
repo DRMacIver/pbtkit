@@ -8,6 +8,7 @@
 # obtain one at https://mozilla.org/MPL/2.0/.
 
 import math
+import os
 import struct
 import unittest.mock
 from random import Random
@@ -30,7 +31,7 @@ from pbtkit.core import (
 )
 from pbtkit.core import PbtkitState as State
 from pbtkit.core import TestCase as TC
-from pbtkit.database import DirectoryDB
+from pbtkit.database import DirectoryDB, InMemoryDB
 from pbtkit.floats import FloatChoice
 from pbtkit.text import StringChoice
 
@@ -189,7 +190,12 @@ def test_prints_a_top_level_weighted(capsys):
             assert test_case.weighted(0.5)
 
     captured = capsys.readouterr()
-    assert captured.out.strip() == "weighted(0.5): False"
+    draws = [
+        line.strip()
+        for line in captured.out.splitlines()
+        if line.strip().startswith("weighted(")
+    ]
+    assert draws == ["weighted(0.5): False"]
 
 
 def test_errors_when_using_frozen():
@@ -267,7 +273,8 @@ def test_forced_choice_bounds():
 @pytest.mark.requires("database")
 def test_malformed_database_entry():
     """Malformed database entries are silently ignored."""
-    db = {"_": b"\xff\xff\xff"}
+    db = InMemoryDB()
+    db.save("_", b"\xff\xff\xff")
 
     @run_test(database=db, max_examples=1)
     def _(test_case):
@@ -277,7 +284,8 @@ def test_malformed_database_entry():
 @pytest.mark.requires("database")
 def test_empty_database_entry():
     """Empty database entries produce an empty replay."""
-    db = {"_": b""}
+    db = InMemoryDB()
+    db.save("_", b"")
 
     @run_test(database=db, max_examples=1)
     def _(test_case):
@@ -296,7 +304,8 @@ def test_empty_database_entry():
 )
 def test_truncated_database_entry(data):
     """Truncated database entries are silently ignored."""
-    db = {"_": data}
+    db = InMemoryDB()
+    db.save("_", data)
 
     @run_test(database=db, max_examples=1)
     def _(test_case):
@@ -429,7 +438,10 @@ def test_draw_silent_does_not_print(capsys):
             assert n == 0
 
     captured = capsys.readouterr()
-    assert captured.out.strip() == ""
+    # draw_silent itself prints nothing; only the "Falsifying example"
+    # header and replay traceback show up in stdout.
+    assert "draw_silent" not in captured.out
+    assert " = " not in captured.out
 
 
 def test_note_prints_on_failing_example(capsys):
@@ -659,6 +671,12 @@ def test_shrink_duplicates_with_stale_indices():
                 raise Failure("isinstance(v3, tuple)")
     except (Unsatisfiable, Failure):
         pass
+    except BaseExceptionGroup as eg:
+        # multi_bug may surface several distinct failures together;
+        # as long as each member is one we already handle, absorb them.
+        _matched, rest = eg.split((Unsatisfiable, Failure))
+        if rest is not None:
+            raise
 
 
 def test_generator_repr():
@@ -868,3 +886,91 @@ def test_swap_adjacent_blocks_equal_blocks():
 
     values = [n.value for n in shrinker.current.nodes]
     assert values == [1, 2, 1, 2]
+
+
+# ---------------------------------------------------------------------------
+# Database storage layer (InMemoryDB and DirectoryDB)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.requires("database")
+def test_in_memory_db_delete_unknown_key():
+    """delete on a missing key is a no-op."""
+    db = InMemoryDB()
+    db.delete("never-saved", b"v")
+    assert list(db.fetch("never-saved")) == []
+
+
+@pytest.mark.requires("database")
+def test_in_memory_db_delete_last_value_clears_bucket():
+    """Removing the only stored value drops the key entirely."""
+    db = InMemoryDB()
+    db.save("k", b"a")
+    db.delete("k", b"a")
+    assert list(db.fetch("k")) == []
+    # Deleting again is still a no-op.
+    db.delete("k", b"a")
+
+
+@pytest.mark.requires("database")
+def test_in_memory_db_delete_keeps_other_values():
+    """Deleting one value leaves the rest of the bucket intact."""
+    db = InMemoryDB()
+    db.save("k", b"a")
+    db.save("k", b"b")
+    db.delete("k", b"a")
+    assert list(db.fetch("k")) == [b"b"]
+
+
+@pytest.mark.requires("database")
+def test_directory_db_save_skips_duplicate(tmp_path):
+    """Saving the same value twice does not duplicate the file."""
+    db = DirectoryDB(str(tmp_path))
+    db.save("k", b"v")
+    db.save("k", b"v")
+    assert list(db.fetch("k")) == [b"v"]
+
+
+@pytest.mark.requires("database")
+def test_directory_db_delete_missing_value_is_silent(tmp_path):
+    """Deleting a value that was never saved is a no-op."""
+    db = DirectoryDB(str(tmp_path))
+    db.delete("k", b"never-saved")  # no error
+
+
+@pytest.mark.requires("database")
+def test_directory_db_delete_keeps_nonempty_dir(tmp_path):
+    """Deleting one of several values leaves the rest in place."""
+    db = DirectoryDB(str(tmp_path))
+    db.save("k", b"v1")
+    db.save("k", b"v2")
+    db.delete("k", b"v1")
+    assert list(db.fetch("k")) == [b"v2"]
+
+
+@pytest.mark.requires("database")
+def test_directory_db_fetch_missing_key_yields_nothing(tmp_path):
+    db = DirectoryDB(str(tmp_path))
+    assert list(db.fetch("absent")) == []
+
+
+@pytest.mark.requires("database")
+def test_directory_db_fetch_skips_unreadable_files(tmp_path, monkeypatch):
+    """If a value file becomes unreadable mid-iteration (e.g. another
+    process deleted it), fetch silently skips it."""
+    db = DirectoryDB(str(tmp_path))
+    db.save("k", b"v1")
+    db.save("k", b"v2")
+    real_open = open
+    target = sorted(os.listdir(db._key_dir("k")))[0]
+
+    def flaky_open(path, *args, **kwargs):
+        if isinstance(path, str) and path.endswith(target):
+            raise OSError("simulated race")
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.open", flaky_open)
+    # The contract is "no exception"; one of the two files survives.
+    surviving = list(db.fetch("k"))
+    assert len(surviving) == 1
+    assert surviving[0] in (b"v1", b"v2")
