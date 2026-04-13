@@ -56,7 +56,7 @@ def _try_sort_group(shrinker: Shrinker, choice_type: type, indices: list[int]) -
     # The full sort above always succeeds for simple types (integers,
     # booleans); insertion sort is only needed when collections cause
     # structural changes during replacement that make the full sort fail.
-    if feature_enabled("collections"):  # needed_for("collections")
+    if feature_enabled("collections"):
         for pos in range(1, len(indices)):
             j = pos
             while j > 0:

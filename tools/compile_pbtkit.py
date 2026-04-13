@@ -354,21 +354,32 @@ class _StripNeededFor(cst.CSTTransformer):
             return cst.RemovalSentinel.REMOVE
         return updated_node
 
-    def _is_feature_enabled_guard(self, node: cst.If) -> bool:
-        """Check if the condition is a feature_enabled("...") call."""
+    def _feature_enabled_arg(self, node: cst.If) -> str | None:
+        """If the condition is ``feature_enabled("X")``, return ``"X"``.
+        Otherwise return None."""
         test = node.test
-        return (
+        if not (
             isinstance(test, cst.Call)
             and isinstance(test.func, cst.Name)
             and test.func.value == "feature_enabled"
-        )
+            and len(test.args) == 1
+            and isinstance(test.args[0].value, cst.SimpleString)
+        ):
+            return None
+        val = test.args[0].value.evaluated_value
+        return val if isinstance(val, str) else None
 
     def leave_If(
         self,
         original_node: cst.If,
         updated_node: cst.If,
     ) -> cst.If | cst.RemovalSentinel | cst.FlattenSentinel[cst.BaseCompoundStatement]:
-        feature = self._comment_needed_for(original_node)
+        # Prefer the feature named in `feature_enabled("X")` — the
+        # `# needed_for("X")` comment is then redundant and optional.
+        feature = self._feature_enabled_arg(original_node)
+        is_feature_enabled_guard = feature is not None
+        if feature is None:
+            feature = self._comment_needed_for(original_node)
         if feature is None:
             return updated_node
         if feature in self.disabled_features:
@@ -383,7 +394,7 @@ class _StripNeededFor(cst.CSTTransformer):
             return updated_node
         # Feature is enabled. For feature_enabled() guards, inline the body
         # (the condition is always true). For other conditions, keep as-is.
-        if self._is_feature_enabled_guard(original_node):
+        if is_feature_enabled_guard:
             if isinstance(updated_node.body, cst.IndentedBlock):
                 return cst.FlattenSentinel(updated_node.body.body)
         return updated_node

@@ -299,7 +299,7 @@ def run_test(
                 if test_case.status is not None:
                     raise
                 origin: Any = None
-                if feature_enabled("multi_bug"):  # needed_for("multi_bug")
+                if feature_enabled("multi_bug"):
                     from pbtkit.multi_bug import InterestingOrigin
 
                     origin = InterestingOrigin.from_exception(exc)
@@ -332,7 +332,7 @@ def run_test(
             hook(state)
 
         if state.result is not None:
-            if feature_enabled("multi_bug"):  # needed_for("multi_bug")
+            if feature_enabled("multi_bug"):
                 from pbtkit.multi_bug import multi_bug_report
 
                 multi_bug_report(state, quiet)
@@ -389,7 +389,7 @@ class TestCase:
         # carries it as an opaque value; a None default means "no
         # origin" (the test marked INTERESTING without supplying one).
         self.interesting_origin: Any = None
-        if feature_enabled("spans"):  # needed_for("spans")
+        if feature_enabled("spans"):
             # Span tracking — (label, start, stop) regions over nodes.
             self.spans: list[tuple[str, int, int]] = []
             self._span_stack: list[tuple[str, int]] = []
@@ -407,7 +407,7 @@ class TestCase:
             return self.random.randint(min_value, max_value)
 
         generate = _draw_uniform
-        if feature_enabled("edge_case_boosting"):  # needed_for("edge_case_boosting")
+        if feature_enabled("edge_case_boosting"):
             from pbtkit.edge_case_boosting import BOUNDARY_PROBABILITY
 
             nasty = [min_value, max_value]
@@ -520,14 +520,14 @@ class TestCase:
 
     def draw(self, generator: Generator[U]) -> U:
         """Return a value from ``generator``, printing it if this is a failing example."""
-        if feature_enabled("spans"):  # needed_for("spans")
+        if feature_enabled("spans"):
             self.start_span(repr(generator))
         try:
             self.depth += 1
             result = generator.produce(self)
         finally:
             self.depth -= 1
-            if feature_enabled("spans"):  # needed_for("spans")
+            if feature_enabled("spans"):
                 self.stop_span()
 
         if self._should_print():
@@ -825,7 +825,7 @@ class PbtkitState:
                 if test_case.status is not None:
                     raise
                 origin: Any = None
-                if feature_enabled("multi_bug"):  # needed_for("multi_bug")
+                if feature_enabled("multi_bug"):
                     from pbtkit.multi_bug import InterestingOrigin
 
                     origin = InterestingOrigin.from_exception(exc)
@@ -860,7 +860,7 @@ class PbtkitState:
             phase(self)
         self.shrink()
 
-    if feature_enabled("multi_bug"):  # needed_for("multi_bug")
+    if feature_enabled("multi_bug"):
 
         def should_keep_generating(self) -> bool:
             from pbtkit.multi_bug import multi_bug_should_keep_generating
@@ -917,7 +917,7 @@ class PbtkitState:
         self.test_function(initial)
         assert initial.status == Status.INTERESTING
 
-        if feature_enabled("multi_bug"):  # needed_for("multi_bug")
+        if feature_enabled("multi_bug"):
             from pbtkit.multi_bug import shrink_per_origin
 
             shrink_per_origin(self)

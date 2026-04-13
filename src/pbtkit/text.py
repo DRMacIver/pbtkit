@@ -259,7 +259,7 @@ def _draw_string(
         return "".join(chr(self.random.choice(alphabet)) for _ in range(length))
 
     base_generate = generate
-    if feature_enabled("edge_case_boosting"):  # needed_for("edge_case_boosting")
+    if feature_enabled("edge_case_boosting"):
         from pbtkit.edge_case_boosting import BOUNDARY_PROBABILITY
 
         # Simplest codepoint in range under the _codepoint_key ordering.

@@ -370,16 +370,19 @@ def test_serialize_round_trip():
     assert out == sequences
 
 
+@pytest.mark.requires("database")
 def test_deserialize_too_short_returns_none():
     assert multi_bug._deserialize_multi(b"") is None
     assert multi_bug._deserialize_multi(b"\x00\x00") is None
 
 
+@pytest.mark.requires("database")
 def test_deserialize_truncated_size_returns_none():
     """Header claims 1 entry but the size prefix is truncated."""
     assert multi_bug._deserialize_multi(b"\x00\x00\x00\x01\x00") is None
 
 
+@pytest.mark.requires("database")
 def test_deserialize_truncated_body_returns_none():
     """Header claims 1 entry of size 100 but body is shorter."""
     assert multi_bug._deserialize_multi(b"\x00\x00\x00\x01\x00\x00\x00\x64ab") is None
